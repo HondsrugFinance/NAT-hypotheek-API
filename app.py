@@ -4,6 +4,7 @@ Minimal API voor hypotheekberekeningen
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import calculator_final
@@ -13,6 +14,15 @@ app = FastAPI(
     description="Bereken maximale hypotheek volgens NAT normen 2026",
     version="1.0.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 class HypotheekDeel(BaseModel):
