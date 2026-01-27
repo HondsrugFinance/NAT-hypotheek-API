@@ -55,8 +55,8 @@ class CalculateRequest(BaseModel):
     inkomen_overige_aanvragers: float = 0
     
     # Status
-    alleenstaande: str = "JA"
-    ontvangt_aow: str = "NEE"
+    alleenstaande: str = True
+    ontvangt_aow: str = False
     
     # Energielabel
     energielabel: Optional[str] = "Geen (geldig) Label"
