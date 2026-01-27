@@ -130,7 +130,7 @@ def calculate(request: CalculateRequest) -> Dict[str, Any]:
         'te_betalen_partneralimentatie_aanvrager': request.te_betalen_partneralimentatie_aanvrager,
         'te_betalen_partneralimentatie_partner': request.te_betalen_partneralimentatie_partner,
         'inkomen_overige_aanvragers': request.inkomen_overige_aanvragers,
-        'alleenstaande': "JA" if request.alleenstaande else "NEE",,
+        'alleenstaande': "JA" if request.alleenstaande else "NEE",
         'ontvangt_aow': "JA" if request.ontvangt_aow else "NEE",
         'energielabel': request.energielabel,
         'verduurzamings_maatregelen': request.verduurzamings_maatregelen,
