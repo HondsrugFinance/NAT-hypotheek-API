@@ -1,0 +1,32 @@
+{
+  "hoofd_inkomen_aanvrager": 60000,
+  "hoofd_inkomen_partner": 0,
+  "alleenstaande": "JA",
+  "ontvangt_aow": "NEE",
+  "energielabel": "A,B",
+  "verduurzamings_maatregelen": 10000,
+  "studievoorschot_studielening": 60,
+  "limieten_bkr_geregistreerd": 400,
+  "hypotheek_delen": [
+    {
+      "aflos_type": "Annuïteit",
+      "org_lpt": 360,
+      "rest_lpt": 360,
+      "hoofdsom_box1": 100000,
+      "hoofdsom_box3": 0,
+      "rvp": 120,
+      "inleg_overig": 0,
+      "werkelijke_rente": 0.03
+    },
+    {
+      "aflos_type": "Aflosvrij",
+      "org_lpt": 360,
+      "rest_lpt": 360,
+      "hoofdsom_box1": 80000,
+      "hoofdsom_box3": 30000,
+      "rvp": 60,
+      "inleg_overig": 0,
+      "werkelijke_rente": 0.028
+    }
+  ]
+}
