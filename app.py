@@ -55,8 +55,8 @@ class CalculateRequest(BaseModel):
     inkomen_overige_aanvragers: float = 0
     
     # Status
-    alleenstaande: str = True
-    ontvangt_aow: str = False
+    alleenstaande: str = "JA"
+    ontvangt_aow: str = "NEE"
     
     # Energielabel
     energielabel: Optional[str] = "Geen (geldig) Label"
@@ -130,8 +130,8 @@ def calculate(request: CalculateRequest) -> Dict[str, Any]:
         'te_betalen_partneralimentatie_aanvrager': request.te_betalen_partneralimentatie_aanvrager,
         'te_betalen_partneralimentatie_partner': request.te_betalen_partneralimentatie_partner,
         'inkomen_overige_aanvragers': request.inkomen_overige_aanvragers,
-        'alleenstaande': "JA" if request.alleenstaande else "NEE",
-        'ontvangt_aow': "JA" if request.ontvangt_aow else "NEE",
+        'alleenstaande': request.alleenstaande,
+        'ontvangt_aow': request.ontvangt_aow,
         'energielabel': request.energielabel,
         'verduurzamings_maatregelen': request.verduurzamings_maatregelen,
         'limieten_bkr_geregistreerd': request.limieten_bkr_geregistreerd,
