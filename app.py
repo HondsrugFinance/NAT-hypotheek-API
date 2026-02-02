@@ -4,25 +4,17 @@ Minimal API voor hypotheekberekeningen
 """
 
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from datetime import date
 import calculator_final
+import aow_calculator
 
 app = FastAPI(
     title="NAT Hypotheeknormen Calculator 2026",
     description="Bereken maximale hypotheek volgens NAT normen 2026",
     version="1.0.0"
 )
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 
 class HypotheekDeel(BaseModel):
@@ -173,3 +165,33 @@ def health():
         "woonquote_tables_loaded": hasattr(calculator_final, 'WOONQUOTE_TABLES'),
         "calculator_version": "Excel-exact 2026"
     }
+
+
+@app.get("/aow-categorie")
+def aow_categorie(geboortedatum: str):
+    """
+    Bepaal AOW-categorie voor hypotheekberekening.
+
+    Args:
+        geboortedatum: Geboortedatum in ISO formaat (YYYY-MM-DD)
+
+    Returns:
+        {
+            "categorie": "AOW_BEREIKT" | "BINNEN_10_JAAR" | "MEER_DAN_10_JAAR",
+            "aow_datum": "YYYY-MM-DD",
+            "jaren_tot_aow": float
+        }
+
+    Gebruik voor hypotheek:
+    - AOW_BEREIKT: Toggle "Ontvangt AOW" default AAN
+    - BINNEN_10_JAAR: Waarschuwing tonen, toggle default UIT
+    - MEER_DAN_10_JAAR: Geen actie, toggle default UIT
+    """
+    try:
+        geboorte = date.fromisoformat(geboortedatum)
+        return aow_calculator.bepaal_aow_categorie(geboorte)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ongeldige geboortedatum. Gebruik formaat YYYY-MM-DD. Error: {str(e)}"
+        )
