@@ -10,6 +10,16 @@ from datetime import date
 import calculator_final
 import aow_calculator
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Of specifiek je Lovable domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app = FastAPI(
     title="NAT Hypotheeknormen Calculator 2026",
     description="Bereken maximale hypotheek volgens NAT normen 2026",
