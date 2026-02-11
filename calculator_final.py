@@ -491,15 +491,22 @@ def calculate_scenario(
     # M34, M35 - Woonlast Box1/Box3
     # LET OP: Gebruikt inkomen_totaal (M32), NIET toets_inkomen!
     # Excel M34: =SUM((((((M32*WoonquoteBox1)+constanten!C53)-M33)-T19)/(WoonquoteBox1/WoonquoteBox3))-U19)*(WoonquoteBox1/WoonquoteBox3)
+
+    # Beveiliging: voorkom deling door nul als woonquote_box3 = 0
+    if woonquote_box3 == 0:
+        raise ValueError("Woonquote Box3 is 0 — kan niet delen. Controleer invoer (inkomen/toetsrente).")
+
+    wq_ratio = woonquote_box1 / woonquote_box3
+
     woonlast_box1 = (
         (((inkomen_totaal * woonquote_box1) + c53 - correctie - T19) /
-         (woonquote_box1 / woonquote_box3)) - U19
-    ) * (woonquote_box1 / woonquote_box3)
+         wq_ratio) - U19
+    ) * wq_ratio
 
     # Excel M35: =SUM((((M32*WoonquoteBox1)+constanten!C53)-M33)-T19)/(WoonquoteBox1/WoonquoteBox3)-U19
     woonlast_box3 = (
         ((inkomen_totaal * woonquote_box1) + c53 - correctie - T19) /
-        (woonquote_box1 / woonquote_box3)
+        wq_ratio
     ) - U19
 
     # M36, M37 - Alternative woonlast (voor niet-annuitair)
@@ -511,13 +518,13 @@ def calculate_scenario(
 
     woonlast_box1_alt = (
         (((inkomen_totaal * woonquote_box1) + const_for_alt - correctie - V19 - X19) /
-         (woonquote_box1 / woonquote_box3)) - W19 - Y19
-    ) * (woonquote_box1 / woonquote_box3)
+         wq_ratio) - W19 - Y19
+    ) * wq_ratio
 
     # Excel M37: =IF(K19>0,SUM((((M32*WoonquoteBox1)+constanten!D53)-M33)-V19-X19)/(WoonquoteBox1/WoonquoteBox3)-W19-Y19,SUM((((M32*WoonquoteBox1)+constanten!C53)-M33)-V19-X19)/(WoonquoteBox1/WoonquoteBox3)-W19-Y19)
     woonlast_box3_alt = (
         ((inkomen_totaal * woonquote_box1) + const_for_alt - correctie - V19 - X19) /
-        (woonquote_box1 / woonquote_box3)
+        wq_ratio
     ) - W19 - Y19
 
     # M42, M43 - Ruimte annuitair
@@ -542,6 +549,9 @@ def calculate_scenario(
     # Excel M48: =IF(K19>0,IF((N19+O19=0),M34/ToetsRente,M36/ToetsRente),SUM(M36/PMT(ToetsRente/12,cLpt,-1,0)/12))
     # Excel M49: =IF(K19>0,IF((N19+O19=0),M35/ToetsRente,M37/ToetsRente),SUM(M37/PMT(ToetsRente/12,cLpt,-1,0)/12))
     if aantal_niet_annuitair > 0:
+        # Beveiliging: voorkom deling door nul als toets_rente = 0
+        if toets_rente == 0:
+            raise ValueError("Toetsrente is 0 — kan niet delen. Controleer invoer.")
         if som_box1 + som_box3 == 0:
             ruimte_box1_niet_annuitair = woonlast_box1 / toets_rente
             ruimte_box3_niet_annuitair = woonlast_box3 / toets_rente

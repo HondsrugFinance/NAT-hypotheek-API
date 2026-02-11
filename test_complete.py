@@ -313,3 +313,6 @@ if all_pass:
 else:
     print(f"\n✗✗✗ {total_tests - passed_tests} TESTS FAILED ✗✗✗")
 print(f"{'='*120}\n")
+
+# Exit code voor CI/CD: 0 = alles geslaagd, 1 = minstens 1 test gefaald
+sys.exit(0 if all_pass else 1)
