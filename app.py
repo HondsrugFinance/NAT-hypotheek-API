@@ -67,12 +67,13 @@ if not ALLOWED_ORIGINS:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.lovable\.app|https://.*\.lovableproject\.com",
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
-logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS} + *.lovable.app + *.lovableproject.com")
 
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
@@ -82,11 +83,14 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
     """Controleer API-sleutel. Slaat over als er geen sleutel is geconfigureerd."""
     if API_KEY is None:
-        # Geen API key ingesteld op de server → alles doorlaten
+        logger.debug("Geen API-sleutel geconfigureerd op server, alles doorlaten")
         return None
+    if not api_key:
+        logger.warning("API-sleutel ontbreekt in request (header X-API-Key niet meegestuurd)")
+        raise HTTPException(status_code=403, detail="API-sleutel ontbreekt. Stuur header: X-API-Key")
     if api_key != API_KEY:
-        logger.warning("Ongeldige of ontbrekende API-sleutel")
-        raise HTTPException(status_code=403, detail="Ongeldige of ontbrekende API-sleutel")
+        logger.warning("Ongeldige API-sleutel ontvangen (lengte: %d)", len(api_key))
+        raise HTTPException(status_code=403, detail="Ongeldige API-sleutel")
     return api_key
 
 
@@ -246,8 +250,10 @@ async def calculate(
 
     Vereist X-API-Key header als NAT_API_KEY is geconfigureerd op de server.
     """
+    origin = request.headers.get("origin", "onbekend")
     logger.info(
-        "Berekening gestart: alleenstaande=%s, ontvangt_aow=%s, delen=%d",
+        "Berekening gestart: origin=%s, alleenstaande=%s, ontvangt_aow=%s, delen=%d",
+        origin,
         request_body.alleenstaande,
         request_body.ontvangt_aow,
         len(request_body.hypotheek_delen),
