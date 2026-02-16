@@ -526,7 +526,6 @@ class SamenvattingPdfRequest(BaseModel):
 async def samenvatting_pdf(
     request_body: SamenvattingPdfRequest,
     request: Request,
-    api_key: Optional[str] = Depends(verify_api_key),
 ):
     """
     Genereer een PDF samenvatting van de hypotheekberekening.
