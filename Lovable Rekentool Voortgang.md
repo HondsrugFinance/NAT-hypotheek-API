@@ -69,7 +69,10 @@ Laatst bijgewerkt: 2026-02-16
 | Project | `armwhaeuacimgbjukdtm` (AWS eu-central-1, Frankfurt) |
 | Plan | Gratis (pauzeert na 1 week inactiviteit) |
 | Auth | Email/password, werkend met ProtectedRoute op alle routes |
-| Bestaande tabellen | `profiles` (adviseursprofiel) |
+| Tabellen | `profiles` (adviseursprofiel), `dossiers` (hypotheekdossiers), `aanvragen` (hypotheekaanvragen), `audit_log` (audit trail) |
+| RLS | Actief op dossiers, aanvragen en audit_log — lezen voor alle auth users, wijzigen alleen eigenaar |
+| Dual-write | localStorage + Supabase (Supabase-first bij lezen) |
+| Migratie | `/admin-migratie` pagina voor eenmalige localStorage → Supabase migratie |
 | Gebruikers | alex@hondsrugfinance.nl (actief), quido@hondsrugfinance.nl (nooit ingelogd), stephan@hondsrugfinance.nl (wacht op verificatie) |
 
 ---
@@ -383,7 +386,45 @@ Alle hardcoded frontend-data (fiscale parameters, geldverstrekkers, dropdown-opt
 
 **Nieuw:** 3 publieke config-endpoints (`/config/fiscaal-frontend`, `/config/geldverstrekkers`, `/config/dropdowns`)
 **Updated:** `/config/versie` toont nu alle 6 config-versies
-**Lovable-prompt:** Geschreven — geeft aan Lovable om `useNatConfig` hook + `NatConfigContext` te implementeren
+**Lovable-prompt:** Geschreven en door Lovable geïmplementeerd (zie hieronder)
+
+### Stap C2: Lovable-data externaliseren — Lovable kant (GEDAAN — 2026-02-16)
+
+Lovable heeft de C2-prompt volledig geïmplementeerd:
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/useNatConfig.ts` | **Nieuw** — fetcht 3 endpoints parallel, in-memory cache |
+| `src/contexts/NatConfigContext.tsx` | **Nieuw** — React context + provider |
+| `App.tsx` | Wrap met `NatConfigProvider` + error toast |
+| `src/utils/fiscaleParameters.ts` | `getFiscaleParameters()` helper toegevoegd |
+| `src/utils/berekeningen.ts` | Functies accepteren nu optioneel `params` argument |
+| `src/pages/Aankoop.tsx` | NHG grens via config |
+| `src/components/ResultCards.tsx` | Config via context |
+| `src/components/aanvraag/sections/FinancieringsopzetSection.tsx` | NHG + overdrachtsbelasting via config |
+| 6 inkomen/dropdown-componenten | Dropdowns via config met fallback |
+| `HuidigeHypotheekSection.tsx` | Geldverstrekkers via config |
+| `VerplichtingenSection.tsx` | Financiële instellingen via config |
+| `WoningSection.tsx` + `OnderpandSection.tsx` | Woning-dropdowns via config |
+
+**Verificatie:** App laadt config bij mount, console toont `NAT Config loaded: { fiscaal: "2026", ... }`
+
+### Lovable-wijzigingen 13 feb 2026
+
+**Supabase dual-write (belangrijkste wijziging):**
+- `supabaseDossierService.ts` — CRUD voor dossiers (fetch, upsert, delete) met camelCase↔snake_case mapping
+- `supabaseAanvraagService.ts` — CRUD voor aanvragen met auto-update parent dossier timestamp
+- `dossierStorage.ts` — schrijft nu naar localStorage + Supabase (dual-write)
+- `aanvraagStorage.ts` — schrijft nu naar localStorage + Supabase (dual-write)
+- Lezen: Supabase-first, fallback naar localStorage
+
+**Database migraties:**
+- `20260213072611`: Tabellen `dossiers`, `aanvragen`, `audit_log` + RLS + audit-triggers
+- `20260213081539`: Fix trigger-functie `update_laatst_gewijzigd_column()`
+
+**Admin migratie:**
+- `/admin-migratie` pagina voor eenmalige localStorage → Supabase migratie
+- Opruimen van wezen-aanvragen (aanvragen zonder gekoppeld dossier)
 
 ### Lovable-wijzigingen 16 feb 2026
 
@@ -417,6 +458,12 @@ Alle hardcoded frontend-data (fiscale parameters, geldverstrekkers, dropdown-opt
 - Burgerlijke staat + samenlevingsvorm (partner)
 - Straat + woonplaats (contactgegevens, via PDOK)
 
+**API & Config:**
+- API-sleutel geëxternaliseerd naar `apiConfig.ts` met env-variabelen
+- NAT Config integratie: `useNatConfig` hook + `NatConfigContext` (C2 Lovable-kant)
+- Site titel geüpdatet naar "2026"
+- Doelstelling-wijziging bevestigingsdialoog (voorkomt dataverlies)
+
 **Nieuwe externe service:**
 - PDOK API (api.pdok.nl) — postcode lookup via Supabase Edge Function `postcode-lookup`
 
@@ -432,7 +479,7 @@ Alle hardcoded frontend-data (fiscale parameters, geldverstrekkers, dropdown-opt
 | 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Na project-switch | Te doen |
 | 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Na project-switch | Te doen |
 | 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
-| 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **NAT API klaar** — Lovable-prompt klaar |
+| 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **Gedaan** |
 | 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |
 | 11 | Hypotheekrentes handmatig (stap C4) | Supabase + Lovable | Na C3 | Te doen |
 | 12 | Samenvatting PDF (stap D1) | NAT API (WeasyPrint) | Onafhankelijk | Te doen |
