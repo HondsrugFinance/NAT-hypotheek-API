@@ -20,6 +20,12 @@ with open(
 ) as f:
     WOONQUOTE_TABLES = json.load(f)
 
+with open(os.path.join(BASE_DIR, 'config', 'energielabel.json'), 'r', encoding='utf-8') as f:
+    ENERGIELABEL_CONFIG = json.load(f)
+
+with open(os.path.join(BASE_DIR, 'config', 'studielening.json'), 'r', encoding='utf-8') as f:
+    STUDIELENING_CONFIG = json.load(f)
+
 @dataclass
 class Annuitair:
     max_box1: float
@@ -104,47 +110,15 @@ def lookup_woonquote(toets_inkomen: float, toets_rente: float, ontvangt_aow: str
 def calculate_energielabel_bonus(energielabel: Optional[str], verduurzamings_maatregelen: float) -> float:
     """
     Calculate C33:C50 sum - Excel energielabel bonuses
-    C33-C40: Base bonuses per label
+    C33-C40: Base bonuses per label (uit config/energielabel.json)
     C43-C50: Verduurzamings maatregelen capped per label
     """
     if energielabel is None:
         energielabel = ""
 
-    # C33-C40: Base bonuses
-    base_bonus = 0
-    if energielabel == "Geen (geldig) Label":
-        base_bonus = 0  # C33
-    elif energielabel == "E,F,G":
-        base_bonus = 0  # C34
-    elif energielabel == "C,D":
-        base_bonus = 5000  # C35
-    elif energielabel == "A,B":
-        base_bonus = 10000  # C36
-    elif energielabel == "A+,A++":
-        base_bonus = 20000  # C37
-    elif energielabel == "A+++":
-        base_bonus = 25000  # C38
-    elif energielabel == "A++++":
-        base_bonus = 30000  # C39
-    elif energielabel == "A++++ met garantie":
-        base_bonus = 40000  # C40
-
-    # C43-C50: Verduurzamings maatregelen met cap per label
-    verduurzaming_bonus = 0
-    if verduurzamings_maatregelen > 0:
-        if energielabel == "Geen (geldig) Label":
-            # C43: IF(AND(F36>0, F36>10000), 10000, F36)
-            verduurzaming_bonus = min(verduurzamings_maatregelen, 10000)
-        elif energielabel == "E,F,G":
-            # C44: cap 20000
-            verduurzaming_bonus = min(verduurzamings_maatregelen, 20000)
-        elif energielabel == "C,D":
-            # C45: cap 15000
-            verduurzaming_bonus = min(verduurzamings_maatregelen, 15000)
-        elif energielabel in ["A,B", "A+,A++"]:
-            # C46, C47: cap 10000
-            verduurzaming_bonus = min(verduurzamings_maatregelen, 10000)
-        # A+++, A++++, A++++ met garantie: 0 (C48, C49, C50)
+    base_bonus = ENERGIELABEL_CONFIG["base_bonus"].get(energielabel, 0)
+    cap = ENERGIELABEL_CONFIG["verduurzaming_cap"].get(energielabel, 0)
+    verduurzaming_bonus = min(verduurzamings_maatregelen, cap) if verduurzamings_maatregelen > 0 and cap > 0 else 0
 
     return base_bonus + verduurzaming_bonus
 
@@ -184,46 +158,15 @@ def calculate_c73(toets_rente: float, studievoorschot: float) -> float:
     """
     Excel C73 = SUM(C60:C71)
     Studielening correctie op basis van toetsrente
-    Exacte brackets volgens Excel
+    Brackets uit config/studielening.json
     """
     jaar_bedrag = studievoorschot * 12
 
-    # C60: <= 1.5%
-    if toets_rente <= 0.015:
-        return jaar_bedrag * 1.05
-    # C61: 1.501% - 2%
-    elif toets_rente <= 0.02:
-        return jaar_bedrag * 1.05
-    # C62: 2.001% - 2.5%
-    elif toets_rente <= 0.025:
-        return jaar_bedrag * 1.1
-    # C63: 2.501% - 3%
-    elif toets_rente <= 0.03:
-        return jaar_bedrag * 1.15
-    # C64: 3.001% - 3.5%
-    elif toets_rente <= 0.035:
-        return jaar_bedrag * 1.2
-    # C65: 3.501% - 4%
-    elif toets_rente <= 0.04:
-        return jaar_bedrag * 1.2
-    # C66: 4.001% - 4.5%
-    elif toets_rente <= 0.045:
-        return jaar_bedrag * 1.25
-    # C67: 4.501% - 5%
-    elif toets_rente <= 0.05:
-        return jaar_bedrag * 1.3
-    # C68: 5.001% - 5.5%
-    elif toets_rente <= 0.055:
-        return jaar_bedrag * 1.3
-    # C69: 5.501% - 6%
-    elif toets_rente <= 0.06:
-        return jaar_bedrag * 1.35
-    # C70: 6.001% - 6.5%
-    elif toets_rente <= 0.065:
-        return jaar_bedrag * 1.4
-    # C71: >= 6.501%
-    else:
-        return jaar_bedrag * 1.4
+    for bracket in STUDIELENING_CONFIG["correctie_brackets"]:
+        if toets_rente <= bracket["rente_tot"]:
+            return jaar_bedrag * bracket["factor"]
+
+    return jaar_bedrag * STUDIELENING_CONFIG["default_factor"]
 
 def calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
     """Main calculation - Excel exact"""

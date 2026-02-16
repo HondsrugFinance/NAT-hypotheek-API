@@ -6,6 +6,7 @@ API voor hypotheekberekeningen met beveiliging, logging en invoercontrole
 import os
 import sys
 import time
+import json
 import logging
 from fastapi import FastAPI, HTTPException, Request, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,17 +106,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# --- Constanten voor validatie ---
-VALID_ENERGIELABELS = [
-    "Geen (geldig) Label",
-    "E,F,G",
-    "C,D",
-    "A,B",
-    "A+,A++",
-    "A+++",
-    "A++++",
-    "A++++ met garantie",
-]
+# --- Constanten voor validatie (energielabels uit config) ---
+VALID_ENERGIELABELS = list(calculator_final.ENERGIELABEL_CONFIG["base_bonus"].keys())
 
 VALID_AFLOS_TYPES = ["Annuïteit", "Lineair", "Aflosvrij", "Spaarhypotheek"]
 
@@ -393,3 +385,45 @@ def aow_categorie(geboortedatum: str):
             status_code=400,
             detail=f"Ongeldige geboortedatum. Gebruik formaat YYYY-MM-DD. Error: {str(e)}",
         )
+
+
+# --- Config endpoints (publieke data, geen API-key vereist) ---
+
+@app.get("/config/energielabel")
+def config_energielabel():
+    """Huidige energielabel bonussen en verduurzaming-caps."""
+    return calculator_final.ENERGIELABEL_CONFIG
+
+
+@app.get("/config/studielening")
+def config_studielening():
+    """Huidige studielening correctiefactoren per toetsrente-bracket."""
+    return calculator_final.STUDIELENING_CONFIG
+
+
+@app.get("/config/aow")
+def config_aow():
+    """Huidige AOW-leeftijden tabel."""
+    return aow_calculator.AOW_CONFIG
+
+
+@app.get("/config/fiscaal")
+def config_fiscaal():
+    """Huidige fiscale standaardwaarden voor hypotheekberekening."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'fiscaal.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+@app.get("/config/versie")
+def config_versie():
+    """Versie-overzicht van API en configuratiebestanden."""
+    return {
+        "api_versie": "1.1.0",
+        "calculator_versie": "Excel-exact 2026",
+        "config_versies": {
+            "energielabel": calculator_final.ENERGIELABEL_CONFIG.get("versie"),
+            "studielening": calculator_final.STUDIELENING_CONFIG.get("versie"),
+            "aow": aow_calculator.AOW_CONFIG.get("versie"),
+        },
+    }

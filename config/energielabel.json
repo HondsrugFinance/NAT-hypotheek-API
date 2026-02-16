@@ -1,0 +1,24 @@
+{
+  "versie": "2026",
+  "laatst_bijgewerkt": "2026-01-01",
+  "base_bonus": {
+    "Geen (geldig) Label": 0,
+    "E,F,G": 0,
+    "C,D": 5000,
+    "A,B": 10000,
+    "A+,A++": 20000,
+    "A+++": 25000,
+    "A++++": 30000,
+    "A++++ met garantie": 40000
+  },
+  "verduurzaming_cap": {
+    "Geen (geldig) Label": 10000,
+    "E,F,G": 20000,
+    "C,D": 15000,
+    "A,B": 10000,
+    "A+,A++": 10000,
+    "A+++": 0,
+    "A++++": 0,
+    "A++++ met garantie": 0
+  }
+}

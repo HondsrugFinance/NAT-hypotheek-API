@@ -1,0 +1,15 @@
+{
+  "versie": "2026",
+  "laatst_bijgewerkt": "2026-01-01",
+  "beschrijving": "Standaardwaarden voor hypotheekberekening. Kunnen per request overschreven worden.",
+  "defaults": {
+    "c_toets_rente": 0.05,
+    "c_actuele_10jr_rente": 0.05,
+    "c_rvp_toets_rente": 120,
+    "c_factor_2e_inkomen": 1.0,
+    "c_lpt": 360,
+    "c_alleen_grens_o": 30000,
+    "c_alleen_grens_b": 29000,
+    "c_alleen_factor": 17000
+  }
+}

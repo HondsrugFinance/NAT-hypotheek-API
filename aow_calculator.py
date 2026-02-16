@@ -7,21 +7,34 @@ Categorieën:
 - BINNEN_10_JAAR: Klant bereikt AOW binnen 10 jaar
 - MEER_DAN_10_JAAR: Klant bereikt AOW over meer dan 10 jaar
 
-Bron: https://www.rijksoverheid.nl/onderwerpen/algemene-ouderdomswet-aow/aow-leeftijd
-Laatst bijgewerkt: 2026-02-02
+AOW-tabel wordt geladen uit config/aow.json
+Jaarlijks updaten in november wanneer nieuwe jaren worden aangekondigd
 """
 
+import os
+import json
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-# AOW-leeftijd tabel (officieel vastgesteld t/m 2031)
-# Jaarlijks updaten in november wanneer nieuwe jaren worden aangekondigd
-AOW_TABEL = [
-    {"geboren_tot": date(1960, 12, 31), "jaren": 67, "maanden": 0},
-    {"geboren_tot": date(1964, 9, 30), "jaren": 67, "maanden": 3},
-    # Fallback voor jongeren (geschat, nog niet officieel vastgesteld)
-    {"geboren_tot": None, "jaren": 67, "maanden": 3},
-]
+# AOW-config laden uit JSON
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+with open(os.path.join(BASE_DIR, 'config', 'aow.json'), 'r', encoding='utf-8') as f:
+    AOW_CONFIG = json.load(f)
+
+# Converteer JSON naar intern formaat
+AOW_TABEL = []
+for regel in AOW_CONFIG["tabel"]:
+    AOW_TABEL.append({
+        "geboren_tot": date.fromisoformat(regel["geboren_tot"]),
+        "jaren": regel["jaren"],
+        "maanden": regel["maanden"],
+    })
+AOW_TABEL.append({
+    "geboren_tot": None,
+    "jaren": AOW_CONFIG["fallback"]["jaren"],
+    "maanden": AOW_CONFIG["fallback"]["maanden"],
+})
 
 
 def bereken_aow_datum(geboortedatum: date) -> date:

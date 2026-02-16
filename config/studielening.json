@@ -1,0 +1,18 @@
+{
+  "versie": "2026",
+  "laatst_bijgewerkt": "2026-01-01",
+  "correctie_brackets": [
+    {"rente_tot": 0.015, "factor": 1.05},
+    {"rente_tot": 0.02, "factor": 1.05},
+    {"rente_tot": 0.025, "factor": 1.10},
+    {"rente_tot": 0.03, "factor": 1.15},
+    {"rente_tot": 0.035, "factor": 1.20},
+    {"rente_tot": 0.04, "factor": 1.20},
+    {"rente_tot": 0.045, "factor": 1.25},
+    {"rente_tot": 0.05, "factor": 1.30},
+    {"rente_tot": 0.055, "factor": 1.30},
+    {"rente_tot": 0.06, "factor": 1.35},
+    {"rente_tot": 0.065, "factor": 1.40}
+  ],
+  "default_factor": 1.40
+}

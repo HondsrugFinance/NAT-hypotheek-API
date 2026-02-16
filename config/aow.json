@@ -1,0 +1,10 @@
+{
+  "versie": "2026",
+  "laatst_bijgewerkt": "2026-02-02",
+  "bron": "https://www.rijksoverheid.nl/onderwerpen/algemene-ouderdomswet-aow/aow-leeftijd",
+  "tabel": [
+    {"geboren_tot": "1960-12-31", "jaren": 67, "maanden": 0},
+    {"geboren_tot": "1964-09-30", "jaren": 67, "maanden": 3}
+  ],
+  "fallback": {"jaren": 67, "maanden": 3}
+}
