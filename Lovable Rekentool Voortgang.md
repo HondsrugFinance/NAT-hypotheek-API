@@ -356,6 +356,70 @@ Resterende duplicaties uit de audit:
 - **Geldverstrekkers (18 namen)** — 2 plekken → naar enkele bron
 - **Financiële instellingen (6 banken)** — 2 plekken → idem
 
+### Stap C1: Config externaliseren NAT API (GEDAAN — 2026-02-16)
+
+Alle hardcoded rekentabellen verplaatst naar `config/*.json`:
+
+| Config-bestand | Inhoud |
+|----------------|--------|
+| `config/energielabel.json` | Base bonussen (€0-€40k) en verduurzaming-caps per label |
+| `config/studielening.json` | 11 correctiefactor-brackets per toetsrente |
+| `config/aow.json` | AOW-leeftijden tabel + fallback |
+| `config/fiscaal.json` | Fiscale standaardwaarden (toetsrente, factoren, etc.) |
+
+**Refactored:** `calculator_final.py` (2 functies), `aow_calculator.py` (AOW-tabel laden)
+**Nieuw:** 5 publieke config-endpoints (`/config/energielabel`, `/config/studielening`, `/config/aow`, `/config/fiscaal`, `/config/versie`)
+**Verificatie:** Alle 10 tests slagen met identieke uitkomsten (0.000000 verschil)
+
+### Stap C2: Lovable-data externaliseren — NAT API kant (GEDAAN — 2026-02-16)
+
+Alle hardcoded frontend-data (fiscale parameters, geldverstrekkers, dropdown-opties) verplaatst naar `config/*.json` + endpoints:
+
+| Config-bestand | Inhoud |
+|----------------|--------|
+| `config/fiscaal-frontend.json` | 17 fiscale parameters (NHG, belasting, overdrachtsbelasting, toetsrente) + AOW-jaarbedragen |
+| `config/geldverstrekkers.json` | 36 hypotheekverstrekkers + productlijnen per verstrekker |
+| `config/dropdowns.json` | 67 beroepen, 5 dienstverbandtypen, 4 arbeidsmarktscan-fases, 13 onderpandtypen, 3 woningtypen, 13 energielabels, 6+1 waarderingsmethoden, 4 overdrachtsbelasting-opties, 293 financiële instellingen |
+
+**Nieuw:** 3 publieke config-endpoints (`/config/fiscaal-frontend`, `/config/geldverstrekkers`, `/config/dropdowns`)
+**Updated:** `/config/versie` toont nu alle 6 config-versies
+**Lovable-prompt:** Geschreven — geeft aan Lovable om `useNatConfig` hook + `NatConfigContext` te implementeren
+
+### Lovable-wijzigingen 16 feb 2026
+
+**AOW-fixes (ochtend):**
+- AOW data flow fixed — prev-ref reset bug opgelost
+- AOW propagation bug — datums propageren nu correct naar einddatums
+- AOW income threshold — inkomen na AOW-datum correct berekend
+
+**Dossier/Aanvraag-flow:**
+- Nieuw dossier aanmaken vanuit indexpagina met contactgegevens
+- Postcode → straat/woonplaats via PDOK API (Supabase Edge Function)
+- Prefill aanvragen vanuit dossiergegevens
+- Save-keuze dialog (overschrijven of nieuw opslaan)
+- Dossier laatst_gewijzigd auto-update bij opslaan aanvraag
+- Drie kaarten op één rij (indexpagina layout)
+- Migratieknop verwijderd
+
+**Financiering/Berekening:**
+- Overbrugging leningtype toegevoegd (mapt naar Aflossingsvrij in NAT API)
+- NHG provisie verlaagd van 0.6% naar 0.4%
+- Overdrachtsbelasting nu bewerkbaar (niet meer auto-berekend)
+- EBB auto-fill verwijderd (handmatig invullen)
+
+**Naamgeving/UI:**
+- Genummerde berekeningen en aanvraagnamen
+- Aanvraag-kopieën naamgeving (kopie, kopie 2, etc.)
+- Aanvraag icon kleuren (primair/secundair)
+- Default stap bij openen aanvraag: 5
+
+**Nieuwe velden (JSONB, geen migratie nodig):**
+- Burgerlijke staat + samenlevingsvorm (partner)
+- Straat + woonplaats (contactgegevens, via PDOK)
+
+**Nieuwe externe service:**
+- PDOK API (api.pdok.nl) — postcode lookup via Supabase Edge Function `postcode-lookup`
+
 ### Nog te doen (Fase 4)
 
 | # | Stap | Waar | Afhankelijkheid | Status |
@@ -367,8 +431,8 @@ Resterende duplicaties uit de audit:
 | 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 6 | Te doen |
 | 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Na project-switch | Te doen |
 | 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Na project-switch | Te doen |
-| 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | Te doen |
-| 9 | Lovable-data externaliseren (stap C2) | Lovable + Supabase | Na C1 | Te doen |
+| 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
+| 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **NAT API klaar** — Lovable-prompt klaar |
 | 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |
 | 11 | Hypotheekrentes handmatig (stap C4) | Supabase + Lovable | Na C3 | Te doen |
 | 12 | Samenvatting PDF (stap D1) | NAT API (WeasyPrint) | Onafhankelijk | Te doen |

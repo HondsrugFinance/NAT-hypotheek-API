@@ -1,0 +1,28 @@
+{
+  "versie": "2026",
+  "laatst_bijgewerkt": "2026-02-16",
+  "beschrijving": "Fiscale parameters voor Lovable frontend hypotheek-UI. Jaarlijks bijwerken.",
+  "parameters": {
+    "nhgGrens": 470000,
+    "nhgProvisie": 0.004,
+    "belastingtariefBox1": 0.3697,
+    "belastingtariefBox1Hoog": 0.495,
+    "grensBox1Hoog": 76817,
+    "aowLeeftijdJaren": 67,
+    "aowLeeftijdMaanden": 0,
+    "overdrachtsbelastingWoning": 0.02,
+    "overdrachtsbelastingOverig": 0.106,
+    "startersVrijstellingGrens": 525000,
+    "startersMaxLeeftijd": 35,
+    "standaardLooptijdJaren": 30,
+    "standaardLooptijdMaanden": 360,
+    "toetsrente": 5.0,
+    "jaar": 2026,
+    "datumIngang": "2026-01-01"
+  },
+  "aow_jaarbedragen": {
+    "alleenstaand": 20929,
+    "samenwonend": 14342,
+    "toelichting": "Bruto jaarbedragen inclusief vakantiegeld"
+  }
+}

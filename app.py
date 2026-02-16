@@ -415,9 +415,43 @@ def config_fiscaal():
         return json.load(f)
 
 
+@app.get("/config/fiscaal-frontend")
+def config_fiscaal_frontend():
+    """Fiscale parameters voor de Lovable frontend UI (NHG, belasting, AOW-bedragen)."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'fiscaal-frontend.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+@app.get("/config/geldverstrekkers")
+def config_geldverstrekkers():
+    """Lijst van hypotheekverstrekkers en productlijnen."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'geldverstrekkers.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+@app.get("/config/dropdowns")
+def config_dropdowns():
+    """Alle dropdown-opties voor de Lovable frontend (beroepen, woning, instellingen)."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'dropdowns.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
 @app.get("/config/versie")
 def config_versie():
     """Versie-overzicht van API en configuratiebestanden."""
+    # Laad versies uit frontend config-bestanden
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    frontend_configs = {}
+    for naam in ("fiscaal-frontend", "geldverstrekkers", "dropdowns"):
+        try:
+            with open(os.path.join(base_dir, 'config', f'{naam}.json'), 'r', encoding='utf-8') as f:
+                frontend_configs[naam] = json.load(f).get("versie")
+        except FileNotFoundError:
+            frontend_configs[naam] = None
+
     return {
         "api_versie": "1.1.0",
         "calculator_versie": "Excel-exact 2026",
@@ -425,5 +459,8 @@ def config_versie():
             "energielabel": calculator_final.ENERGIELABEL_CONFIG.get("versie"),
             "studielening": calculator_final.STUDIELENING_CONFIG.get("versie"),
             "aow": aow_calculator.AOW_CONFIG.get("versie"),
+            "fiscaal_frontend": frontend_configs.get("fiscaal-frontend"),
+            "geldverstrekkers": frontend_configs.get("geldverstrekkers"),
+            "dropdowns": frontend_configs.get("dropdowns"),
         },
     }
