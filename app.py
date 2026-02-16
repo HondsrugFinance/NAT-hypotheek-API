@@ -10,13 +10,14 @@ import json
 import logging
 from fastapi import FastAPI, HTTPException, Request, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import date
 import calculator_final
 import aow_calculator
+import pdf_generator
 
 # --- Logging ---
 logging.basicConfig(
@@ -464,3 +465,100 @@ def config_versie():
             "dropdowns": frontend_configs.get("dropdowns"),
         },
     }
+
+
+# --- Samenvatting PDF modellen ---
+
+class HaalbaarheidItem(BaseModel):
+    label: str
+    waarde: str
+    is_totaal: bool = False
+
+class HaalbaarheidSectie(BaseModel):
+    naam: str
+    inkomen_items: List[HaalbaarheidItem] = []
+    energie_items: List[HaalbaarheidItem] = []
+    verplichtingen_items: List[HaalbaarheidItem] = []
+    max_annuitair: str = ""
+    max_werkelijk: str = ""
+
+class FinancieringItem(BaseModel):
+    label: str
+    waarde: str
+
+class FinancieringSectie(BaseModel):
+    naam: str
+    type_label: str
+    posten: List[FinancieringItem]
+    totaal: str
+    eigen_middelen: List[FinancieringItem] = []
+    hypotheek: str
+
+class LeningDeelPdf(BaseModel):
+    naam: str
+    aflosvorm: str
+    looptijd: str
+    rente: str
+    rvp: str
+    bedrag: str
+
+class MaandlastenSectie(BaseModel):
+    naam: str
+    lening_delen: List[LeningDeelPdf]
+    totaal_lening: str
+    rente: str
+    aflossing: str
+    bruto: str
+    renteaftrek: str
+    netto: str
+
+class SamenvattingPdfRequest(BaseModel):
+    klant_naam: str = ""
+    datum: str = ""
+    haalbaarheid: List[HaalbaarheidSectie] = []
+    financiering: List[FinancieringSectie] = []
+    maandlasten: List[MaandlastenSectie] = []
+
+
+# --- Samenvatting PDF endpoint ---
+
+@app.post("/samenvatting-pdf")
+async def samenvatting_pdf(
+    request_body: SamenvattingPdfRequest,
+    request: Request,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """
+    Genereer een PDF samenvatting van de hypotheekberekening.
+
+    De frontend stuurt alle display-ready data (bedragen al geformateerd).
+    Retourneert een PDF bestand.
+    """
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "PDF generatie gestart: origin=%s, klant=%s",
+        origin,
+        request_body.klant_naam or "(onbekend)",
+    )
+
+    try:
+        data = request_body.model_dump()
+        pdf_bytes = pdf_generator.genereer_samenvatting_pdf(data)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'attachment; filename="samenvatting-hypotheek.pdf"',
+            },
+        )
+    except Exception as e:
+        logger.error("PDF generatie mislukt: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF generatie mislukt: {str(e)}",
+        )
+
+
+# Rate limit op PDF endpoint (zwaarder dan berekening)
+if RATE_LIMITING_ENABLED:
+    samenvatting_pdf = limiter.limit("10/minute")(samenvatting_pdf)

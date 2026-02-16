@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 15mm 25mm 15mm;
+    @bottom-center {
+      content: "Pagina " counter(page) " van " counter(pages);
+      font-size: 8pt;
+      color: #888;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #1a1a1a;
+    line-height: 1.45;
+  }
+
+  /* --- Header --- */
+  .header {
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid #3d7c5f;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+  .header img {
+    width: 48px;
+    height: 48px;
+    margin-right: 14px;
+  }
+  .header-text h1 {
+    font-size: 16pt;
+    color: #3d7c5f;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .header-text p {
+    font-size: 9pt;
+    color: #666;
+  }
+
+  /* --- Secties --- */
+  .section {
+    margin-bottom: 18px;
+    page-break-inside: avoid;
+  }
+  .section-title {
+    font-size: 11pt;
+    font-weight: 600;
+    color: #3d7c5f;
+    border-bottom: 1px solid #d0d0d0;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  /* --- Kaarten grid --- */
+  .cards {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .card {
+    flex: 1 1 45%;
+    min-width: 240px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    page-break-inside: avoid;
+  }
+  .card-title {
+    font-size: 10pt;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #eee;
+  }
+
+  /* --- Groep headers --- */
+  .group-label {
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+    margin-bottom: 3px;
+  }
+
+  /* --- Rijen --- */
+  .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1.5px 0;
+  }
+  .row .label {
+    color: #666;
+  }
+  .row .value {
+    font-weight: 400;
+    text-align: right;
+  }
+
+  /* --- Scheidingslijnen --- */
+  .divider {
+    border-top: 1px solid #e0e0e0;
+    margin: 5px 0;
+  }
+
+  /* --- Totaal rijen --- */
+  .row-bold .label,
+  .row-bold .value {
+    font-weight: 600;
+  }
+  .row-primary .label,
+  .row-primary .value {
+    font-weight: 700;
+    color: #3d7c5f;
+  }
+
+  /* --- Leningdelen tabel --- */
+  .lening-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 4px;
+  }
+  .lening-tabel th {
+    text-align: left;
+    font-weight: 600;
+    color: #888;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 2px 4px 3px 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  .lening-tabel th:last-child,
+  .lening-tabel td:last-child {
+    text-align: right;
+  }
+  .lening-tabel td {
+    padding: 2px 4px 2px 0;
+    color: #666;
+  }
+
+  /* --- Footer --- */
+  .footer {
+    margin-top: 24px;
+    padding-top: 10px;
+    border-top: 1px solid #d0d0d0;
+    font-size: 7.5pt;
+    color: #999;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<div class="header">
+  <img src="data:image/png;base64,{{ logo_base64 }}" alt="Hondsrug Finance">
+  <div class="header-text">
+    <h1>Samenvatting Hypotheekberekening</h1>
+    <p>
+      {% if klant_naam %}{{ klant_naam }} &mdash; {% endif %}
+      {{ datum }}
+    </p>
+  </div>
+</div>
+
+<!-- ===== SECTIE 1: HAALBARE HYPOTHEEK ===== -->
+{% if haalbaarheid %}
+<div class="section">
+  <div class="section-title">Haalbare hypotheek</div>
+  <div class="cards">
+    {% for ber in haalbaarheid %}
+    <div class="card">
+      <div class="card-title">{{ ber.naam }}</div>
+
+      <!-- Inkomen -->
+      {% if ber.inkomen_items %}
+      <div class="group-label">Inkomen</div>
+      {% for item in ber.inkomen_items %}
+      <div class="row{% if loop.last and not item.is_totaal %} row-bold{% endif %}{% if item.is_totaal %} row-bold{% endif %}">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.waarde }}</span>
+      </div>
+      {% if item.is_totaal %}<div class="divider"></div>{% endif %}
+      {% endfor %}
+      {% endif %}
+
+      <!-- Energielabel -->
+      {% if ber.energie_items %}
+      <div class="group-label">Energielabel en EBV/EBB</div>
+      {% for item in ber.energie_items %}
+      <div class="row">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.waarde }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <!-- Financiele verplichtingen -->
+      {% if ber.verplichtingen_items %}
+      <div class="group-label">Financi&euml;le verplichtingen</div>
+      {% for item in ber.verplichtingen_items %}
+      <div class="row">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.waarde }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <!-- Maximale hypotheek -->
+      {% if ber.max_annuitair or ber.max_werkelijk %}
+      <div class="divider"></div>
+      <div class="group-label">Maximale hypotheek</div>
+      {% if ber.max_annuitair %}
+      <div class="row row-primary">
+        <span class="label">Max. Annu&iuml;tair (GHF)</span>
+        <span class="value">{{ ber.max_annuitair }}</span>
+      </div>
+      {% endif %}
+      {% if ber.max_werkelijk %}
+      <div class="row row-primary">
+        <span class="label">Max. Werkelijk</span>
+        <span class="value">{{ ber.max_werkelijk }}</span>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ===== SECTIE 2: FINANCIERINGSOPZET ===== -->
+{% if financiering %}
+<div class="section">
+  <div class="section-title">Financieringsopzet</div>
+  <div class="cards">
+    {% for fin in financiering %}
+    <div class="card">
+      <div class="card-title">{{ fin.naam }}</div>
+
+      <div class="group-label">{{ fin.type_label }}</div>
+      {% for item in fin.posten %}
+      <div class="row">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.waarde }}</span>
+      </div>
+      {% endfor %}
+
+      <div class="divider"></div>
+      <div class="row row-bold">
+        <span class="label">Totaal</span>
+        <span class="value">{{ fin.totaal }}</span>
+      </div>
+
+      {% for item in fin.eigen_middelen %}
+      <div class="row">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.waarde }}</span>
+      </div>
+      {% endfor %}
+
+      <div class="divider"></div>
+      <div class="row row-primary">
+        <span class="label">Hypotheek</span>
+        <span class="value">{{ fin.hypotheek }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ===== SECTIE 3: MAANDLASTEN ===== -->
+{% if maandlasten %}
+<div class="section">
+  <div class="section-title">Maandlasten</div>
+  <div class="cards">
+    {% for ml in maandlasten %}
+    <div class="card">
+      <div class="card-title">{{ ml.naam }}</div>
+
+      <!-- Leningdelen tabel -->
+      <div class="group-label">Leningdelen</div>
+      <table class="lening-tabel">
+        <thead>
+          <tr>
+            <th>Naam</th>
+            <th>Aflosvorm</th>
+            <th>Looptijd</th>
+            <th>Rente</th>
+            <th>RVP</th>
+            <th>Bedrag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for deel in ml.lening_delen %}
+          <tr>
+            <td>{{ deel.naam }}</td>
+            <td>{{ deel.aflosvorm }}</td>
+            <td>{{ deel.looptijd }}</td>
+            <td>{{ deel.rente }}</td>
+            <td>{{ deel.rvp }}</td>
+            <td style="text-align:right">{{ deel.bedrag }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="divider"></div>
+      <div class="row row-bold">
+        <span class="label">Totaal</span>
+        <span class="value">{{ ml.totaal_lening }}</span>
+      </div>
+
+      <!-- Maandlasten -->
+      <div class="divider"></div>
+      <div class="group-label">Maandlasten</div>
+      <div class="row">
+        <span class="label">Rente</span>
+        <span class="value">{{ ml.rente }}</span>
+      </div>
+      <div class="row">
+        <span class="label">Aflossing</span>
+        <span class="value">{{ ml.aflossing }}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="row row-bold">
+        <span class="label">Bruto maandlast</span>
+        <span class="value">{{ ml.bruto }}</span>
+      </div>
+      <div class="row">
+        <span class="label">Renteaftrek</span>
+        <span class="value">- {{ ml.renteaftrek }}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="row row-primary">
+        <span class="label">Netto maandlast</span>
+        <span class="value">{{ ml.netto }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ===== FOOTER ===== -->
+<div class="footer">
+  <p>
+    De genoemde maximale hypotheek is een indicatie op basis van de ingevoerde gegevens en de
+    GHF-normen voor {{ jaar }}. De werkelijke maximale hypotheek kan afwijken op basis van
+    persoonlijke omstandigheden, geldverstrekker en actuele rentestand. Deze berekening vormt
+    geen bindend aanbod.
+  </p>
+  <p style="margin-top: 4px;">
+    Gegenereerd op {{ datum }} &mdash; Hondsrug Finance
+  </p>
+</div>
+
+</body>
+</html>
