@@ -1,7 +1,6 @@
 {
   "versie": "2026",
-  "laatst_bijgewerkt": "2026-02-17",
-  "beschrijving": "Fiscale parameters voor Lovable frontend hypotheek-UI. Jaarlijks bijwerken.",
+  "beschrijving": "Test",
   "parameters": {
     "nhgGrens": 470000,
     "nhgProvisie": 0.004,
@@ -27,5 +26,6 @@
     "alleenstaand": 20929,
     "samenwonend": 14342,
     "toelichting": "Bruto jaarbedragen inclusief vakantiegeld"
-  }
+  },
+  "laatst_bijgewerkt": "2026-02-17"
 }
