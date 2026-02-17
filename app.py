@@ -493,6 +493,9 @@ async def update_config(
             f"Toegestaan: {', '.join(sorted(EDITABLE_CONFIGS))}",
         )
 
+    # Auto-set laatst_bijgewerkt (vóór validatie, zodat het veld altijd aanwezig is)
+    body["laatst_bijgewerkt"] = date.today().isoformat()
+
     # Valideer tegen Pydantic schema
     schema = CONFIG_SCHEMAS.get(config_name)
     if schema:
@@ -500,9 +503,6 @@ async def update_config(
             schema(**body)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Validatiefout: {str(e)}")
-
-    # Auto-set laatst_bijgewerkt
-    body["laatst_bijgewerkt"] = date.today().isoformat()
 
     # Schrijf naar lokaal filesystem
     config_path = os.path.join(
