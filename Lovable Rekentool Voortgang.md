@@ -534,11 +534,12 @@ PDF-generatie endpoint voor de Samenvatting-stap. Adviseurs kunnen een professio
 | 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Geen | **Gedaan** (2026-02-17) — SQL: role kolom + RLS policies, Lovable: useUserRole, RoleContext, Admin-pagina, rolbadge, viewer-restricties |
 | 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
 | 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **Gedaan** |
-| 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |
+| 10 | Admin-dashboard (stap C3) | NAT API + Lovable | Na C1 + C2 | **Gedaan** (2026-02-17) — Backend: PUT /config/{name} endpoint + Pydantic validatie + GitHub auto-commit. Frontend: Config Editor met 3 secties (Fiscale parameters, Calculator defaults, Geldverstrekkers). Geldverstrekkers: 34 stuks met productlijnen, klikbare expandable lijst. GitHub PAT + Render GITHUB_TOKEN voor persistentie over redeploys. |
 | 11 | Hypotheekrentes handmatig (stap C4) | Supabase + Lovable | Na C3 | Te doen |
 | 12 | Samenvatting PDF (stap D1) | NAT API (WeasyPrint) | Onafhankelijk | **Gedaan** (API + Lovable-prompt) |
 | 13 | Adviesrapport PDF (stap D2) | NAT API + Lovable | Na adviezen-feature | Te doen |
 | 14 | Hypotheekrentes automatisch (stap C4 fase 2) | NAT API | Na C4 fase 1 | Toekomst |
+| 15 | Project-switch naar eigen Supabase (stap 5) | Supabase + Lovable | Bij eerste echte klant of schaling | Toekomst |
 
 ---
 

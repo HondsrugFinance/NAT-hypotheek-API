@@ -4,7 +4,7 @@ Gebruikt door PUT /config/{name} endpoint.
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 # --- fiscaal-frontend.json ---
@@ -37,12 +37,28 @@ class FiscaalFrontendAowBedragen(BaseModel):
     toelichting: str
 
 
+class WoonquoteStaffel(BaseModel):
+    grens: int = Field(ge=0)
+    quote: float = Field(ge=0, le=1)
+
+
+class WoonquoteTabel(BaseModel):
+    toelichting: str
+    staffels: List[WoonquoteStaffel] = Field(min_length=1)
+    rentecorrectie_basis: float = Field(ge=0, le=20)
+    rentecorrectie_factor: float = Field(ge=0, le=1)
+    box3_reductie: float = Field(ge=0, le=1)
+    box3_minimum: float = Field(ge=0, le=1)
+    box1_minimum: float = Field(ge=0, le=1)
+
+
 class FiscaalFrontendConfig(BaseModel):
     versie: str
     laatst_bijgewerkt: str
     beschrijving: str
     parameters: FiscaalFrontendParameters
     aow_jaarbedragen: FiscaalFrontendAowBedragen
+    woonquote_tabel: Optional[WoonquoteTabel] = None
 
 
 # --- fiscaal.json ---

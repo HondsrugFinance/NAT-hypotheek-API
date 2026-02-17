@@ -27,5 +27,24 @@
     "samenwonend": 14342,
     "toelichting": "Bruto jaarbedragen inclusief vakantiegeld"
   },
+  "woonquote_tabel": {
+    "toelichting": "NAT 2026 woonquote staffels. Inkomen > grens → bijbehorende basisquote.",
+    "staffels": [
+      { "grens": 0, "quote": 0.216 },
+      { "grens": 25000, "quote": 0.22 },
+      { "grens": 35000, "quote": 0.24 },
+      { "grens": 45000, "quote": 0.26 },
+      { "grens": 55000, "quote": 0.28 },
+      { "grens": 65000, "quote": 0.29 },
+      { "grens": 75000, "quote": 0.30 },
+      { "grens": 85000, "quote": 0.31 },
+      { "grens": 100000, "quote": 0.32 }
+    ],
+    "rentecorrectie_basis": 4.5,
+    "rentecorrectie_factor": 0.005,
+    "box3_reductie": 0.062,
+    "box3_minimum": 0.10,
+    "box1_minimum": 0.15
+  },
   "laatst_bijgewerkt": "2026-02-17"
 }
