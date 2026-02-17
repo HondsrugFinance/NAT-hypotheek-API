@@ -77,6 +77,14 @@ app.add_middleware(
 
 logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS} + *.lovable.app + *.lovableproject.com")
 
+# --- Monthly costs calculator ---
+from monthly_costs.routes.calculate import router as monthly_costs_router
+from monthly_costs.exceptions.handlers import register_exception_handlers
+
+app.include_router(monthly_costs_router)
+register_exception_handlers(app)
+logger.info("Monthly costs calculator endpoint registered: POST /calculate/monthly-costs")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -532,7 +540,6 @@ async def update_config(
 # Rate limit op config PUT (max 5 per minuut)
 if RATE_LIMITING_ENABLED:
     update_config = limiter.limit("5/minute")(update_config)
-
 
 # --- Samenvatting PDF modellen ---
 

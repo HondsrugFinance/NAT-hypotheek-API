@@ -1,0 +1,69 @@
+{
+  "fiscal_year": 2025,
+  "effective_date": "2025-01-01",
+  "source": "Belastingdienst - Definitieve tarieven 2025",
+  "notes": "Tarieven 2025 zoals vastgesteld door de Belastingdienst",
+
+  "tax_brackets_box1": [
+    {
+      "lower": 0,
+      "upper": 38441,
+      "rate": 0.3693
+    },
+    {
+      "lower": 38441,
+      "upper": 76817,
+      "rate": 0.3748
+    },
+    {
+      "lower": 76817,
+      "upper": null,
+      "rate": 0.495
+    }
+  ],
+
+  "tax_brackets_box1_aow": [
+    {
+      "lower": 0,
+      "upper": 38441,
+      "rate": 0.1792
+    },
+    {
+      "lower": 38441,
+      "upper": 76817,
+      "rate": 0.3748
+    },
+    {
+      "lower": 76817,
+      "upper": null,
+      "rate": 0.495
+    }
+  ],
+
+  "max_mortgage_interest_deduction_rate": 0.3748,
+
+  "ewf_table": [
+    {
+      "lower": 0,
+      "upper": 75000,
+      "percentage": 0
+    },
+    {
+      "lower": 75001,
+      "upper": 1330000,
+      "percentage": 0.0035
+    },
+    {
+      "lower": 1330001,
+      "upper": null,
+      "fixed_amount": 4655,
+      "excess_percentage": 0.0235,
+      "threshold": 1330000
+    }
+  ],
+
+  "hillen": {
+    "enabled": true,
+    "reduction_percentage": 0.7667
+  }
+}
