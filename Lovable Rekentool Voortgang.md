@@ -135,8 +135,8 @@ De Rekentool slaat nu alle dossiers en aanvragen op in de browser (localStorage)
 | 3 | Dual-write aanzetten (localStorage + Supabase) | Lovable | Gedaan — werkt correct (zie debug-notitie hieronder) |
 | 4 | Bestaande data migreren | Lovable + Supabase | Gedaan (10 dossiers, 2 aanvragen, 1 wees-aanvraag overgeslagen) |
 | 5 | Reads overschakelen naar Supabase | Lovable | Gedaan (2026-02-16, incognito-test geslaagd) |
-| 6 | localStorage opruimen | Lovable | Te doen (pas na 1 week stabiel) |
-| 7 | 2FA met MS Authenticator | Lovable + Supabase | Te doen (na database-migratie) |
+| 6 | localStorage opruimen | Lovable | Gedaan (2026-02-16) |
+| 7 | 2FA met MS Authenticator | Lovable + Supabase | Gedaan (2026-02-17) — MfaEnroll, MfaVerify, Auth, Instellingen, ProtectedRoute |
 
 ### Stap 1: Tabellen aanmaken in Supabase (GEDAAN)
 
@@ -351,13 +351,15 @@ Alle API-configuratie geconsolideerd naar één bestand:
 - Rate limiting (30/min) beschermt tegen misbruik
 - De API-key is een extra laag, niet de primaire beveiliging
 
-### Stap A fix 3: Duplicaties opruimen — TE DOEN
+### Stap A fix 3: Duplicaties opruimen (GEDAAN — 2026-02-16)
 
-Resterende duplicaties uit de audit:
-- **Overdrachtsbelasting (2%)** — 3 plekken → centraliseren naar `fiscaleParameters.ts`
-- **BKR-forfait (€100)** — 2 plekken → idem
-- **Geldverstrekkers (18 namen)** — 2 plekken → naar enkele bron
-- **Financiële instellingen (6 banken)** — 2 plekken → idem
+Alle duplicaties opgelost via NAT Config API (C2) + stap 3:
+- **Overdrachtsbelasting (2%)** — via `params.overdrachtsbelastingWoning` uit config
+- **BKR-forfait (€100)** — via `params.bkrForfait` uit config
+- **Taxatiekosten (€695)** — via `params.taxatiekosten` uit config
+- **Hypotheekadvieskosten (€3.500)** — via `params.hypotheekadvieskosten` uit config
+- **Geldverstrekkers** — via `natConfig.geldverstrekkers` uit config
+- **Financiële instellingen** — via `natConfig.dropdowns.financiele_instellingen` uit config
 
 ### Stap C1: Config externaliseren NAT API (GEDAAN — 2026-02-16)
 
@@ -496,11 +498,11 @@ PDF-generatie endpoint voor de Samenvatting-stap. Adviseurs kunnen een professio
 |---|------|------|-----------------|--------|
 | 1 | Audit Lovable (stap A) | Lovable | Geen | **Gedaan** |
 | 2 | API centralisatie (stap A fix 1+2) | Lovable | Stap A | **Gedaan** |
-| 3 | Duplicaties opruimen (stap A fix 3) | Lovable | Stap A | Prompt klaar (`lovable-prompt-stap3.md`) |
-| 4 | localStorage opruimen (Fase 3, stap 6) | Lovable | Na stap 3 | Prompt klaar (`lovable-prompt-stap4.md`) |
-| 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 4 | Te doen |
-| 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Na project-switch | Te doen |
-| 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Na project-switch | Te doen |
+| 3 | Duplicaties opruimen (stap A fix 3) | Lovable | Stap A | **Gedaan** (2026-02-16) |
+| 4 | localStorage opruimen (Fase 3, stap 6) | Lovable | Na stap 3 | **Gedaan** (2026-02-16) |
+| 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 4 | **Uitgesteld** — Lovable Cloud voldoet voorlopig. Pas bij eerste echte klant of schaling. |
+| 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Geen | **Gedaan** (2026-02-17) |
+| 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Geen | Te doen |
 | 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
 | 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **Gedaan** |
 | 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |
