@@ -411,6 +411,35 @@ Lovable heeft de C2-prompt volledig geïmplementeerd:
 
 **Verificatie:** App laadt config bij mount, console toont `NAT Config loaded: { fiscaal: "2026", ... }`
 
+### Stap B: Rollen-systeem RBAC (GEDAAN — 2026-02-17)
+
+Drie rollen: admin, adviseur, viewer. Database-kant (Supabase) + frontend (Lovable) in één sessie opgezet.
+
+**Database (SQL-script `sql/stap7-rbac.sql`):**
+- `role` kolom op `profiles` tabel (TEXT, default 'adviseur', CHECK constraint)
+- `get_user_role()` helper functie (SECURITY DEFINER, voorkomt RLS-recursie)
+- RLS policies op dossiers, aanvragen, profiles:
+  - SELECT: alle authenticated users
+  - INSERT: admin + adviseur (alleen eigen owner_id)
+  - UPDATE/DELETE: eigen records voor adviseur, alle records voor admin
+  - Profiles: eigen profiel updaten zonder role-wijziging, admin mag alles
+
+**Frontend (Lovable-prompt `lovable-prompt-stap7-rbac.md`):**
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/useUserRole.ts` | **Nieuw** — haalt rol + userId op uit profiles |
+| `src/contexts/RoleContext.tsx` | **Nieuw** — React context voor rol |
+| `src/pages/Admin.tsx` | **Nieuw** — Gebruikersbeheer met rol-dropdown |
+| `App.tsx` | RoleProvider per route + /admin route |
+| Header/navigatie | "Beheer" link voor admin |
+| Index (home) | "Alleen-lezen toegang" voor viewer |
+| Dossiers + DossierDetail | Bewerken/verwijderen op basis van rol + ownership |
+| Aankoop, Aanpassen, Aanvraag | Redirect viewer naar / |
+| Instellingen | Rolbadge (groen=admin, blauw=adviseur, grijs=viewer) |
+
+**Verificatie:** Alex = admin (ziet Beheer-link, /admin werkt), Quido + Stephan = adviseur (dropdown beschikbaar).
+
 ### Stap D1: Samenvatting PDF (GEDAAN — 2026-02-16)
 
 PDF-generatie endpoint voor de Samenvatting-stap. Adviseurs kunnen een professionele A4-samenvatting downloaden.
@@ -502,7 +531,7 @@ PDF-generatie endpoint voor de Samenvatting-stap. Adviseurs kunnen een professio
 | 4 | localStorage opruimen (Fase 3, stap 6) | Lovable | Na stap 3 | **Gedaan** (2026-02-16) |
 | 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 4 | **Uitgesteld** — Lovable Cloud voldoet voorlopig. Pas bij eerste echte klant of schaling. |
 | 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Geen | **Gedaan** (2026-02-17) |
-| 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Geen | Te doen |
+| 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Geen | **Gedaan** (2026-02-17) — SQL: role kolom + RLS policies, Lovable: useUserRole, RoleContext, Admin-pagina, rolbadge, viewer-restricties |
 | 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
 | 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **Gedaan** |
 | 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |

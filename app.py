@@ -71,7 +71,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"https://.*\.lovable\.app|https://.*\.lovableproject\.com",
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
@@ -465,6 +465,73 @@ def config_versie():
             "dropdowns": frontend_configs.get("dropdowns"),
         },
     }
+
+
+# --- Config PUT endpoint (admin, API-key vereist) ---
+
+from config_schemas import CONFIG_SCHEMAS
+import github_sync
+
+EDITABLE_CONFIGS = {"fiscaal-frontend", "fiscaal", "geldverstrekkers"}
+
+
+@app.put("/config/{config_name}")
+async def update_config(
+    config_name: str,
+    body: Dict[str, Any],
+    request: Request,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """
+    Werk een config-bestand bij. Beveiligd met API-key.
+    Schrijft naar lokaal filesystem + commit naar GitHub voor persistentie.
+    """
+    if config_name not in EDITABLE_CONFIGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Config '{config_name}' is niet bewerkbaar. "
+            f"Toegestaan: {', '.join(sorted(EDITABLE_CONFIGS))}",
+        )
+
+    # Valideer tegen Pydantic schema
+    schema = CONFIG_SCHEMAS.get(config_name)
+    if schema:
+        try:
+            schema(**body)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Validatiefout: {str(e)}")
+
+    # Auto-set laatst_bijgewerkt
+    body["laatst_bijgewerkt"] = date.today().isoformat()
+
+    # Schrijf naar lokaal filesystem
+    config_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "config", f"{config_name}.json"
+    )
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(body, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    origin = request.headers.get("origin", "onbekend")
+    logger.info("Config '%s' bijgewerkt via %s", config_name, origin)
+
+    # Commit naar GitHub (async)
+    commit_msg = f"Config update: {config_name} (via admin UI)"
+    github_ok = await github_sync.commit_config_to_github(
+        config_name, body, commit_msg
+    )
+
+    return {
+        "status": "ok",
+        "config": config_name,
+        "github_committed": github_ok,
+        "message": f"Config '{config_name}' bijgewerkt",
+    }
+
+
+# Rate limit op config PUT (max 5 per minuut)
+if RATE_LIMITING_ENABLED:
+    update_config = limiter.limit("5/minute")(update_config)
 
 
 # --- Samenvatting PDF modellen ---
