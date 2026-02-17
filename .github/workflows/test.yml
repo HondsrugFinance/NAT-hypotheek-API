@@ -22,5 +22,5 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run calculator tests
-        run: python test_complete.py
+      - name: Run unit tests
+        run: python -m pytest tests/monthly_costs/unit/ -v
