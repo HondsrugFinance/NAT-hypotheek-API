@@ -1,6 +1,6 @@
 {
   "versie": "2026",
-  "beschrijving": "Test",
+  "beschrijving": "Fiscale parameters voor Lovable frontend hypotheek-UI. Jaarlijks bijwerken.",
   "parameters": {
     "nhgGrens": 470000,
     "nhgProvisie": 0.004,
