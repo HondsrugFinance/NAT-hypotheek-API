@@ -188,9 +188,9 @@ python test_complete.py
 
 ## 📁 Bestanden
 
-- `calculator.py` - Hoofdmodule (Excel-exact)
-- `woonquote_tables.json` - 4 woonquote lookup tabellen
-- `test_complete.py` - Test suite (9 tests)
+- `calculator_final.py` - Hoofdmodule (Excel-exact)
+- `config/woonquote.json` - 4 woonquote lookup tabellen
+- `tests/` - Test suites (pytest)
 - `README.md` - Deze documentatie
 
 ## 🎉 Conclusie

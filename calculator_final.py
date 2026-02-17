@@ -14,7 +14,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 with open(
-    os.path.join(BASE_DIR, 'woonquote_tables.json'),
+    os.path.join(BASE_DIR, 'config', 'woonquote.json'),
     'r',
     encoding='utf-8'
 ) as f:
