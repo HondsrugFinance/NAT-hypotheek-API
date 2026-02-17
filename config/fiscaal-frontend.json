@@ -17,6 +17,9 @@
     "standaardLooptijdJaren": 30,
     "standaardLooptijdMaanden": 360,
     "toetsrente": 5.0,
+    "bkrForfait": 100,
+    "taxatiekosten": 695,
+    "hypotheekadvieskosten": 3500,
     "jaar": 2026,
     "datumIngang": "2026-01-01"
   },

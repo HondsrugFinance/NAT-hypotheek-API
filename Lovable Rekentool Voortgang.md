@@ -409,6 +409,29 @@ Lovable heeft de C2-prompt volledig geïmplementeerd:
 
 **Verificatie:** App laadt config bij mount, console toont `NAT Config loaded: { fiscaal: "2026", ... }`
 
+### Stap D1: Samenvatting PDF (GEDAAN — 2026-02-16)
+
+PDF-generatie endpoint voor de Samenvatting-stap. Adviseurs kunnen een professionele A4-samenvatting downloaden.
+
+**Infrastructuur:**
+- `Dockerfile` — Render gemigreerd van native Python buildpack naar Docker (WeasyPrint vereist libcairo, libpango)
+- `requirements.txt` — +weasyprint==63.1, +jinja2==3.1.5
+
+**Nieuwe bestanden:**
+| Bestand | Beschrijving |
+|---------|-------------|
+| `pdf_generator.py` | Jinja2 template rendering + WeasyPrint PDF conversie |
+| `templates/samenvatting.html` | A4 template met 3 secties: haalbaarheid, financiering, maandlasten |
+| `templates/assets/hondsrug-logo.png` | Logo embedded als base64 in PDF |
+| `lovable-prompt-d1.md` | Lovable-instructies voor "Download PDF" knop |
+
+**API:**
+- `POST /samenvatting-pdf` — ontvangt display-ready data, retourneert PDF (application/pdf)
+- Geen API-key nodig, rate limit 10/min
+- Pydantic models: `SamenvattingPdfRequest` met geneste secties
+
+**Verificatie:** Productie-endpoint getest op 2026-02-16, 200 OK, 58KB PDF gegenereerd.
+
 ### Lovable-wijzigingen 13 feb 2026
 
 **Supabase dual-write (belangrijkste wijziging):**
@@ -473,16 +496,16 @@ Lovable heeft de C2-prompt volledig geïmplementeerd:
 |---|------|------|-----------------|--------|
 | 1 | Audit Lovable (stap A) | Lovable | Geen | **Gedaan** |
 | 2 | API centralisatie (stap A fix 1+2) | Lovable | Stap A | **Gedaan** |
-| 3 | Duplicaties opruimen (stap A fix 3) | Lovable | Stap A | Te doen |
-| 4 | localStorage opruimen (Fase 3, stap 6) | Lovable | ~1 week na stap 5 | Te doen (~23 feb) |
-| 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 6 | Te doen |
+| 3 | Duplicaties opruimen (stap A fix 3) | Lovable | Stap A | Prompt klaar (`lovable-prompt-stap3.md`) |
+| 4 | localStorage opruimen (Fase 3, stap 6) | Lovable | Na stap 3 | Prompt klaar (`lovable-prompt-stap4.md`) |
+| 5 | Project-switch naar eigen Supabase | Supabase + Lovable | Na stap 4 | Te doen |
 | 6 | 2FA (Fase 3, stap 7) | Lovable + Supabase | Na project-switch | Te doen |
 | 7 | Rollen-systeem RBAC (stap B) | Supabase + Lovable | Na project-switch | Te doen |
 | 8 | Config externaliseren NAT API (stap C1) | NAT API (deze repo) | Na audit | **Gedaan** |
 | 9 | Lovable-data externaliseren (stap C2) | NAT API + Lovable | Na C1 | **Gedaan** |
 | 10 | Admin-dashboard (stap C3) | Lovable | Na C1 + C2 | Te doen |
 | 11 | Hypotheekrentes handmatig (stap C4) | Supabase + Lovable | Na C3 | Te doen |
-| 12 | Samenvatting PDF (stap D1) | NAT API (WeasyPrint) | Onafhankelijk | Te doen |
+| 12 | Samenvatting PDF (stap D1) | NAT API (WeasyPrint) | Onafhankelijk | **Gedaan** (API + Lovable-prompt) |
 | 13 | Adviesrapport PDF (stap D2) | NAT API + Lovable | Na adviezen-feature | Te doen |
 | 14 | Hypotheekrentes automatisch (stap C4 fase 2) | NAT API | Na C4 fase 1 | Toekomst |
 
