@@ -164,45 +164,26 @@
     color: #666;
   }
 
-  /* --- Grid layouts (space-between for WeasyPrint compatibility) --- */
-  .two-column-grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
+  /* --- Grid layouts (float-based for WeasyPrint reliability) --- */
+  .two-column-grid::after,
+  .three-column-grid::after {
+    content: "";
+    display: block;
+    clear: both;
   }
-  .three-column-grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-  .three-column-grid .result-card,
-  .three-column-grid .scenario-card,
-  .three-column-grid .info-card {
-    width: calc(33.33% - 7px);
-    flex: none;
-    font-size: 8pt;
-  }
-  .three-column-grid .card-title { font-size: 8.5pt; }
-  .three-column-grid .group-label { font-size: 6.5pt; }
-  .three-column-grid .amount-primary .label,
-  .three-column-grid .amount-primary .value { font-size: 8.5pt; }
 
-  /* --- Kaarten --- */
+  /* --- Kaarten (float layout) --- */
   .info-card,
   .result-card,
   .scenario-card {
-    width: calc(50% - 7px);
-    flex: none;
+    float: left;
+    width: 48%;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 10px 14px;
   }
-  .result-card,
-  .scenario-card {
-    display: flex;
-    flex-direction: column;
+  .two-column-grid > *:nth-child(2n) {
+    float: right;
   }
   .card-bottom {
     margin-top: 0;
@@ -211,12 +192,31 @@
     visibility: hidden;
   }
   .info-card-single {
-    flex: 0 1 48%;
-    min-width: 240px;
+    width: 48%;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 10px 14px;
   }
+
+  /* --- Drie kolommen --- */
+  .three-column-grid .result-card,
+  .three-column-grid .scenario-card,
+  .three-column-grid .info-card {
+    width: 31%;
+    margin-right: 3.5%;
+    font-size: 8pt;
+  }
+  .three-column-grid > *:nth-child(2n) {
+    float: left;
+  }
+  .three-column-grid > *:nth-child(3n) {
+    margin-right: 0;
+    float: right;
+  }
+  .three-column-grid .card-title { font-size: 8.5pt; }
+  .three-column-grid .group-label { font-size: 6.5pt; }
+  .three-column-grid .amount-primary .label,
+  .three-column-grid .amount-primary .value { font-size: 8.5pt; }
 
   /* --- Maandlasten card (full width) --- */
   .monthly-card {
@@ -249,14 +249,24 @@
     margin-bottom: 3px;
   }
 
-  /* --- Rijen --- */
+  /* --- Rijen (table-cell for reliable label-value alignment) --- */
   .row {
-    display: flex;
-    justify-content: space-between;
+    display: table;
+    width: 100%;
+  }
+  .row .label {
+    display: table-cell;
+    color: #555;
+    padding: 2px 8px 2px 0;
+  }
+  .row .value {
+    display: table-cell;
+    font-weight: 400;
+    text-align: right;
+    color: #1a1a1a;
+    white-space: nowrap;
     padding: 2px 0;
   }
-  .row .label { color: #555; padding-right: 8px; }
-  .row .value { font-weight: 400; text-align: right; color: #1a1a1a; white-space: nowrap; flex-shrink: 0; }
 
   .divider {
     border-top: 1px solid #e8e8e8;
@@ -269,38 +279,42 @@
     color: #333;
   }
   .amount-primary {
-    display: flex;
-    justify-content: space-between;
-    padding: 2px 0;
+    display: table;
+    width: 100%;
   }
   .amount-primary .label {
+    display: table-cell;
     font-weight: 700;
     color: #3d7c5f;
     font-size: 10pt;
-    padding-right: 8px;
+    padding: 2px 8px 2px 0;
   }
   .amount-primary .value {
+    display: table-cell;
     font-weight: 700;
     color: #3d7c5f;
     font-size: 10pt;
+    text-align: right;
     white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .amount-secondary {
-    display: flex;
-    justify-content: space-between;
     padding: 2px 0;
   }
+  .amount-secondary {
+    display: table;
+    width: 100%;
+  }
   .amount-secondary .label {
+    display: table-cell;
     font-weight: 700;
     color: #333;
-    padding-right: 8px;
+    padding: 2px 8px 2px 0;
   }
   .amount-secondary .value {
+    display: table-cell;
     font-weight: 700;
     color: #333;
+    text-align: right;
     white-space: nowrap;
-    flex-shrink: 0;
+    padding: 2px 0;
   }
 
   /* --- Leningdelen tabel --- */
