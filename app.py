@@ -693,4 +693,4 @@ async def samenvatting_pdf(
 
 # Rate limit op PDF endpoint (zwaarder dan berekening)
 if RATE_LIMITING_ENABLED:
-    samenvatting_pdf = limiter.limit("10/minute")(samenvatting_pdf)
+    samenvatting_pdf = limiter.limit("30/minute")(samenvatting_pdf)
