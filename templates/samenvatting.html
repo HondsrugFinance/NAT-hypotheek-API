@@ -120,6 +120,17 @@
   .text-block p + p {
     margin-top: 12px;
   }
+  .text-block ul {
+    padding-left: 20px;
+    list-style-position: outside;
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .text-block li {
+    display: list-item;
+    list-style-type: disc;
+    margin-bottom: 4px;
+  }
 
   /* --- Highlight box --- */
   .highlight-box {
@@ -207,6 +218,7 @@
     border-radius: 6px;
     padding: 12px 14px;
     margin-bottom: 16px;
+    page-break-inside: avoid;
   }
 
   /* --- Card titel --- */
@@ -355,6 +367,16 @@
   /* --- Page breaks --- */
   .page-break {
     page-break-before: always;
+  }
+
+  /* Prevent cards from splitting across pages */
+  .result-card,
+  .scenario-card,
+  .info-card,
+  .info-card-single,
+  .highlight-box,
+  .disclaimer-box {
+    page-break-inside: avoid;
   }
 </style>
 </head>
