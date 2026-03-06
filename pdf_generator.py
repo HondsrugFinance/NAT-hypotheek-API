@@ -55,8 +55,8 @@ def genereer_samenvatting_pdf(data: dict) -> bytes:
     template = jinja_env.get_template("samenvatting.html")
     html_string = template.render(**data)
 
-    # Converteer naar PDF
-    pdf_bytes = HTML(string=html_string).write_pdf()
+    # Converteer naar PDF (base_url zodat relatieve paden zoals assets/logo.png werken)
+    pdf_bytes = HTML(string=html_string, base_url=TEMPLATES_DIR).write_pdf()
 
     logger.info(
         "PDF gegenereerd: %d bytes, klant=%s",

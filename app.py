@@ -543,6 +543,54 @@ if RATE_LIMITING_ENABLED:
 
 # --- Samenvatting PDF modellen ---
 
+class KlantGegevens(BaseModel):
+    naam: str = ""
+    geboortedatum: str = ""
+    straat: str = ""
+    postcode: str = ""
+    woonplaats: str = ""
+    telefoon: str = ""
+    email: str = ""
+
+class PartnerGegevens(BaseModel):
+    naam: str = ""
+    geboortedatum: str = ""
+    straat: str = ""
+    postcode: str = ""
+    woonplaats: str = ""
+    telefoon: str = ""
+    email: str = ""
+
+class KlantGegevensSectie(BaseModel):
+    aanvrager: KlantGegevens = KlantGegevens()
+    partner: Optional[PartnerGegevens] = None
+
+class OnderpandSectie(BaseModel):
+    adres: str = ""
+    woz_waarde: str = ""
+    woningtype: str = ""
+    energielabel: str = ""
+    ebv_ebb_bedrag: str = ""
+
+class BedrijfsGegevens(BaseModel):
+    naam: str = "Hondsrug Finance"
+    email: str = "Info@hondsrugfinance.nl"
+    telefoon: str = "+31 88 400 2700"
+    kvk: str = "KVK 93276699"
+
+class HighlightBox(BaseModel):
+    label: str
+    waarde: str
+    toelichting: str = ""
+    uitgangspunt: str = ""  # "Huidige situatie", "Toekomstige situatie", etc.
+
+class ToelichtingSectie(BaseModel):
+    paragrafen: List[str] = []
+
+class SectieIntroTekst(BaseModel):
+    paragrafen: List[str] = []
+    highlight: Optional[HighlightBox] = None
+
 class HaalbaarheidItem(BaseModel):
     label: str
     waarde: str
@@ -551,7 +599,6 @@ class HaalbaarheidItem(BaseModel):
 class HaalbaarheidSectie(BaseModel):
     naam: str
     inkomen_items: List[HaalbaarheidItem] = []
-    energie_items: List[HaalbaarheidItem] = []
     verplichtingen_items: List[HaalbaarheidItem] = []
     max_annuitair: str = ""
     max_werkelijk: str = ""
@@ -587,11 +634,23 @@ class MaandlastenSectie(BaseModel):
     netto: str
 
 class SamenvattingPdfRequest(BaseModel):
+    # Bestaand
     klant_naam: str = ""
     datum: str = ""
+    klant_gegevens: Optional[KlantGegevensSectie] = None
+    onderpand: Optional[OnderpandSectie] = None
     haalbaarheid: List[HaalbaarheidSectie] = []
     financiering: List[FinancieringSectie] = []
     maandlasten: List[MaandlastenSectie] = []
+    # Nieuw — alle tekst komt vanuit de frontend
+    dossier_type: str = ""
+    bedrijf: Optional[BedrijfsGegevens] = BedrijfsGegevens()
+    toelichting: Optional[ToelichtingSectie] = None
+    haalbaarheid_tekst: Optional[SectieIntroTekst] = None
+    financiering_tekst: Optional[SectieIntroTekst] = None
+    maandlasten_tekst: Optional[SectieIntroTekst] = None
+    haalbaarheid_voetnoten: List[str] = []  # Voetnoten onder haalbaarheid cards (* / **)
+    disclaimer: List[str] = []
 
 
 # --- Samenvatting PDF endpoint ---
