@@ -81,7 +81,7 @@
   }
   .page-header .left {
     font-size: 9pt;
-    font-weight: 600;
+    font-weight: 700;
     color: #3d7c5f;
   }
   .page-header .right {
@@ -102,7 +102,7 @@
 
   h2.section-title {
     font-size: 11pt;
-    font-weight: 600;
+    font-weight: 700;
     color: #3d7c5f;
     border-bottom: 1px solid #d0d0d0;
     padding-bottom: 4px;
@@ -117,7 +117,7 @@
     line-height: 1.6;
     margin-bottom: 16px;
   }
-  .text-block p + p {
+  .text-block > * + * {
     margin-top: 12px;
   }
   .text-block ul {
@@ -142,7 +142,7 @@
   }
   .highlight-box .highlight-label {
     font-size: 8pt;
-    font-weight: 600;
+    font-weight: 700;
     color: #3d7c5f;
     text-transform: uppercase;
     letter-spacing: 0.4px;
@@ -159,21 +159,31 @@
     color: #666;
   }
 
-  /* --- Grid layouts --- */
+  /* --- Grid layouts (margin-based gap for WeasyPrint compatibility) --- */
   .two-column-grid {
     display: flex;
-    gap: 14px;
     flex-wrap: wrap;
+    margin-left: -7px;
+    margin-right: -7px;
+  }
+  .two-column-grid > * {
+    margin-left: 7px;
+    margin-right: 7px;
   }
   .three-column-grid {
     display: flex;
-    gap: 10px;
     flex-wrap: wrap;
+    margin-left: -5px;
+    margin-right: -5px;
+  }
+  .three-column-grid > * {
+    margin-left: 5px;
+    margin-right: 5px;
   }
   .three-column-grid .result-card,
   .three-column-grid .scenario-card,
   .three-column-grid .info-card {
-    flex: 1 1 30%;
+    flex: 1 1 calc(33.33% - 10px);
     min-width: 140px;
     font-size: 8pt;
   }
@@ -186,8 +196,8 @@
   .info-card,
   .result-card,
   .scenario-card {
-    flex: 1 1 45%;
-    min-width: 240px;
+    flex: 1 1 calc(50% - 14px);
+    min-width: 200px;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 10px 14px;
@@ -224,7 +234,7 @@
   /* --- Card titel --- */
   h3.card-title {
     font-size: 10pt;
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
     margin: 0 0 8px 0;
     padding-bottom: 4px;
@@ -234,7 +244,7 @@
   /* --- Groep labels --- */
   .group-label {
     font-size: 7.5pt;
-    font-weight: 600;
+    font-weight: 700;
     color: #888;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -258,7 +268,7 @@
 
   .row-bold .label,
   .row-bold .value {
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
   }
   .amount-primary {
@@ -279,7 +289,7 @@
   }
   .amount-secondary .label,
   .amount-secondary .value {
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
   }
 
@@ -292,7 +302,7 @@
   }
   .data-table th {
     text-align: left;
-    font-weight: 600;
+    font-weight: 700;
     color: #888;
     font-size: 7.5pt;
     text-transform: uppercase;
@@ -330,10 +340,10 @@
     line-height: 1.6;
     margin-top: 12px;
   }
-  .footnotes p {
+  .footnotes > * {
     margin: 0;
   }
-  .footnotes p + p {
+  .footnotes > * + * {
     margin-top: 2px;
   }
 
@@ -360,7 +370,7 @@
     color: #555;
     font-size: 8pt;
   }
-  .disclaimer-box p + p {
+  .disclaimer-box > * + * {
     margin-top: 5px;
   }
 
@@ -494,7 +504,7 @@
   <h2 class="section-title">Toelichting</h2>
   <div class="text-block">
     {% for p in toelichting.paragrafen %}
-    <p>{{ p | safe }}</p>
+    <div>{{ p | safe }}</div>
     {% endfor %}
   </div>
 </div>
@@ -521,7 +531,7 @@
     {% if haalbaarheid_tekst.paragrafen %}
     <div class="text-block">
       {% for p in haalbaarheid_tekst.paragrafen %}
-      <p>{{ p | safe }}</p>
+      <div>{{ p | safe }}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -603,7 +613,7 @@
   {% if haalbaarheid_voetnoten %}
   <div class="footnotes">
     {% for voetnoot in haalbaarheid_voetnoten %}
-    <p>{{ voetnoot | safe }}</p>
+    <div>{{ voetnoot | safe }}</div>
     {% endfor %}
   </div>
   {% endif %}
@@ -670,7 +680,7 @@
     {% if financiering_tekst.paragrafen %}
     <div class="text-block">
       {% for p in financiering_tekst.paragrafen %}
-      <p>{{ p | safe }}</p>
+      <div>{{ p | safe }}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -756,7 +766,7 @@
     {% if maandlasten_tekst.paragrafen %}
     <div class="text-block">
       {% for p in maandlasten_tekst.paragrafen %}
-      <p>{{ p | safe }}</p>
+      <div>{{ p | safe }}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -852,7 +862,7 @@
 <div class="disclaimer-box">
   <p><strong>Disclaimer</strong></p>
   {% for p in disclaimer %}
-  <p>{{ p | safe }}</p>
+  <div>{{ p | safe }}</div>
   {% endfor %}
 </div>
 {% endif %}

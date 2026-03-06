@@ -102,6 +102,39 @@ Zoek op welke property de energielabel-waarde bevat. Het is waarschijnlijk `invo
 
 ---
 
+## Fix 4: Aflosvorm namen zonder hoofdletter
+
+In de maandlasten-tabel worden aflosvorm-namen getoond zonder hoofdletter (bijv. "overbrugging" in plaats van "Overbrugging").
+
+### Probleem
+
+De aflosvorm-naam wordt direct uit de data overgenomen zonder capitalisatie. Dit geldt voor alle aflosvormen in de `lening_delen` array van de maandlasten.
+
+### Fix
+
+In `buildMaandlasten()`, bij het samenstellen van de `lening_delen` array, capitalize de aflosvorm-naam:
+
+```typescript
+// Helper functie
+const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+// Bij het samenstellen van lening_delen:
+lening_delen: scenario.leningDelen.map(deel => ({
+  naam: deel.naam || '',
+  aflosvorm: capitalize(deel.aflosvorm || deel.aflosType || ''),
+  looptijd: `${Math.round((deel.looptijd || deel.orgLpt || 360) / 12)} jaar`,
+  rente: `${((deel.rente || deel.werkelijkeRente || 0) * 100).toFixed(2).replace('.', ',')}%`,
+  rvp: `${Math.round((deel.rvp || 120) / 12)} jaar`,
+  bedrag: formatBedrag(deel.bedrag || deel.hoofdsomBox1 || 0),
+})),
+```
+
+Zoek de daadwerkelijke property-namen op in de code — bovenstaande zijn voorbeelden.
+
+**Let op:** Dit geldt voor alle aflosvormen, niet alleen "overbrugging". Pas `capitalize()` toe op elke aflosvorm-naam.
+
+---
+
 ## Samenvatting
 
 | Fix | Bestand | Wat |
@@ -109,6 +142,7 @@ Zoek op welke property de energielabel-waarde bevat. Het is waarschijnlijk `invo
 | 1 | `pdfDownload.ts` | `buildKlantGegevens`: correcte veldnamen voor adres/telefoon/email |
 | 2 | `pdfDownload.ts` | `buildHaalbaarheidData`: sterretjes toepassen op Partner label |
 | 3 | `pdfDownload.ts` | `buildOnderpand`: energielabel mapping fixen |
+| 4 | `pdfDownload.ts` | `buildMaandlasten`: aflosvorm namen capitaliseren |
 
 ## Belangrijk
 
