@@ -255,8 +255,8 @@
     justify-content: space-between;
     padding: 2px 0;
   }
-  .row .label { color: #555; }
-  .row .value { font-weight: 400; text-align: right; color: #1a1a1a; }
+  .row .label { color: #555; padding-right: 8px; }
+  .row .value { font-weight: 400; text-align: right; color: #1a1a1a; white-space: nowrap; flex-shrink: 0; }
 
   .divider {
     border-top: 1px solid #e8e8e8;
@@ -273,21 +273,34 @@
     justify-content: space-between;
     padding: 2px 0;
   }
-  .amount-primary .label,
+  .amount-primary .label {
+    font-weight: 700;
+    color: #3d7c5f;
+    font-size: 10pt;
+    padding-right: 8px;
+  }
   .amount-primary .value {
     font-weight: 700;
     color: #3d7c5f;
     font-size: 10pt;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .amount-secondary {
     display: flex;
     justify-content: space-between;
     padding: 2px 0;
   }
-  .amount-secondary .label,
+  .amount-secondary .label {
+    font-weight: 700;
+    color: #333;
+    padding-right: 8px;
+  }
   .amount-secondary .value {
     font-weight: 700;
     color: #333;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   /* --- Leningdelen tabel --- */
