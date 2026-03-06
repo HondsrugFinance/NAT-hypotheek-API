@@ -123,13 +123,18 @@
   .text-block ul {
     padding-left: 20px;
     list-style-position: outside;
+    list-style-type: disc;
     margin-top: 4px;
     margin-bottom: 4px;
   }
   .text-block li {
-    display: list-item;
-    list-style-type: disc;
+    display: list-item !important;
+    list-style-type: disc !important;
     margin-bottom: 4px;
+  }
+  .text-block strong,
+  .text-block b {
+    font-weight: 700;
   }
 
   /* --- Highlight box --- */
@@ -159,32 +164,24 @@
     color: #666;
   }
 
-  /* --- Grid layouts (margin-based gap for WeasyPrint compatibility) --- */
+  /* --- Grid layouts (space-between for WeasyPrint compatibility) --- */
   .two-column-grid {
     display: flex;
     flex-wrap: wrap;
-    margin-left: -7px;
-    margin-right: -7px;
-  }
-  .two-column-grid > * {
-    margin-left: 7px;
-    margin-right: 7px;
+    justify-content: space-between;
+    align-items: flex-start;
   }
   .three-column-grid {
     display: flex;
     flex-wrap: wrap;
-    margin-left: -5px;
-    margin-right: -5px;
-  }
-  .three-column-grid > * {
-    margin-left: 5px;
-    margin-right: 5px;
+    justify-content: space-between;
+    align-items: flex-start;
   }
   .three-column-grid .result-card,
   .three-column-grid .scenario-card,
   .three-column-grid .info-card {
-    flex: 1 1 calc(33.33% - 10px);
-    min-width: 140px;
+    width: calc(33.33% - 7px);
+    flex: none;
     font-size: 8pt;
   }
   .three-column-grid .card-title { font-size: 8.5pt; }
@@ -196,8 +193,8 @@
   .info-card,
   .result-card,
   .scenario-card {
-    flex: 1 1 calc(50% - 14px);
-    min-width: 200px;
+    width: calc(50% - 7px);
+    flex: none;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 10px 14px;
