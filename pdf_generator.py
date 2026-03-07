@@ -55,8 +55,7 @@ def _fix_toelichting_paragrafen(data: dict) -> None:
 
         # Detecteer de paragraaf met de drie onderdelen als platte tekst
         if "Maximaal haalbare hypotheek" in p and "Financieringsopzet" in p and "Maandlasten" in p:
-            # Vervang door intro-zin + HTML-lijst
-            nieuwe_paragrafen.append("Het rapport bevat drie onderdelen:")
+            # Vervang door HTML-lijst (intro-zin staat al in vorige paragraaf)
             items = "".join(
                 f'<li><strong>{naam}</strong> — {beschrijving}</li>'
                 for naam, beschrijving in onderdelen
