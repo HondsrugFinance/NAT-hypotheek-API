@@ -28,18 +28,18 @@ def samenvatting_email_body(
 
 <p>Met vriendelijke groet,</p>
 
-<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+<table cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; font-family: Calibri, sans-serif;">
 <tr>
-<td style="padding-right: 15px; vertical-align: top;">
-<img src="https://raw.githubusercontent.com/HondsrugFinance/NAT-hypotheek-API/main/static/logo-hondsrug-finance.jpg" alt="Hondsrug Finance" width="80" height="80" style="display: block;" />
+<td style="width: 180px; border-right: 1px solid #7B818B; padding: 0 12px 0 0; vertical-align: top;">
+<img src="https://raw.githubusercontent.com/HondsrugFinance/NAT-hypotheek-API/main/static/logo-hondsrug-finance.jpg" alt="Hondsrug Finance" width="154" style="display: block;" />
 </td>
-<td style="vertical-align: top;">
-<p style="margin: 0 0 2px 0;"><strong>Alex Kuijper CFP\u00ae</strong></p>
-<p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Hypotheken | Verzekeringen | Ondernemers</p>
-<p style="margin: 0; font-size: 12px; line-height: 1.6;">
-<strong>M:</strong> +31 6 1292 6573 | <strong>E:</strong> <a href="mailto:alex@hondsrugfinance.nl" style="color: #2E5644;">alex@hondsrugfinance.nl</a><br>
-<strong>A:</strong> Marktstraat 21, Assen | <a href="http://www.hondsrugfinance.nl/" style="color: #2E5644;">www.hondsrugfinance.nl</a><br>
-KVK 93276699
+<td style="padding: 0 0 0 16px; vertical-align: top;">
+<p style="margin: 0 0 2px 0; font-size: 14pt; line-height: 1.2;"><b style="color: #558E76;">Alex Kuijper CFP\u00ae</b></p>
+<p style="margin: 0 0 10px 0; font-size: 11pt; color: gray; line-height: 1.2;">Hypotheken | Verzekeringen | Ondernemers</p>
+<p style="margin: 0; font-size: 11pt; color: gray; line-height: 1.6;">
+<b style="color: #558E76;">M:</b> +31 6 1292 6573\u00a0|\u00a0<b style="color: #558E76;">E:</b> <a href="mailto:alex@hondsrugfinance.nl" style="color: gray;">alex@hondsrugfinance.nl</a><br>
+<b style="color: #558E76;">A:</b> Marktstraat 21, Assen\u00a0|\u00a0<a href="http://www.hondsrugfinance.nl/" style="color: gray;">www.hondsrugfinance.nl</a><br>
+<span style="color: gray;">KVK 93276699</span>
 </p>
 </td>
 </tr>
