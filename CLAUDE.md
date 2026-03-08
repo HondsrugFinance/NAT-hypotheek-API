@@ -23,7 +23,7 @@ NAT-hypotheek-API/
 ├── app.py                      # FastAPI app, routes, CORS, auth
 ├── calculator_final.py         # NAT 2026 maximale hypotheek calculator
 ├── aow_calculator.py           # AOW-leeftijd berekening
-├── pdf_generator.py            # Samenvatting PDF generatie (weasyprint)
+├── pdf_generator.py            # PDF generatie: samenvatting + adviesrapport (weasyprint)
 ├── graph_client.py             # Microsoft Graph API — concept e-mails in Outlook
 ├── email_templates.py          # HTML e-mail body templates
 ├── config_schemas.py           # Pydantic validatie voor config bestanden
@@ -168,6 +168,7 @@ Bewerkbare configs: `fiscaal-frontend`, `fiscaal`, `geldverstrekkers`
 ### PDF Generatie
 ```
 POST /samenvatting-pdf
+POST /adviesrapport-pdf (API-key vereist)
 ```
 
 ### E-mail Draft (API-key vereist)
@@ -193,7 +194,83 @@ GET /health/deep
 | `POST /calculate` | 30/minuut |
 | `PUT /config/*` | 5/minuut |
 | `POST /samenvatting-pdf` | 30/minuut |
+| `POST /adviesrapport-pdf` | 10/minuut |
 | `POST /email/draft-samenvatting` | 10/minuut |
+
+---
+
+## Adviesrapport PDF API
+
+### Request: AdviesrapportPdfRequest
+
+```
+POST /adviesrapport-pdf
+Content-Type: application/json
+X-API-Key: vereist
+```
+
+De frontend stuurt een generieke structuur met `meta`, `bedrijf` en `sections[]`.
+Alle bedragen en percentages zijn **al geformateerd als strings** door de frontend.
+
+```json
+{
+  "meta": {
+    "title": "Adviesrapport Hypotheek",
+    "date": "12-02-2026",
+    "dossierNumber": "HF-2026-001",
+    "advisor": "Alex Kuijper CFP®",
+    "customerName": "Harry Slinger",
+    "propertyAddress": "Voorbeeldstraat 12, 1234 AB Emmen"
+  },
+  "bedrijf": {
+    "naam": "Hondsrug Finance",
+    "email": "Info@hondsrugfinance.nl",
+    "telefoon": "+31 88 400 2700",
+    "kvk": "KVK 93276699"
+  },
+  "sections": [
+    {
+      "id": "summary",
+      "title": "Samenvatting advies",
+      "visible": true,
+      "narratives": ["Tekst paragraaf 1", "Tekst paragraaf 2"],
+      "highlights": [
+        {"label": "Hypotheekbedrag", "value": "€ 338.173", "note": "ING"}
+      ],
+      "rows": [
+        {"label": "Bruto maandlast", "value": "€ 1.855"},
+        {"label": "Netto maandlast", "value": "€ 1.267", "bold": true}
+      ],
+      "tables": [
+        {
+          "headers": ["Leningdeel", "Bedrag", "Aflosvorm"],
+          "rows": [["Deel 1", "€ 338.173", "Annuïteit"]]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Section types (via `id`):**
+
+| Section ID | Rendering | Bijzonderheden |
+|------------|-----------|----------------|
+| `summary` | Highlights + narratives + rows card | Highlight-boxen naast elkaar |
+| `client-profile` | Narratives + rows card | Klantgegevens + inkomen + vermogen |
+| `property` | Rows card | Onderpand details |
+| `affordability` | Narratives + rows card | Betaalbaarheid |
+| `financing` | Rows card | Financieringsopzet met spacers |
+| `loan-parts` | Narratives + rows + table | Leningdelen tabel |
+| `tax` | Narratives + plain rows | Fiscale kwalificatie |
+| `risk-death` | Narratives | Overlijdensrisico |
+| `risk-disability` | Narratives | Arbeidsongeschiktheid |
+| `risk-unemployment` | Narratives + rows | Werkloosheid + buffer |
+| `retirement` | Narratives + rows | Pensionering |
+| `attention-points` | Bullet list | Aandachtspunten |
+| `disclaimer` | Disclaimer box | Speciale styling |
+
+**Response:** PDF bytes (`application/pdf`)
 
 ---
 

@@ -702,6 +702,98 @@ if RATE_LIMITING_ENABLED:
     samenvatting_pdf = limiter.limit("30/minute")(samenvatting_pdf)
 
 
+# --- Adviesrapport PDF modellen ---
+
+class AdviesrapportMeta(BaseModel):
+    title: str = "Adviesrapport Hypotheek"
+    date: str = ""
+    dossierNumber: str = ""
+    advisor: str = ""
+    customerName: str = ""
+    propertyAddress: str = ""
+
+
+class AdviesrapportRow(BaseModel):
+    label: str = ""
+    value: str = ""
+    bold: bool = False
+
+
+class AdviesrapportTable(BaseModel):
+    headers: List[str] = []
+    rows: List[List[str]] = []
+
+
+class AdviesrapportHighlight(BaseModel):
+    label: str
+    value: str
+    note: str = ""
+
+
+class AdviesrapportSection(BaseModel):
+    id: str
+    title: str
+    visible: bool = True
+    narratives: List[str] = []
+    rows: Optional[List[AdviesrapportRow]] = None
+    tables: Optional[List[AdviesrapportTable]] = None
+    highlights: Optional[List[AdviesrapportHighlight]] = None
+
+
+class AdviesrapportPdfRequest(BaseModel):
+    meta: AdviesrapportMeta = AdviesrapportMeta()
+    bedrijf: Optional[BedrijfsGegevens] = BedrijfsGegevens()
+    sections: List[AdviesrapportSection] = []
+
+
+# --- Adviesrapport PDF endpoint ---
+
+@app.post("/adviesrapport-pdf")
+async def adviesrapport_pdf(
+    request_body: AdviesrapportPdfRequest,
+    request: Request,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """
+    Genereer een adviesrapport PDF.
+
+    De frontend stuurt alle display-ready data (bedragen al geformateerd).
+    Secties zijn generiek: id, title, narratives, rows, tables, highlights.
+    Retourneert een PDF bestand.
+    """
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "Adviesrapport PDF gestart: origin=%s, klant=%s, secties=%d",
+        origin,
+        request_body.meta.customerName or "(onbekend)",
+        len(request_body.sections),
+    )
+
+    try:
+        data = request_body.model_dump()
+        pdf_bytes = pdf_generator.genereer_adviesrapport_pdf(data)
+        klant_naam = request_body.meta.customerName or "klant"
+        filename = f"adviesrapport-{klant_naam.replace(' ', '-').lower()}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+    except Exception as e:
+        logger.error("Adviesrapport PDF mislukt: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Adviesrapport PDF generatie mislukt: {str(e)}",
+        )
+
+
+# Rate limit op adviesrapport PDF endpoint
+if RATE_LIMITING_ENABLED:
+    adviesrapport_pdf = limiter.limit("10/minute")(adviesrapport_pdf)
+
+
 # --- E-mail draft endpoint ---
 
 class DraftEmailRequest(BaseModel):

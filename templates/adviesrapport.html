@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 15mm 25mm 15mm;
+    @bottom-left {
+      content: element(pageFooter);
+    }
+    @bottom-right {
+      content: "Pagina " counter(page) " van " counter(pages);
+      font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 8pt;
+      color: #5C4A6E;
+    }
+  }
+  @page :first {
+    @bottom-left { content: none; }
+    @bottom-right { content: none; }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #2B1E39;
+    line-height: 1.5;
+  }
+
+  /* --- Cover header (logo + bedrijfsinfo) --- */
+  .page-cover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 48px;
+    padding-top: 10px;
+  }
+  .page-cover-header img {
+    height: 52px;
+    width: auto;
+  }
+  .page-cover-header .company-info {
+    text-align: right;
+    font-size: 8.5pt;
+    color: #5C4A6E;
+    line-height: 1.6;
+  }
+  .page-cover-header .company-info .company-name {
+    font-weight: 700;
+    color: #2B1E39;
+    font-size: 9pt;
+  }
+
+  /* --- Titel --- */
+  .page-header-title {
+    font-size: 28pt;
+    font-weight: 700;
+    color: #2E5644;
+    margin-bottom: 4px;
+    text-align: center;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .page-header-subtitle {
+    font-size: 10pt;
+    color: #5C4A6E;
+    margin-bottom: 36px;
+    text-align: center;
+  }
+
+  /* --- Pagina header (pagina 2+) --- */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5pt solid #E5DFC8;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+  .page-header .left {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #2E5644;
+  }
+  .page-header .right {
+    font-size: 8pt;
+    color: #5C4A6E;
+  }
+
+  /* --- Pagina footer (running element) --- */
+  .page-footer {
+    position: running(pageFooter);
+    font-size: 7.5pt;
+    color: #5C4A6E;
+    line-height: 1.4;
+  }
+
+  /* --- Secties --- */
+  .section { margin-bottom: 22px; }
+
+  h2.section-title {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #2E5644;
+    border-bottom: 0.5pt solid #E5DFC8;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+    margin-top: 0;
+  }
+
+  /* --- Tekst blokken --- */
+  .text-block {
+    font-size: 8.5pt;
+    color: #5C4A6E;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .text-block > * + * {
+    margin-top: 8px;
+  }
+  .text-block ul {
+    padding-left: 20px;
+    list-style-position: outside;
+    list-style-type: disc;
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .text-block li {
+    display: list-item !important;
+    list-style-type: disc !important;
+    margin-bottom: 4px;
+  }
+
+  /* --- Highlight box --- */
+  .highlight-box {
+    background: #E3F0E9;
+    border-left: 3px solid #2E5644;
+    border-radius: 0 6px 6px 0;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    page-break-inside: avoid;
+  }
+  .highlight-box .highlight-label {
+    font-size: 8pt;
+    font-weight: 700;
+    color: #2E5644;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 3px;
+  }
+  .highlight-box .highlight-value {
+    font-size: 14pt;
+    font-weight: 700;
+    color: #2E5644;
+    margin-bottom: 4px;
+  }
+  .highlight-box .highlight-note {
+    font-size: 8pt;
+    color: #5C4A6E;
+  }
+
+  /* --- Cards --- */
+  .info-card-single {
+    width: 100%;
+    border: 0.5pt solid #E5DFC8;
+    border-radius: 6px;
+    padding: 10px 14px;
+    background: #FEFDF8;
+    page-break-inside: avoid;
+    margin-bottom: 12px;
+  }
+
+  /* --- Rijen (table-cell for reliable label-value alignment) --- */
+  .row {
+    display: table;
+    width: 100%;
+  }
+  .row .label {
+    display: table-cell;
+    color: #5C4A6E;
+    padding: 2px 8px 2px 0;
+  }
+  .row .value {
+    display: table-cell;
+    font-weight: 400;
+    text-align: right;
+    color: #2B1E39;
+    white-space: nowrap;
+    padding: 2px 0;
+  }
+
+  /* Rijen buiten cards: sta wrapping toe voor lange waarden */
+  .rows-plain .row .value {
+    white-space: normal;
+    text-align: left;
+  }
+
+  .divider {
+    border-top: 0.5pt solid #E5DFC8;
+    margin: 6px 0;
+  }
+
+  .row-bold .label,
+  .row-bold .value {
+    font-weight: 700;
+    color: #2B1E39;
+  }
+  .amount-primary {
+    display: table;
+    width: 100%;
+  }
+  .amount-primary .label {
+    display: table-cell;
+    font-weight: 700;
+    color: #2E5644;
+    font-size: 10pt;
+    padding: 2px 8px 2px 0;
+  }
+  .amount-primary .value {
+    display: table-cell;
+    font-weight: 700;
+    color: #2E5644;
+    font-size: 10pt;
+    text-align: right;
+    white-space: nowrap;
+    padding: 2px 0;
+  }
+
+  /* --- Leningdelen tabel --- */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 4px;
+    margin-top: 8px;
+  }
+  .data-table th {
+    text-align: left;
+    font-weight: 700;
+    color: #5C4A6E;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 3px 6px 4px 0;
+    border-bottom: 0.5pt solid #E5DFC8;
+  }
+  .data-table th:last-child,
+  .data-table td:last-child {
+    text-align: right;
+  }
+  .data-table td {
+    padding: 3px 6px 3px 0;
+    color: #5C4A6E;
+  }
+
+  /* --- Highlight grid (twee highlights naast elkaar) --- */
+  .highlight-grid::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
+  .highlight-grid .highlight-box {
+    float: left;
+    width: 48%;
+    margin-bottom: 12px;
+  }
+  .highlight-grid .highlight-box:nth-child(2n) {
+    float: right;
+  }
+
+  /* --- Disclaimer --- */
+  .disclaimer-box {
+    background: #EFE9D8;
+    border: 0.5pt solid #E5DFC8;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 7.5pt;
+    color: #5C4A6E;
+    line-height: 1.6;
+    margin-top: 20px;
+    page-break-inside: avoid;
+  }
+  .disclaimer-box strong {
+    color: #5C4A6E;
+    font-size: 8pt;
+  }
+  .disclaimer-box > * + * {
+    margin-top: 5px;
+  }
+
+  /* --- Page breaks --- */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* --- Browser preview: A4-simulatie --- */
+  @media screen {
+    html {
+      background: #888;
+    }
+    body {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 20mm auto;
+      padding: 20mm 15mm 25mm 15mm;
+      background: white;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .page-break {
+      /* Visuele paginascheiding in browser */
+      page-break-before: auto;
+      margin: 0 -15mm;
+      padding: 25mm 15mm 0 15mm;
+      border-top: 2px dashed #bbb;
+    }
+    .page-footer {
+      /* Running footer werkt niet in browser, verberg */
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Running footer: verschijnt automatisch op pagina 2+ -->
+<div class="page-footer">{{ bedrijf.naam if bedrijf else 'Hondsrug Finance' }} &mdash; Adviesrapport &mdash; {{ meta.customerName }}</div>
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# PAGINA 1: VOORBLAD                                             #}
+{# ═══════════════════════════════════════════════════════════════ #}
+
+<!-- Cover header: logo + bedrijfsinfo -->
+<div class="page-cover-header">
+  <img src="assets/HF - liggend.png" alt="{{ bedrijf.naam if bedrijf else 'Hondsrug Finance' }}">
+  {% if bedrijf %}
+  <div class="company-info">
+    <span class="company-name">{{ bedrijf.naam }}</span><br>
+    {{ bedrijf.email }}<br>
+    {{ bedrijf.telefoon }}<br>
+    {{ bedrijf.kvk }}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Titel -->
+<h1 class="page-header-title">{{ meta.title }}</h1>
+<p class="page-header-subtitle">Opgesteld op {{ meta.date }}</p>
+
+<!-- Klant info kaart op voorblad -->
+<div class="section" style="margin-top: 40px;">
+  <div class="info-card-single">
+    <div class="row">
+      <span class="label">Klant</span>
+      <span class="value">{{ meta.customerName }}</span>
+    </div>
+    {% if meta.propertyAddress %}
+    <div class="row">
+      <span class="label">Onderpand</span>
+      <span class="value">{{ meta.propertyAddress }}</span>
+    </div>
+    {% endif %}
+    <div class="row">
+      <span class="label">Dossiernummer</span>
+      <span class="value">{{ meta.dossierNumber }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Adviseur</span>
+      <span class="value">{{ meta.advisor }}</span>
+    </div>
+  </div>
+</div>
+
+
+{# ═══════════════════════════════════════════════════════════════ #}
+{# CONTENT SECTIES                                                 #}
+{# ═══════════════════════════════════════════════════════════════ #}
+
+{# Secties waarvoor een paginawissel begint #}
+{% set page_break_before = ['summary', 'client-profile', 'financing', 'tax'] %}
+
+{# Secties waarvan rijen in een kaart worden getoond #}
+{% set card_sections = ['summary', 'client-profile', 'property', 'affordability', 'financing'] %}
+
+{% for section in sections %}
+{% if section.visible %}
+
+  {# --- Paginawissel + header --- #}
+  {% if section.id in page_break_before %}
+  <div class="page-break"></div>
+  <div class="page-header">
+    <span class="left">{{ meta.title }} &mdash; {{ meta.customerName }}</span>
+    <span class="right">{{ meta.date }}</span>
+  </div>
+  {% endif %}
+
+  {# --- Disclaimer: eigen styling --- #}
+  {% if section.id == 'disclaimer' %}
+  <div class="disclaimer-box">
+    <p><strong>{{ section.title }}</strong></p>
+    {% for text in section.narratives %}
+    <div>{{ text }}</div>
+    {% endfor %}
+  </div>
+
+  {# --- Aandachtspunten: bullet list --- #}
+  {% elif section.id == 'attention-points' %}
+  <div class="section">
+    <h2 class="section-title">{{ section.title }}</h2>
+    <div class="text-block">
+      <ul>
+        {% for text in section.narratives %}
+        <li>{{ text }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {# --- Generieke sectie --- #}
+  {% else %}
+  <div class="section">
+    <h2 class="section-title">{{ section.title }}</h2>
+
+    {# Highlights (samenvatting-pagina) #}
+    {% if section.highlights %}
+    {% if section.highlights|length == 1 %}
+    <div class="highlight-box">
+      <div class="highlight-label">{{ section.highlights[0].label }}</div>
+      <div class="highlight-value">{{ section.highlights[0].value }}</div>
+      {% if section.highlights[0].note %}
+      <div class="highlight-note">{{ section.highlights[0].note }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="highlight-grid">
+      {% for h in section.highlights %}
+      <div class="highlight-box">
+        <div class="highlight-label">{{ h.label }}</div>
+        <div class="highlight-value">{{ h.value }}</div>
+        {% if h.note %}
+        <div class="highlight-note">{{ h.note }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# Verhaalteksten #}
+    {% if section.narratives %}
+    <div class="text-block">
+      {% for text in section.narratives %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Rijen: in card of plain #}
+    {% if section.rows %}
+    {% if section.id in card_sections %}
+    <div class="info-card-single">
+    {% else %}
+    <div class="rows-plain">
+    {% endif %}
+      {% for row in section.rows %}
+        {% if not row.label and not row.value %}
+        <div class="divider"></div>
+        {% elif row.bold %}
+        <div class="divider"></div>
+        <div class="row row-bold">
+          <span class="label">{{ row.label }}</span>
+          <span class="value">{{ row.value }}</span>
+        </div>
+        {% else %}
+        <div class="row">
+          <span class="label">{{ row.label }}</span>
+          <span class="value">{{ row.value }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Tabellen (leningdelen) #}
+    {% if section.tables %}
+    {% for table in section.tables %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% for header in table.headers %}
+          <th>{{ header }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for trow in table.rows %}
+        <tr>
+          {% for cell in trow %}
+          <td>{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+{% endif %}
+{% endfor %}
+
+</body>
+</html>

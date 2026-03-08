@@ -1,6 +1,10 @@
 """
-PDF generator voor Samenvatting Hypotheekberekening.
-Rendert een Jinja2 HTML-template en converteert naar PDF via WeasyPrint.
+PDF generator voor hypotheekrapporten.
+Rendert Jinja2 HTML-templates en converteert naar PDF via WeasyPrint.
+
+Ondersteunt:
+- Samenvatting Hypotheekberekening (samenvatting.html)
+- Adviesrapport Hypotheek (adviesrapport.html)
 """
 
 import os
@@ -98,6 +102,38 @@ def genereer_samenvatting_pdf(data: dict) -> bytes:
         "PDF gegenereerd: %d bytes, klant=%s",
         len(pdf_bytes),
         data.get("klant_naam", "(onbekend)"),
+    )
+    return pdf_bytes
+
+
+def genereer_adviesrapport_pdf(data: dict) -> bytes:
+    """
+    Genereer een adviesrapport PDF.
+
+    Args:
+        data: Dict met meta, bedrijf, sections[] (PdfReport structuur).
+              Alle bedragen zijn al geformateerd als strings door de frontend.
+
+    Returns:
+        PDF als bytes.
+    """
+    # Vul defaults aan
+    meta = data.get("meta", {})
+    if not meta.get("date"):
+        meta["date"] = date.today().strftime("%d-%m-%Y")
+        data["meta"] = meta
+
+    # Render HTML
+    template = jinja_env.get_template("adviesrapport.html")
+    html_string = template.render(**data)
+
+    # Converteer naar PDF
+    pdf_bytes = HTML(string=html_string, base_url=TEMPLATES_DIR).write_pdf()
+
+    logger.info(
+        "Adviesrapport PDF gegenereerd: %d bytes, klant=%s",
+        len(pdf_bytes),
+        meta.get("customerName", "(onbekend)"),
     )
     return pdf_bytes
 
