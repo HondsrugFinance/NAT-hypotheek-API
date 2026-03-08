@@ -655,40 +655,50 @@
 </div>
 
 {# Onderpand (zelfde pagina, na haalbaarheid) #}
-{% if onderpand and (onderpand.adres or onderpand.woz_waarde or onderpand.woningtype or onderpand.energielabel) %}
+{# Ondersteunt zowel onderpanden[] (nieuw, meerdere) als onderpand (backward-compatible, enkel) #}
+{% set onderpand_lijst = onderpanden if onderpanden else ([onderpand] if onderpand and (onderpand.adres or onderpand.woz_waarde or onderpand.woningtype or onderpand.energielabel) else []) %}
+{% if onderpand_lijst %}
 <div class="section">
   <h2 class="section-title">Onderpand</h2>
-  <div class="info-card-single">
-    {% if onderpand.adres %}
-    <div class="row">
-      <span class="label">Adres</span>
-      <span class="value">{{ onderpand.adres }}</span>
+  {% set op_grid = 'three-column-grid' if onderpand_lijst|length > 2 else ('single-column' if onderpand_lijst|length == 1 else 'two-column-grid') %}
+  <div class="{{ op_grid }}">
+    {% for op in onderpand_lijst %}
+    <div class="info-card">
+      {% if op.naam and onderpand_lijst|length > 1 %}
+      <h3 class="card-title">{{ op.naam }}</h3>
+      {% endif %}
+      {% if op.adres %}
+      <div class="row">
+        <span class="label">Adres</span>
+        <span class="value">{{ op.adres }}</span>
+      </div>
+      {% endif %}
+      {% if op.woz_waarde %}
+      <div class="row">
+        <span class="label">WOZ-waarde</span>
+        <span class="value">{{ op.woz_waarde }}</span>
+      </div>
+      {% endif %}
+      {% if op.woningtype %}
+      <div class="row">
+        <span class="label">Woningtype</span>
+        <span class="value">{{ op.woningtype }}</span>
+      </div>
+      {% endif %}
+      {% if op.energielabel %}
+      <div class="row">
+        <span class="label">Energielabel</span>
+        <span class="value">{{ op.energielabel }}</span>
+      </div>
+      {% endif %}
+      {% if op.ebv_ebb_bedrag %}
+      <div class="row">
+        <span class="label">Energiebesparende voorzieningen</span>
+        <span class="value">{{ op.ebv_ebb_bedrag }}</span>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-    {% if onderpand.woz_waarde %}
-    <div class="row">
-      <span class="label">WOZ-waarde</span>
-      <span class="value">{{ onderpand.woz_waarde }}</span>
-    </div>
-    {% endif %}
-    {% if onderpand.woningtype %}
-    <div class="row">
-      <span class="label">Woningtype</span>
-      <span class="value">{{ onderpand.woningtype }}</span>
-    </div>
-    {% endif %}
-    {% if onderpand.energielabel %}
-    <div class="row">
-      <span class="label">Energielabel</span>
-      <span class="value">{{ onderpand.energielabel }}</span>
-    </div>
-    {% endif %}
-    {% if onderpand.ebv_ebb_bedrag %}
-    <div class="row">
-      <span class="label">EBV/EBB bedrag</span>
-      <span class="value">{{ onderpand.ebv_ebb_bedrag }}</span>
-    </div>
-    {% endif %}
+    {% endfor %}
   </div>
 </div>
 {% endif %}

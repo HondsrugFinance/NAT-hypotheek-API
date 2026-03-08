@@ -566,6 +566,7 @@ class KlantGegevensSectie(BaseModel):
     partner: Optional[PartnerGegevens] = None
 
 class OnderpandSectie(BaseModel):
+    naam: str = ""  # Scenario naam (bijv. "Huidige situatie")
     adres: str = ""
     woz_waarde: str = ""
     woningtype: str = ""
@@ -638,7 +639,8 @@ class SamenvattingPdfRequest(BaseModel):
     klant_naam: str = ""
     datum: str = ""
     klant_gegevens: Optional[KlantGegevensSectie] = None
-    onderpand: Optional[OnderpandSectie] = None
+    onderpand: Optional[OnderpandSectie] = None  # Backward-compatible: enkel onderpand
+    onderpanden: List[OnderpandSectie] = []  # Nieuw: meerdere onderpanden (1 per berekening)
     haalbaarheid: List[HaalbaarheidSectie] = []
     financiering: List[FinancieringSectie] = []
     maandlasten: List[MaandlastenSectie] = []
@@ -668,9 +670,10 @@ async def samenvatting_pdf(
     """
     origin = request.headers.get("origin", "onbekend")
     logger.info(
-        "PDF generatie gestart: origin=%s, klant=%s, onderpand=%s",
+        "PDF generatie gestart: origin=%s, klant=%s, onderpanden=%d, onderpand=%s",
         origin,
         request_body.klant_naam or "(onbekend)",
+        len(request_body.onderpanden),
         request_body.onderpand.model_dump() if request_body.onderpand else None,
     )
 
