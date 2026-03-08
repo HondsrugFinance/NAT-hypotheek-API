@@ -18,9 +18,13 @@ def samenvatting_email_body(
     return f"""\
 <p>Beste {klant_naam},</p>
 
-<p>Hierbij ontvangt u de samenvatting van uw hypotheekberekening als bijlage bij dit bericht.</p>
+<p>Zoals besproken stuur ik je hierbij de samenvatting van de hypotheekberekening.</p>
 
-<p>Heeft u vragen naar aanleiding van deze samenvatting? Neem dan gerust contact met ons op.</p>
+<p>In het document vind je een overzicht van de maximale hypotheek, de mogelijke financieringsopzet en de bijbehorende maandlasten. Hiermee krijg je een goed beeld van de financi\u00eble mogelijkheden in jouw situatie.</p>
+
+<p>De berekening is gebaseerd op de huidige gegevens en hypotheeknormen en dient als eerste indicatie. De uiteindelijke mogelijkheden kunnen nog afhankelijk zijn van onder andere de definitieve toetsing van de gegevens en de actuele rentestand op het moment van aanvragen.</p>
+
+<p>Wanneer je vragen hebt of bepaalde onderdelen wilt bespreken, neem gerust contact met mij op.</p>
 
 <p>Met vriendelijke groet,<br>
 {advisor_naam}<br>
