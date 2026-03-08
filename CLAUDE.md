@@ -64,6 +64,8 @@ NAT-hypotheek-API/
 │   ├── lovable-prompt-e3-pdf-fixes.md      # Energielabel + footer naam
 │   ├── lovable-prompt-e4-pdf-namen.md      # Namen i.p.v. Aanvrager/Partner
 │   ├── lovable-prompt-e5-onderpanden.md    # Onderpanden[] per scenario
+│   ├── lovable-prompt-f1-email-draft.md    # Verstuur samenvatting als concept e-mail
+│   ├── lovable-prompt-f2-open-outlook.md   # Succes-feedback na e-mail draft
 │   ├── lovable-prompt-stap3.md
 │   ├── lovable-prompt-stap4.md
 │   ├── lovable-prompt-stap6-2fa.md
@@ -77,6 +79,9 @@ NAT-hypotheek-API/
 │   ├── preview-samenvatting-3scenarios.html  # Browser preview (3 scenario's)
 │   ├── preview-single-fullwidth.html     # Browser preview (1 scenario, volle breedte)
 │   └── test-template-render.html         # Gegenereerde Jinja2 preview
+│
+├── static/                     # Statische bestanden (logo voor e-mail handtekening)
+│   └── logo-hondsrug-finance.jpg  # 308px breed (2x retina), gehost via GitHub raw
 │
 ├── reference/                  # Bronbestanden (niet in git)
 │   ├── Rapport-Advies-hypotheeknormen-2026.pdf
@@ -172,7 +177,8 @@ Content-Type: application/json
 X-API-Key: <required>
 ```
 Maakt een concept e-mail aan in het Outlook-postvak van de adviseur met de samenvatting PDF als bijlage.
-Vereist: Azure Entra ID app-registratie + `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` env vars.
+Handtekening wordt automatisch geselecteerd op basis van `sender_email` (zie `ADVISORS` dict in `email_templates.py`).
+Vereist: Azure Entra ID app-registratie met `Mail.ReadWrite` (Application) + `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` env vars.
 
 ### Health Checks
 ```
@@ -545,6 +551,16 @@ pytest tests/ -v
 - **GitHub Actions:** `.github/workflows/test.yml` draait pytest unit tests bij elke push en PR
 - **Config persistentie:** `github_sync.py` commit config-wijzigingen (via `PUT /config/`) terug naar GitHub zodat ze persistent zijn over Render redeploys. Vereist `GITHUB_TOKEN` environment variable.
 
+### Environment Variables
+
+| Variable | Beschrijving |
+|----------|-------------|
+| `NAT_API_KEY` | API-sleutel voor beveiligde endpoints |
+| `GITHUB_TOKEN` | GitHub PAT voor config-persistentie |
+| `AZURE_TENANT_ID` | Azure Entra ID tenant |
+| `AZURE_CLIENT_ID` | Azure app registration client ID |
+| `AZURE_CLIENT_SECRET` | Azure app registration secret |
+
 ### Dependencies
 
 Belangrijkste packages (zie `requirements.txt`):
@@ -552,7 +568,7 @@ Belangrijkste packages (zie `requirements.txt`):
 - `pydantic` — Data validatie
 - `weasyprint` — PDF generatie
 - `slowapi` — Rate limiting
-- `httpx` — HTTP client (gebruikt door `github_sync.py`)
+- `httpx` — HTTP client (gebruikt door `github_sync.py` en `graph_client.py`)
 
 De `monthly_costs/` module heeft **geen extra dependencies** — gebruikt alleen `decimal` (stdlib), `pydantic` en `fastapi`.
 
