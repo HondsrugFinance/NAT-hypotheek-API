@@ -668,9 +668,10 @@ async def samenvatting_pdf(
     """
     origin = request.headers.get("origin", "onbekend")
     logger.info(
-        "PDF generatie gestart: origin=%s, klant=%s",
+        "PDF generatie gestart: origin=%s, klant=%s, onderpand=%s",
         origin,
         request_body.klant_naam or "(onbekend)",
+        request_body.onderpand.model_dump() if request_body.onderpand else None,
     )
 
     try:
