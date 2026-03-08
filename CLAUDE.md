@@ -168,7 +168,7 @@ Bewerkbare configs: `fiscaal-frontend`, `fiscaal`, `geldverstrekkers`
 ### PDF Generatie
 ```
 POST /samenvatting-pdf
-POST /adviesrapport-pdf (API-key vereist)
+POST /adviesrapport-pdf
 ```
 
 ### E-mail Draft (API-key vereist)

@@ -752,7 +752,6 @@ class AdviesrapportPdfRequest(BaseModel):
 async def adviesrapport_pdf(
     request_body: AdviesrapportPdfRequest,
     request: Request,
-    api_key: Optional[str] = Depends(verify_api_key),
 ):
     """
     Genereer een adviesrapport PDF.
