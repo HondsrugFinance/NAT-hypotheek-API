@@ -200,6 +200,14 @@
     padding: 10px 14px;
   }
 
+  /* --- Volle breedte bij 1 item --- */
+  .single-column .info-card,
+  .single-column .result-card,
+  .single-column .scenario-card {
+    float: none;
+    width: 100%;
+  }
+
   /* --- Drie kolommen --- */
   .three-column-grid .result-card,
   .three-column-grid .scenario-card,
@@ -448,7 +456,8 @@
 {% if klant_gegevens %}
 <div class="section">
   <h2 class="section-title">Klantgegevens</h2>
-  <div class="two-column-grid">
+  {% set kg_class = 'single-column' if not klant_gegevens.partner else 'two-column-grid' %}
+  <div class="{{ kg_class }}">
     {% if klant_gegevens.aanvrager and (klant_gegevens.aanvrager.naam or klant_gegevens.aanvrager.geboortedatum or klant_gegevens.aanvrager.straat or klant_gegevens.aanvrager.email) %}
     <div class="info-card">
       <h3 class="card-title">Aanvrager</h3>
@@ -576,7 +585,7 @@
   {% endif %}
 
   {# Haalbaarheid cards #}
-  {% set grid_class = 'three-column-grid' if haalbaarheid|length > 2 else 'two-column-grid' %}
+  {% set grid_class = 'three-column-grid' if haalbaarheid|length > 2 else ('single-column' if haalbaarheid|length == 1 else 'two-column-grid') %}
   <div class="{{ grid_class }}">
     {# Bereken max rijen per groep voor spacer-uitlijning #}
     {% set ns = namespace(max_inkomen=0, max_verpl=0) %}
@@ -713,7 +722,7 @@
   {% endif %}
 
   {# Financiering cards #}
-  {% set grid_class = 'three-column-grid' if financiering|length > 2 else 'two-column-grid' %}
+  {% set grid_class = 'three-column-grid' if financiering|length > 2 else ('single-column' if financiering|length == 1 else 'two-column-grid') %}
   <div class="{{ grid_class }}">
     {# Bereken max rijen per groep voor spacer-uitlijning #}
     {% set ns_fin = namespace(max_posten=0, max_eigen=0) %}
