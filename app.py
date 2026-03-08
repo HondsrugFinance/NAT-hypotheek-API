@@ -771,7 +771,10 @@ async def email_draft_samenvatting(
         else "klant"
     )
     subject = request_body.email_subject or f"Samenvatting hypotheekberekening - {klant_naam}"
-    body_html = email_templates.samenvatting_email_body(klant_naam=klant_naam)
+    body_html = email_templates.samenvatting_email_body(
+        klant_naam=klant_naam,
+        sender_email=request_body.sender_email,
+    )
 
     # Stap 4: Concept e-mail aanmaken in Outlook via Graph API
     try:
