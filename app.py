@@ -18,6 +18,8 @@ from datetime import date
 import calculator_final
 import aow_calculator
 import pdf_generator
+import graph_client
+import email_templates
 
 # --- Logging ---
 logging.basicConfig(
@@ -698,3 +700,112 @@ async def samenvatting_pdf(
 # Rate limit op PDF endpoint (zwaarder dan berekening)
 if RATE_LIMITING_ENABLED:
     samenvatting_pdf = limiter.limit("30/minute")(samenvatting_pdf)
+
+
+# --- E-mail draft endpoint ---
+
+class DraftEmailRequest(BaseModel):
+    """Request om een concept e-mail aan te maken met de samenvatting PDF."""
+    sender_email: str  # M365 e-mail van de ingelogde adviseur
+    email_subject: Optional[str] = None  # Override onderwerp (anders automatisch)
+    pdf_data: SamenvattingPdfRequest  # Alle data voor PDF generatie
+
+
+@app.post("/email/draft-samenvatting")
+async def email_draft_samenvatting(
+    request_body: DraftEmailRequest,
+    request: Request,
+    api_key: Optional[str] = Depends(verify_api_key),
+):
+    """
+    Genereer de samenvatting PDF en maak een concept e-mail aan in Outlook.
+
+    Vereist:
+    - Azure Graph API credentials geconfigureerd op de server
+    - API key (X-API-Key header)
+    - sender_email moet een geldig M365 postvak zijn in de tenant
+    """
+    # Check of Graph API geconfigureerd is
+    if not graph_client.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="E-mail integratie is niet geconfigureerd (Azure credentials ontbreken)",
+        )
+
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "E-mail draft gestart: origin=%s, sender=%s, klant=%s",
+        origin,
+        request_body.sender_email,
+        request_body.pdf_data.klant_naam or "(onbekend)",
+    )
+
+    # Stap 1: Genereer PDF (hergebruik bestaande code)
+    try:
+        pdf_data = request_body.pdf_data.model_dump()
+        pdf_bytes = pdf_generator.genereer_samenvatting_pdf(pdf_data)
+    except Exception as e:
+        logger.error("PDF generatie mislukt voor e-mail draft: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF generatie mislukt: {str(e)}")
+
+    # Stap 2: Ontvangers ophalen
+    recipients = []
+    if request_body.pdf_data.klant_gegevens:
+        aanvrager = request_body.pdf_data.klant_gegevens.aanvrager
+        if aanvrager and aanvrager.email:
+            recipients.append(aanvrager.email)
+        partner = request_body.pdf_data.klant_gegevens.partner
+        if partner and partner.email:
+            recipients.append(partner.email)
+
+    if not recipients:
+        raise HTTPException(
+            status_code=422,
+            detail="Geen ontvanger e-mailadres gevonden (klant_gegevens.aanvrager.email is leeg)",
+        )
+
+    # Stap 3: E-mail opbouwen
+    klant_naam = request_body.pdf_data.klant_naam or (
+        request_body.pdf_data.klant_gegevens.aanvrager.naam
+        if request_body.pdf_data.klant_gegevens
+        else "klant"
+    )
+    subject = request_body.email_subject or f"Samenvatting hypotheekberekening - {klant_naam}"
+    body_html = email_templates.samenvatting_email_body(klant_naam=klant_naam)
+
+    # Stap 4: Concept e-mail aanmaken in Outlook via Graph API
+    try:
+        result = await graph_client.create_draft_with_attachment(
+            sender_email=request_body.sender_email,
+            to_recipients=recipients,
+            subject=subject,
+            body_html=body_html,
+            attachment_name=f"samenvatting-{klant_naam.replace(' ', '-').lower()}.pdf",
+            attachment_bytes=pdf_bytes,
+        )
+    except graph_client.GraphAPIError as e:
+        logger.error("Graph API fout: %s (status=%s)", e.message, e.status_code)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Outlook draft aanmaken mislukt: {e.message}",
+        )
+
+    logger.info(
+        "E-mail draft aangemaakt: message_id=%s, recipients=%s",
+        result.get("message_id", "?")[:30],
+        recipients,
+    )
+
+    return {
+        "status": "ok",
+        "message": "Concept e-mail aangemaakt in Outlook",
+        "message_id": result["message_id"],
+        "web_link": result.get("web_link", ""),
+        "recipients": recipients,
+        "attachment_size_bytes": len(pdf_bytes),
+    }
+
+
+# Rate limit op email draft endpoint
+if RATE_LIMITING_ENABLED:
+    email_draft_samenvatting = limiter.limit("10/minute")(email_draft_samenvatting)

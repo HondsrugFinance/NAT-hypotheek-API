@@ -24,11 +24,15 @@ NAT-hypotheek-API/
 ├── calculator_final.py         # NAT 2026 maximale hypotheek calculator
 ├── aow_calculator.py           # AOW-leeftijd berekening
 ├── pdf_generator.py            # Samenvatting PDF generatie (weasyprint)
+├── graph_client.py             # Microsoft Graph API — concept e-mails in Outlook
+├── email_templates.py          # HTML e-mail body templates
 ├── config_schemas.py           # Pydantic validatie voor config bestanden
-├── contract_check.py           # API response validator
-├── output_contract.json        # API response schema specificatie
+├── github_sync.py              # GitHub Contents API — config persistentie over redeploys
 ├── conftest.py                 # Pytest root config (sys.path)
 ├── pytest.ini                  # Pytest configuratie
+│
+├── .github/workflows/
+│   └── test.yml                # CI: pytest unit tests bij push/PR
 │
 ├── config/                     # Configuratie JSON bestanden
 │   ├── aow.json                # AOW-leeftijden tabel
@@ -37,7 +41,47 @@ NAT-hypotheek-API/
 │   ├── fiscaal.json            # Fiscale standaardwaarden
 │   ├── fiscaal-frontend.json   # Fiscale parameters voor Lovable UI
 │   ├── geldverstrekkers.json   # Geldverstrekkers en productlijnen
-│   └── studielening.json       # Studielening correctiefactoren
+│   ├── studielening.json       # Studielening correctiefactoren
+│   └── woonquote.json          # Woonquote tabellen (NAT normen)
+│
+├── docs/                       # Projectdocumentatie
+│   ├── TOETS_INKOMEN_FIX.md    # Toetsinkomen berekening documentatie
+│   ├── Lovable Rekentool - API-koppelingen.md
+│   ├── Lovable Rekentool - Site mapping.md
+│   ├── Lovable Rekentool Voortgang.md
+│   └── example_request.json    # Voorbeeld API request
+│
+├── prompts/                    # Lovable prompts voor frontend iteraties
+│   ├── lovable-prompt-c2.md
+│   ├── lovable-prompt-c3-config.md
+│   ├── lovable-prompt-c3-geldverstrekkers-fix.md
+│   ├── lovable-prompt-c4-config-fixes.md
+│   ├── lovable-prompt-c5-monthly-costs-url.md
+│   ├── lovable-prompt-d1.md
+│   ├── lovable-prompt-d1b-pdf-uitbreiding.md
+│   ├── lovable-prompt-e1-dossier-fixes.md
+│   ├── lovable-prompt-e2-pdf-fixes.md
+│   ├── lovable-prompt-e3-pdf-fixes.md      # Energielabel + footer naam
+│   ├── lovable-prompt-e4-pdf-namen.md      # Namen i.p.v. Aanvrager/Partner
+│   ├── lovable-prompt-e5-onderpanden.md    # Onderpanden[] per scenario
+│   ├── lovable-prompt-stap3.md
+│   ├── lovable-prompt-stap4.md
+│   ├── lovable-prompt-stap6-2fa.md
+│   ├── lovable-prompt-stap6-fix.md
+│   └── lovable-prompt-stap7-rbac.md
+│
+├── templates/                  # Jinja2 HTML templates voor PDF generatie
+│   ├── assets/                 # Logo en afbeeldingen voor templates
+│   ├── samenvatting.html       # Samenvatting PDF template (WeasyPrint)
+│   ├── preview-samenvatting.html         # Browser preview (2 scenario's)
+│   ├── preview-samenvatting-3scenarios.html  # Browser preview (3 scenario's)
+│   ├── preview-single-fullwidth.html     # Browser preview (1 scenario, volle breedte)
+│   └── test-template-render.html         # Gegenereerde Jinja2 preview
+│
+├── reference/                  # Bronbestanden (niet in git)
+│   ├── Rapport-Advies-hypotheeknormen-2026.pdf
+│   ├── Bijlage-financieringslastnormen-2026.xlsx
+│   └── NAT-sheet 2026.xlsm
 │
 ├── monthly_costs/              # Netto maandlasten calculator (package)
 │   ├── config.py               # RULES_DIR, DEFAULT_FISCAL_YEAR
@@ -121,6 +165,15 @@ Bewerkbare configs: `fiscaal-frontend`, `fiscaal`, `geldverstrekkers`
 POST /samenvatting-pdf
 ```
 
+### E-mail Draft (API-key vereist)
+```
+POST /email/draft-samenvatting
+Content-Type: application/json
+X-API-Key: <required>
+```
+Maakt een concept e-mail aan in het Outlook-postvak van de adviseur met de samenvatting PDF als bijlage.
+Vereist: Azure Entra ID app-registratie + `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` env vars.
+
 ### Health Checks
 ```
 GET /
@@ -133,7 +186,8 @@ GET /health/deep
 |----------|--------|
 | `POST /calculate` | 30/minuut |
 | `PUT /config/*` | 5/minuut |
-| `POST /samenvatting-pdf` | 10/minuut |
+| `POST /samenvatting-pdf` | 30/minuut |
+| `POST /email/draft-samenvatting` | 10/minuut |
 
 ---
 
@@ -486,6 +540,11 @@ pytest tests/ -v
 - **Auto-deploy:** bij push naar `main` branch
 - **Python versie:** 3.12+
 
+### CI/CD
+
+- **GitHub Actions:** `.github/workflows/test.yml` draait pytest unit tests bij elke push en PR
+- **Config persistentie:** `github_sync.py` commit config-wijzigingen (via `PUT /config/`) terug naar GitHub zodat ze persistent zijn over Render redeploys. Vereist `GITHUB_TOKEN` environment variable.
+
 ### Dependencies
 
 Belangrijkste packages (zie `requirements.txt`):
@@ -493,5 +552,62 @@ Belangrijkste packages (zie `requirements.txt`):
 - `pydantic` — Data validatie
 - `weasyprint` — PDF generatie
 - `slowapi` — Rate limiting
+- `httpx` — HTTP client (gebruikt door `github_sync.py`)
 
 De `monthly_costs/` module heeft **geen extra dependencies** — gebruikt alleen `decimal` (stdlib), `pydantic` en `fastapi`.
+
+---
+
+## PDF Template — Kleurenpalet
+
+De PDF template (`templates/samenvatting.html`) gebruikt het Hondsrug Finance kleurenpalet uit de Lovable frontend (`src/index.css`):
+
+| Element | Hex | Palet-token |
+|---------|-----|-------------|
+| Groene accenten (titels, highlight, bedragen) | `#2E5644` | primary |
+| Standaard tekst | `#2B1E39` | foreground / card-foreground |
+| Subtiele tekst (labels, voetnoten) | `#5C4A6E` | muted-foreground |
+| Card achtergrond | `#FEFDF8` | card |
+| Highlight-box achtergrond | `#E3F0E9` | accent |
+| Disclaimer achtergrond | `#EFE9D8` | muted |
+| Randen | `#E5DFC8` | border |
+
+### PDF Template Features
+
+- **Responsieve grid**: 1 item = volle breedte, 2 items = 49%/49%, 3 items = 32%/32%/32%
+- **Meerdere onderpanden**: `onderpanden[]` array (1 per scenario), backward-compatible met `onderpand` object
+- **WeasyPrint-specifiek**: float-based layout (geen flexbox/grid), `0.5pt` borders, Google Fonts Inter
+- **Toelichting fix**: `_fix_toelichting_paragrafen()` in `pdf_generator.py` converteert plain text naar HTML bullets
+
+---
+
+## Backlog
+
+Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
+
+### Te doen — Fase 4
+
+| # | Item | Waar | Status |
+|---|------|------|--------|
+| C4 | Hypotheekrentes handmatig beheren | Supabase + Lovable | Te doen |
+| D2 | Adviesrapport PDF (uitgebreid met adviezen) | NAT API + Lovable | Te doen |
+| C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
+| — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
+
+### Te doen — Meer tests (wacht op Excel-waarden)
+
+- AOW-scenario testen
+- Scenario 2 (over 10 jaar) testen
+- Alle 8 energielabels testen
+- Grensgevallen (nul-inkomen, hoog inkomen, RVP 119 vs 120)
+
+### Te doen — Uitbouwen
+
+- API-versioning (`/v1/calculate` voor NAT 2026)
+- Sentry monitoring voor foutmeldingen
+
+### Toekomst — Integraties
+
+- HDN-export (hypotheekaanvragen elektronisch versturen)
+- AI document processing vanuit SharePoint/OneDrive
+- Supabase REST API als centrale hub voor externe services
