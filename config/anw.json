@@ -1,0 +1,36 @@
+{
+  "versie": "2026-H1",
+  "peildatum": "2026-01-01",
+  "laatst_bijgewerkt": "2026-03-09",
+  "update_frequentie": "halfjaarlijks (1 jan + 1 jul)",
+  "bronnen": [
+    "https://www.svb.nl/nl/anw/anw-voor-nabestaanden/bedragen-anw",
+    "https://www.svb.nl/nl/anw/anw-voor-nabestaanden/inkomsten-en-anw",
+    "https://www.rijksoverheid.nl/onderwerpen/algemene-nabestaandenwet-anw"
+  ],
+  "anw": {
+    "bruto_maandbedrag": 1668.49,
+    "vakantiegeld_maand": 128.18,
+    "bruto_jaarbedrag_incl_vakantiegeld": 21559.00,
+    "toelichting_jaarbedrag": "(1668.49 + 128.18) * 12 = 21559.04, afgerond",
+    "kostendeler_bruto_maand": 1112.33,
+    "kostendeler_vakantiegeld_maand": 85.46,
+    "kostendeler_jaarbedrag_incl_vakantiegeld": 14373.00,
+    "toelichting_kostendeler": "Bedrag bij kostendelersnorm (2 personen)",
+    "vrijlating_gedeeltelijke_korting_maand": 1147.20,
+    "inkomensgrens_nihil_maand": 3617.28,
+    "kortingsfractie": 0.6666667,
+    "toelichting_korting": "Eerste 1147.20 bruto/mnd vrij, daarboven 2/3 korting op ANW",
+    "minimum_ao_percentage": 45,
+    "toelichting_ao": "ANW recht bij >= 45% arbeidsongeschiktheid (UWV-vastgesteld)"
+  },
+  "aow_maandbedragen": {
+    "alleenstaand_bruto_maand": 1637.57,
+    "alleenstaand_vakantiegeld_maand": 106.55,
+    "alleenstaand_jaarbedrag_incl_vakantiegeld": 20929.44,
+    "samenwonend_bruto_maand_pp": 1122.12,
+    "samenwonend_vakantiegeld_maand_pp": 76.10,
+    "samenwonend_jaarbedrag_incl_vakantiegeld_pp": 14378.64,
+    "toelichting": "AOW per persoon. Bij stel: samenwonend bedrag per persoon."
+  }
+}

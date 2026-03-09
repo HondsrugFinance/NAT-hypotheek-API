@@ -1,0 +1,53 @@
+{
+  "rule_version": "wia_static_nl_employee_v1",
+  "peildatum": "2026-01-01",
+  "laatst_bijgewerkt": "2026-03-09",
+  "bronnen": [
+    "https://www.uwv.nl/particulieren/ziek/wia-uitkering",
+    "https://www.uwv.nl/particulieren/bedragen/wia-702.aspx",
+    "https://www.rijksoverheid.nl/onderwerpen/wia"
+  ],
+  "dagloon": {
+    "werkdagen_per_jaar": 261,
+    "maandloon_factor": 21.75,
+    "toelichting": "WIA-dagloon = sv_loon_12m / 261. WIA-maandloon = dagloon * 21.75."
+  },
+  "wachttijd_standaard_weken": 104,
+  "minimum_ao_percentage_wia": 35,
+  "wga_lgu": {
+    "percentage_maand_1_2": 0.75,
+    "percentage_maand_3_plus": 0.70,
+    "minimum_duur_maanden": 3,
+    "maximum_duur_maanden": 24,
+    "toelichting": "Eerste 2 maanden 75%, daarna 70% van WIA-maandloon (zonder werken)."
+  },
+  "wga_loonaanvulling": {
+    "percentage": 0.70,
+    "toelichting": "70% van verschil. Variant 1: (maandloon - feitelijk loon) bij benutting >= 100%. Variant 2: (maandloon - rvc) bij benutting >= 50%."
+  },
+  "wga_vervolg": {
+    "ao_klassen": {
+      "35_45": 0.28,
+      "45_55": 0.35,
+      "55_65": 0.42,
+      "65_80": 0.5075
+    },
+    "toelichting": "Percentage van minimumloon (of WIA-maandloon als dat lager is). Bij benutting < 50% rvc."
+  },
+  "iva": {
+    "percentage": 0.75,
+    "toelichting": "75% van WIA-maandloon. Bij >= 80% AO en duurzaam."
+  },
+  "wga_80_100": {
+    "percentage_maand_1_2": 0.75,
+    "percentage_maand_3_plus": 0.70,
+    "toelichting": "Zelfde als LGU-tarieven. Bij >= 80% AO maar niet duurzaam."
+  },
+  "loondoorbetaling": {
+    "wettelijk_minimum_pct_jaar1": 0.70,
+    "wettelijk_minimum_pct_jaar2": 0.70,
+    "minimumloon_vloer_jaar1": true,
+    "minimumloon_vloer_jaar2": false,
+    "toelichting": "Jaar 1: min 70% + minimumloon vloer. Jaar 2: min 70%, geen verplichte aanvulling tot minimumloon."
+  }
+}

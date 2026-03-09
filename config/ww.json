@@ -1,0 +1,45 @@
+{
+  "rule_version": "ww_static_nl_employee_v1",
+  "peildatum": "2026-01-01",
+  "laatst_bijgewerkt": "2026-03-09",
+  "bronnen": [
+    "https://www.uwv.nl/particulieren/werkloos/ww-uitkering",
+    "https://www.uwv.nl/particulieren/bedragen/ww-702.aspx",
+    "https://www.rijksoverheid.nl/onderwerpen/ww-uitkering"
+  ],
+  "dagloon": {
+    "werkdagen_per_jaar": 261,
+    "maandloon_factor": 21.75,
+    "maximum_dagloon": 304.25,
+    "uren_per_werkdag": 8,
+    "toelichting": "WW-dagloon = sv_loon_12m / 261. WW-maandloon = dagloon * 21.75. Max dagloon 2026: 304.25."
+  },
+  "uitkering": {
+    "percentage_maand_1_2": 0.75,
+    "percentage_maand_3_plus": 0.70,
+    "toelichting": "Eerste 2 maanden 75%, daarna 70% van WW-maandloon. Voor adviesscenario's gebruiken we 70% structureel."
+  },
+  "duur": {
+    "minimum_maanden": 3,
+    "maximum_maanden": 24,
+    "toelichting": "Min 3 mnd (alleen wekeneis). Opbouw: eerste 10 jr = 1 mnd/jr, pre-2016 boven 10 = 1 mnd/jr, vanaf 2016 boven 10 = 0.5 mnd/jr."
+  },
+  "inkomstenverrekening": {
+    "income_disregard_pct": 0.30,
+    "income_offset_pct": 0.70,
+    "work_stop_threshold_pct": 0.875,
+    "work_stop_consecutive_months": 2,
+    "toelichting": "30% vrijlating, 70% verrekening. WW stopt na 2 opeenvolgende maanden boven 87.5% van WW-maandloon."
+  },
+  "wekeneis": {
+    "weken_vereist": 26,
+    "referteperiode_weken": 36,
+    "toelichting": "In de laatste 36 weken voor werkloosheid minimaal 26 weken gewerkt."
+  },
+  "urenverlies": {
+    "drempel_uren_per_week_hoog": 10,
+    "minimum_verlies_bij_hoog": 5,
+    "minimum_verlies_bij_laag_fractie": 0.5,
+    "toelichting": "Bij >= 10 uur/week: min 5 uur verlies. Bij < 10 uur/week: min helft van uren verlies."
+  }
+}
