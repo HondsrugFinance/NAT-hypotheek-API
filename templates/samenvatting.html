@@ -696,7 +696,7 @@
       {% endif %}
       <div class="row">
         <span class="label">Energielabel</span>
-        <span class="value">{{ op.energielabel or 'Geen (geldig) label' }}</span>
+        <span class="value">{{ op.energielabel if op.energielabel and op.energielabel not in ('geen_label', 'Geen (geldig) Label') else 'Geen (geldig) label' }}</span>
       </div>
       {% if op.ebv_ebb_bedrag %}
       <div class="row">
