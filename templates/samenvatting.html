@@ -678,7 +678,7 @@
       {% endif %}
       {% if op.woz_waarde %}
       <div class="row">
-        <span class="label">WOZ-waarde</span>
+        <span class="label">Marktwaarde</span>
         <span class="value">{{ op.woz_waarde }}</span>
       </div>
       {% endif %}
@@ -688,12 +688,10 @@
         <span class="value">{{ op.woningtype }}</span>
       </div>
       {% endif %}
-      {% if op.energielabel %}
       <div class="row">
         <span class="label">Energielabel</span>
-        <span class="value">{{ op.energielabel }}</span>
+        <span class="value">{{ op.energielabel or 'Geen (geldig) label' }}</span>
       </div>
-      {% endif %}
       {% if op.ebv_ebb_bedrag %}
       <div class="row">
         <span class="label">Energiebesparende voorzieningen</span>

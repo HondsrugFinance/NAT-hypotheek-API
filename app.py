@@ -738,6 +738,8 @@ class AdviesrapportSection(BaseModel):
     rows: Optional[List[AdviesrapportRow]] = None
     tables: Optional[List[AdviesrapportTable]] = None
     highlights: Optional[List[AdviesrapportHighlight]] = None
+    advisor_note: Optional[str] = None
+    chart_data: Optional[Dict[str, Any]] = None
 
 
 class AdviesrapportPdfRequest(BaseModel):
@@ -793,6 +795,303 @@ if RATE_LIMITING_ENABLED:
     adviesrapport_pdf = limiter.limit("10/minute")(adviesrapport_pdf)
 
 
+# --- Risk Scenarios endpoint ---
+
+import risk_scenarios
+
+
+class RiskHypotheekDeel(BaseModel):
+    """Hypotheekdeel met rente_aftrekbaar_tot voor risk scenarios."""
+    aflos_type: str = "Annuïteit"
+    org_lpt: int = Field(default=360, ge=1, le=600)
+    rest_lpt: int = Field(default=360, ge=1, le=600)
+    hoofdsom_box1: float = Field(default=0, ge=0)
+    hoofdsom_box3: float = Field(default=0, ge=0)
+    rvp: int = Field(default=120, ge=0, le=600)
+    inleg_overig: float = Field(default=0, ge=0)
+    werkelijke_rente: float = Field(default=0.05, ge=0, le=0.20)
+    rente_aftrekbaar_tot: Optional[str] = None  # YYYY-MM-DD
+
+    @field_validator("aflos_type")
+    @classmethod
+    def validate_aflos_type(cls, v: str) -> str:
+        if v not in VALID_AFLOS_TYPES:
+            raise ValueError(
+                f"Ongeldig aflostype '{v}'. Toegestaan: {', '.join(VALID_AFLOS_TYPES)}"
+            )
+        return v
+
+
+class RiskScenariosRequest(BaseModel):
+    """Request voor risico-scenario berekeningen (AOW + overlijden + AO)."""
+    # Hypotheekdelen met aftrekbaar-tot datum
+    hypotheek_delen: List[RiskHypotheekDeel] = Field(default_factory=list, max_length=10)
+    ingangsdatum_hypotheek: str  # YYYY-MM-DD
+
+    # Persoonsgegevens
+    geboortedatum_aanvrager: str  # YYYY-MM-DD
+    inkomen_aanvrager_huidig: float = Field(ge=0, le=10_000_000)
+    inkomen_aanvrager_aow: float = Field(ge=0, le=10_000_000)
+    alleenstaande: str = "JA"
+
+    # Partner (optioneel)
+    geboortedatum_partner: Optional[str] = None
+    inkomen_partner_huidig: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_partner_aow: float = Field(default=0, ge=0, le=10_000_000)
+
+    # Overlijdensscenario (alleen bij stel)
+    nabestaandenpensioen_bij_overlijden_aanvrager: float = Field(
+        default=0, ge=0, le=10_000_000,
+        description="Jaarbedrag partnerpensioen dat partner ontvangt bij overlijden aanvrager"
+    )
+    nabestaandenpensioen_bij_overlijden_partner: float = Field(
+        default=0, ge=0, le=10_000_000,
+        description="Jaarbedrag partnerpensioen dat aanvrager ontvangt bij overlijden partner"
+    )
+    heeft_kind_onder_18: bool = Field(
+        default=False,
+        description="Thuiswonend kind onder 18 (voor ANW-recht)"
+    )
+    geboortedatum_jongste_kind: Optional[str] = Field(
+        default=None,
+        description="YYYY-MM-DD, voor ANW einddatum berekening"
+    )
+
+    # AO-scenario — inkomensverdeling (bruto jaarbedragen)
+    inkomen_loondienst_aanvrager: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_onderneming_aanvrager: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_roz_aanvrager: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_overig_aanvrager: float = Field(
+        default=0, ge=0, le=10_000_000,
+        description="Niet door AO beïnvloed (lijfrente, huur, etc.)"
+    )
+    inkomen_loondienst_partner: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_onderneming_partner: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_roz_partner: float = Field(default=0, ge=0, le=10_000_000)
+    inkomen_overig_partner: float = Field(default=0, ge=0, le=10_000_000)
+
+    # AO-scenario — parameters
+    ao_percentage: float = Field(default=50, ge=0, le=100)
+    benutting_rvc_percentage: float = Field(default=50, ge=0, le=100)
+    loondoorbetaling_pct_jaar1_aanvrager: float = Field(default=1.0, ge=0, le=2.0)
+    loondoorbetaling_pct_jaar2_aanvrager: float = Field(default=0.70, ge=0, le=2.0)
+    loondoorbetaling_pct_jaar1_partner: float = Field(default=1.0, ge=0, le=2.0)
+    loondoorbetaling_pct_jaar2_partner: float = Field(default=0.70, ge=0, le=2.0)
+
+    # AO-scenario — verzekeringen (bruto jaarbedragen)
+    aov_dekking_bruto_jaar_aanvrager: float = Field(default=0, ge=0, le=10_000_000)
+    aov_dekking_bruto_jaar_partner: float = Field(default=0, ge=0, le=10_000_000)
+    woonlastenverzekering_ao_bruto_jaar: float = Field(default=0, ge=0, le=10_000_000)
+
+    # WW-scenario — verzekeringen (bruto jaarbedragen)
+    woonlastenverzekering_ww_bruto_jaar: float = Field(default=0, ge=0, le=10_000_000)
+
+    # AO-scenario — arbeidsverleden (voor LGU-duur)
+    arbeidsverleden_jaren_tm_2015: int = Field(default=10, ge=0, le=50)
+    arbeidsverleden_jaren_vanaf_2016: int = Field(default=5, ge=0, le=20)
+
+    # Werkloosheid — arbeidsverleden (voor WW-duur)
+    arbeidsverleden_jaren_totaal_aanvrager: int = Field(default=0, ge=0, le=50)
+    arbeidsverleden_pre2016_boven10_aanvrager: int = Field(default=0, ge=0, le=40)
+    arbeidsverleden_vanaf2016_boven10_aanvrager: int = Field(default=0, ge=0, le=20)
+    arbeidsverleden_jaren_totaal_partner: int = Field(default=0, ge=0, le=50)
+    arbeidsverleden_pre2016_boven10_partner: int = Field(default=0, ge=0, le=40)
+    arbeidsverleden_vanaf2016_boven10_partner: int = Field(default=0, ge=0, le=20)
+
+    # Berekening parameters
+    toetsrente: float = Field(default=0.05, ge=0, le=0.20)
+    geadviseerd_hypotheekbedrag: float = Field(default=0, ge=0)
+
+    # Woning / verplichtingen
+    energielabel: Optional[str] = "Geen (geldig) Label"
+    verduurzamings_maatregelen: float = Field(default=0, ge=0, le=1_000_000)
+    limieten_bkr_geregistreerd: float = Field(default=0, ge=0, le=10_000_000)
+    studievoorschot_studielening: float = Field(default=0, ge=0, le=100_000)
+    erfpachtcanon_per_jaar: float = Field(default=0, ge=0, le=100_000)
+    jaarlast_overige_kredieten: float = Field(default=0, ge=0, le=100_000)
+
+    @field_validator("alleenstaande")
+    @classmethod
+    def validate_alleenstaande(cls, v: str) -> str:
+        if v not in ("JA", "NEE"):
+            raise ValueError("alleenstaande moet 'JA' of 'NEE' zijn")
+        return v
+
+
+@app.post("/calculate/risk-scenarios")
+async def calculate_risk_scenarios(
+    request_body: RiskScenariosRequest,
+    request: Request,
+):
+    """
+    Bereken maximale hypotheek bij risico-scenario's.
+
+    Retourneert AOW-scenario's (geprojecteerde hypotheek op AOW-datum)
+    en overlijdensscenario's (bij stellen, hypotheek op startdatum).
+    """
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "Risk scenarios gestart: origin=%s, aanvrager_geb=%s, alleenstaande=%s",
+        origin,
+        request_body.geboortedatum_aanvrager,
+        request_body.alleenstaande,
+    )
+
+    try:
+        # Hypotheekdelen naar dict formaat
+        delen = [d.model_dump() for d in request_body.hypotheek_delen]
+
+        all_scenarios = []
+
+        # --- AOW scenario's ---
+        aow_result = risk_scenarios.bereken_aow_scenarios(
+            hypotheek_delen=delen,
+            ingangsdatum_hypotheek=request_body.ingangsdatum_hypotheek,
+            geboortedatum_aanvrager=request_body.geboortedatum_aanvrager,
+            inkomen_aanvrager_huidig=request_body.inkomen_aanvrager_huidig,
+            inkomen_aanvrager_aow=request_body.inkomen_aanvrager_aow,
+            alleenstaande=request_body.alleenstaande,
+            geboortedatum_partner=request_body.geboortedatum_partner,
+            inkomen_partner_huidig=request_body.inkomen_partner_huidig,
+            inkomen_partner_aow=request_body.inkomen_partner_aow,
+            toetsrente=request_body.toetsrente,
+            energielabel=request_body.energielabel,
+            verduurzamings_maatregelen=request_body.verduurzamings_maatregelen,
+            limieten_bkr_geregistreerd=request_body.limieten_bkr_geregistreerd,
+            studievoorschot_studielening=request_body.studievoorschot_studielening,
+            erfpachtcanon_per_jaar=request_body.erfpachtcanon_per_jaar,
+            jaarlast_overige_kredieten=request_body.jaarlast_overige_kredieten,
+            geadviseerd_hypotheekbedrag=request_body.geadviseerd_hypotheekbedrag,
+        )
+        all_scenarios.extend(aow_result.get('scenarios', []))
+
+        # --- Overlijdensscenario's (alleen bij stel) ---
+        if (request_body.alleenstaande == "NEE"
+                and request_body.geboortedatum_partner):
+            overlijden_result = risk_scenarios.bereken_overlijdens_scenarios(
+                hypotheek_delen=delen,
+                geboortedatum_aanvrager=request_body.geboortedatum_aanvrager,
+                inkomen_aanvrager_huidig=request_body.inkomen_aanvrager_huidig,
+                geboortedatum_partner=request_body.geboortedatum_partner,
+                inkomen_partner_huidig=request_body.inkomen_partner_huidig,
+                nabestaandenpensioen_bij_overlijden_aanvrager=request_body.nabestaandenpensioen_bij_overlijden_aanvrager,
+                nabestaandenpensioen_bij_overlijden_partner=request_body.nabestaandenpensioen_bij_overlijden_partner,
+                heeft_kind_onder_18=request_body.heeft_kind_onder_18,
+                geboortedatum_jongste_kind=request_body.geboortedatum_jongste_kind,
+                toetsrente=request_body.toetsrente,
+                energielabel=request_body.energielabel,
+                verduurzamings_maatregelen=request_body.verduurzamings_maatregelen,
+                limieten_bkr_geregistreerd=request_body.limieten_bkr_geregistreerd,
+                studievoorschot_studielening=request_body.studievoorschot_studielening,
+                erfpachtcanon_per_jaar=request_body.erfpachtcanon_per_jaar,
+                jaarlast_overige_kredieten=request_body.jaarlast_overige_kredieten,
+                geadviseerd_hypotheekbedrag=request_body.geadviseerd_hypotheekbedrag,
+            )
+            all_scenarios.extend(overlijden_result.get('scenarios', []))
+
+        # --- AO-scenario's ---
+        # Alleen als er inkomensverdeling is opgegeven (loondienst/onderneming/roz)
+        has_ao_income = (
+            request_body.inkomen_loondienst_aanvrager > 0
+            or request_body.inkomen_onderneming_aanvrager > 0
+            or request_body.inkomen_roz_aanvrager > 0
+            or request_body.inkomen_loondienst_partner > 0
+            or request_body.inkomen_onderneming_partner > 0
+            or request_body.inkomen_roz_partner > 0
+        )
+        if has_ao_income:
+            ao_result = risk_scenarios.bereken_ao_scenarios(
+                hypotheek_delen=delen,
+                ingangsdatum_hypotheek=request_body.ingangsdatum_hypotheek,
+                geboortedatum_aanvrager=request_body.geboortedatum_aanvrager,
+                alleenstaande=request_body.alleenstaande,
+                geboortedatum_partner=request_body.geboortedatum_partner,
+                inkomen_loondienst_aanvrager=request_body.inkomen_loondienst_aanvrager,
+                inkomen_onderneming_aanvrager=request_body.inkomen_onderneming_aanvrager,
+                inkomen_roz_aanvrager=request_body.inkomen_roz_aanvrager,
+                inkomen_overig_aanvrager=request_body.inkomen_overig_aanvrager,
+                inkomen_loondienst_partner=request_body.inkomen_loondienst_partner,
+                inkomen_onderneming_partner=request_body.inkomen_onderneming_partner,
+                inkomen_roz_partner=request_body.inkomen_roz_partner,
+                inkomen_overig_partner=request_body.inkomen_overig_partner,
+                ao_percentage=request_body.ao_percentage,
+                benutting_rvc_percentage=request_body.benutting_rvc_percentage,
+                loondoorbetaling_pct_jaar1_aanvrager=request_body.loondoorbetaling_pct_jaar1_aanvrager,
+                loondoorbetaling_pct_jaar2_aanvrager=request_body.loondoorbetaling_pct_jaar2_aanvrager,
+                loondoorbetaling_pct_jaar1_partner=request_body.loondoorbetaling_pct_jaar1_partner,
+                loondoorbetaling_pct_jaar2_partner=request_body.loondoorbetaling_pct_jaar2_partner,
+                aov_dekking_bruto_jaar_aanvrager=request_body.aov_dekking_bruto_jaar_aanvrager,
+                aov_dekking_bruto_jaar_partner=request_body.aov_dekking_bruto_jaar_partner,
+                woonlastenverzekering_ao_bruto_jaar=request_body.woonlastenverzekering_ao_bruto_jaar,
+                arbeidsverleden_jaren_tm_2015=request_body.arbeidsverleden_jaren_tm_2015,
+                arbeidsverleden_jaren_vanaf_2016=request_body.arbeidsverleden_jaren_vanaf_2016,
+                toetsrente=request_body.toetsrente,
+                energielabel=request_body.energielabel,
+                verduurzamings_maatregelen=request_body.verduurzamings_maatregelen,
+                limieten_bkr_geregistreerd=request_body.limieten_bkr_geregistreerd,
+                studievoorschot_studielening=request_body.studievoorschot_studielening,
+                erfpachtcanon_per_jaar=request_body.erfpachtcanon_per_jaar,
+                jaarlast_overige_kredieten=request_body.jaarlast_overige_kredieten,
+                geadviseerd_hypotheekbedrag=request_body.geadviseerd_hypotheekbedrag,
+            )
+            all_scenarios.extend(ao_result.get('scenarios', []))
+
+        # --- Werkloosheidsscenario's ---
+        if has_ao_income:
+            ww_result = risk_scenarios.bereken_werkloosheid_scenarios(
+                hypotheek_delen=delen,
+                ingangsdatum_hypotheek=request_body.ingangsdatum_hypotheek,
+                geboortedatum_aanvrager=request_body.geboortedatum_aanvrager,
+                alleenstaande=request_body.alleenstaande,
+                geboortedatum_partner=request_body.geboortedatum_partner,
+                inkomen_loondienst_aanvrager=request_body.inkomen_loondienst_aanvrager,
+                inkomen_onderneming_aanvrager=request_body.inkomen_onderneming_aanvrager,
+                inkomen_roz_aanvrager=request_body.inkomen_roz_aanvrager,
+                inkomen_overig_aanvrager=request_body.inkomen_overig_aanvrager,
+                inkomen_loondienst_partner=request_body.inkomen_loondienst_partner,
+                inkomen_onderneming_partner=request_body.inkomen_onderneming_partner,
+                inkomen_roz_partner=request_body.inkomen_roz_partner,
+                inkomen_overig_partner=request_body.inkomen_overig_partner,
+                arbeidsverleden_jaren_totaal_aanvrager=request_body.arbeidsverleden_jaren_totaal_aanvrager,
+                arbeidsverleden_pre2016_boven10_aanvrager=request_body.arbeidsverleden_pre2016_boven10_aanvrager,
+                arbeidsverleden_vanaf2016_boven10_aanvrager=request_body.arbeidsverleden_vanaf2016_boven10_aanvrager,
+                arbeidsverleden_jaren_totaal_partner=request_body.arbeidsverleden_jaren_totaal_partner,
+                arbeidsverleden_pre2016_boven10_partner=request_body.arbeidsverleden_pre2016_boven10_partner,
+                arbeidsverleden_vanaf2016_boven10_partner=request_body.arbeidsverleden_vanaf2016_boven10_partner,
+                woonlastenverzekering_ww_bruto_jaar=request_body.woonlastenverzekering_ww_bruto_jaar,
+                toetsrente=request_body.toetsrente,
+                energielabel=request_body.energielabel,
+                verduurzamings_maatregelen=request_body.verduurzamings_maatregelen,
+                limieten_bkr_geregistreerd=request_body.limieten_bkr_geregistreerd,
+                studievoorschot_studielening=request_body.studievoorschot_studielening,
+                erfpachtcanon_per_jaar=request_body.erfpachtcanon_per_jaar,
+                jaarlast_overige_kredieten=request_body.jaarlast_overige_kredieten,
+                geadviseerd_hypotheekbedrag=request_body.geadviseerd_hypotheekbedrag,
+            )
+            all_scenarios.extend(ww_result.get('scenarios', []))
+
+        logger.info(
+            "Risk scenarios klaar: %d scenario's",
+            len(all_scenarios),
+        )
+        return {
+            "scenarios": all_scenarios,
+            "geadviseerd_hypotheekbedrag": request_body.geadviseerd_hypotheekbedrag,
+        }
+
+    except Exception as e:
+        logger.error("Risk scenarios mislukt: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Risk scenario berekening mislukt: {str(e)}",
+        )
+
+
+# Rate limit op risk scenarios endpoint
+if RATE_LIMITING_ENABLED:
+    calculate_risk_scenarios = limiter.limit("10/minute")(calculate_risk_scenarios)
+
+
 # --- E-mail draft endpoint ---
 
 class DraftEmailRequest(BaseModel):
@@ -846,7 +1145,7 @@ async def email_draft_samenvatting(
         if aanvrager and aanvrager.email:
             recipients.append(aanvrager.email)
         partner = request_body.pdf_data.klant_gegevens.partner
-        if partner and partner.email:
+        if partner and partner.email and partner.email not in recipients:
             recipients.append(partner.email)
 
     if not recipients:
