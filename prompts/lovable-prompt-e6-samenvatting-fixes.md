@@ -1,10 +1,44 @@
-# Lovable Prompt E6: Overige inkomsten tonen in samenvatting
+# Lovable Prompt E6: Samenvatting fixes (onderpand + overige inkomsten)
 
-> Kopieer deze prompt in Lovable om de samenvatting (Stap 6) uit te breiden met overige inkomsten.
+> Kopieer deze prompt in Lovable om twee problemen in de samenvatting (Stap 6) op te lossen:
+> 1. WOZ-waarde en marktwaarde correct tonen bij onderpand
+> 2. Overige inkomsten tonen bij inkomen
 
 ---
 
-## Probleem
+## Probleem 1: WOZ-waarde bij onderpand
+
+Bij het onderpand in de samenvatting wordt nu de **marktwaarde** in het `woz_waarde` veld gestuurd. De backend heeft nu twee aparte velden:
+
+- `marktwaarde` — de marktwaarde/koopsom van de woning
+- `woz_waarde` — de WOZ-waarde (kan afwijken van marktwaarde)
+
+### Oplossing
+
+Zoek de functie die de `onderpanden[]` array opbouwt voor de samenvatting PDF-request. Pas de data-mapping aan zodat **beide waarden apart** worden meegegeven:
+
+```typescript
+// Per onderpand/scenario:
+{
+  naam: scenario.naam,
+  adres: onderpand.adres || '',
+  marktwaarde: formatBedrag(onderpand.marktwaarde || onderpand.koopsom || 0),  // NIEUW veld
+  woz_waarde: formatBedrag(onderpand.wozWaarde || 0),  // Was: marktwaarde, nu: echte WOZ-waarde
+  woningtype: onderpand.woningtype || '',
+  energielabel: onderpand.energielabel || '',
+  ebv_ebb_bedrag: onderpand.ebvEbbBedrag ? formatBedrag(onderpand.ebvEbbBedrag) : '',
+}
+```
+
+**Let op:**
+- `marktwaarde` is een **nieuw veld** — de backend toont het alleen als het is ingevuld
+- `woz_waarde` moet nu de **echte WOZ-waarde** bevatten, niet de marktwaarde
+- Als er geen aparte WOZ-waarde is ingevuld, stuur dan een lege string (`''`) — de rij wordt dan niet getoond in de PDF
+- Zoek de juiste property-namen op in de bestaande types (bijv. `wozWaarde`, `koopsom`, `marktwaarde`)
+
+---
+
+## Probleem 2: Overige inkomsten ontbreken
 
 In de samenvatting (Stap 6 van de berekening) worden bij "Haalbare hypotheek" onder **Inkomen** alleen het hoofdinkomen van de aanvrager en partner getoond. Wanneer er overige inkomsten zijn ingevuld (lijfrente, partneralimentatie, inkomsten uit vermogen, huurinkomsten), verschijnen deze **niet** in de samenvatting.
 
@@ -139,12 +173,14 @@ inkomen_items.push({
 
 | # | Check | Verwacht resultaat |
 |---|-------|--------------------|
-| 1 | Samenvatting zonder overige inkomsten | Alleen hoofdinkomen + totaal (geen extra rijen) |
-| 2 | Aanvrager met lijfrente € 5.000 | Extra rij "  Lijfrente  € 5.000" onder aanvrager |
-| 3 | Partner met partneralimentatie € 3.600 | Extra rij "  Partneralimentatie  € 3.600" onder partner |
-| 4 | Totaal inkomen klopt | Totaal = hoofdinkomen + alle overige inkomsten |
-| 5 | PDF downloaden | Overige inkomsten zichtbaar in samenvatting PDF |
-| 6 | E-mail samenvatting | Overige inkomsten ook correct in e-mail PDF bijlage |
+| 1 | Onderpand met marktwaarde € 635.000 en WOZ € 580.000 | Beide waarden apart getoond |
+| 2 | Onderpand zonder WOZ-waarde | Alleen marktwaarde getoond, WOZ-rij verborgen |
+| 3 | Samenvatting zonder overige inkomsten | Alleen hoofdinkomen + totaal (geen extra rijen) |
+| 4 | Aanvrager met lijfrente € 5.000 | Extra rij "  Lijfrente  € 5.000" onder aanvrager |
+| 5 | Partner met partneralimentatie € 3.600 | Extra rij "  Partneralimentatie  € 3.600" onder partner |
+| 6 | Totaal inkomen klopt | Totaal = hoofdinkomen + alle overige inkomsten |
+| 7 | PDF downloaden | Onderpand + overige inkomsten correct in PDF |
+| 8 | E-mail samenvatting | Alles ook correct in e-mail PDF bijlage |
 
 ---
 
@@ -152,9 +188,10 @@ inkomen_items.push({
 
 | Onderdeel | Wijziging |
 |-----------|-----------|
+| **Wijzig:** Onderpanden data-mapping | Stuur `marktwaarde` en `woz_waarde` als aparte velden |
 | **Wijzig:** `buildHaalbaarheidData` (of vergelijkbare functie) | Voeg overige inkomsten toe aan `inkomen_items[]` array |
 | **Hergebruik:** `formatBedrag` | Bedragnotatie |
 | **Hergebruik:** Bestaande `inkomenGegevens` properties | Dezelfde velden als Stap 2 (Haalbaarheid) |
-| **Geen wijziging:** Backend / PDF template | Template rendert al generieke `inkomen_items[]` |
+| **Geen wijziging:** Backend / PDF template | Backend is al aangepast voor beide velden |
 
-**Risico:** Laag. Alleen de `inkomen_items[]` array wordt uitgebreid met extra rijen. Bestaande functionaliteit blijft intact.
+**Risico:** Laag. Bestaande functionaliteit blijft intact.

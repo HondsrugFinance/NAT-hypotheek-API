@@ -676,9 +676,15 @@
         <span class="value">{{ op.adres }}</span>
       </div>
       {% endif %}
-      {% if op.woz_waarde %}
+      {% if op.marktwaarde %}
       <div class="row">
         <span class="label">Marktwaarde</span>
+        <span class="value">{{ op.marktwaarde }}</span>
+      </div>
+      {% endif %}
+      {% if op.woz_waarde %}
+      <div class="row">
+        <span class="label">WOZ-waarde</span>
         <span class="value">{{ op.woz_waarde }}</span>
       </div>
       {% endif %}

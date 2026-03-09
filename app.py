@@ -570,6 +570,7 @@ class KlantGegevensSectie(BaseModel):
 class OnderpandSectie(BaseModel):
     naam: str = ""  # Scenario naam (bijv. "Huidige situatie")
     adres: str = ""
+    marktwaarde: str = ""
     woz_waarde: str = ""
     woningtype: str = ""
     energielabel: str = ""
