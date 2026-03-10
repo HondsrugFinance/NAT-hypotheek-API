@@ -69,6 +69,9 @@ NAT-hypotheek-API/
 │   ├── lovable-prompt-f1-email-draft.md    # Verstuur samenvatting als concept e-mail
 │   ├── lovable-prompt-f2-open-outlook.md   # Succes-feedback na e-mail draft
 │   ├── lovable-prompt-g1-adviesrapport.md  # Nieuw advies: aanvraag selectie + PDF generatie
+│   ├── lovable-prompt-g3-dialog-fix.md     # Dialog vereenvoudigen (vervangen door G4)
+│   ├── lovable-prompt-g4-rapport-generatie.md  # Resultaten opslaan + rapportgeneratie flow
+│   ├── lovable-prompt-g5-rapport-compleet.md   # Ontbrekende secties + risicoscenario's verplicht
 │   ├── lovable-prompt-stap3.md
 │   ├── lovable-prompt-stap4.md
 │   ├── lovable-prompt-stap6-2fa.md
@@ -690,7 +693,9 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 | D2 | Adviesrapport PDF — backend endpoint | NAT API | Gereed (POST /adviesrapport-pdf) |
 | D2b | Adviesrapport PDF — SVG grafieken + risico-secties | NAT API | Gereed (chart_generator.py) |
 | D2c | Adviesrapport PDF — klantprofiel (kennis/ervaring/risicobereidheid) | NAT API | Gereed |
-| G1 | Adviesrapport PDF — Lovable frontend | Lovable | Prompt geschreven, nog niet toegepast |
+| G1 | Adviesrapport PDF — Lovable frontend | Lovable | Toegepast |
+| G4 | Adviesrapport — resultaten opslaan + rapportgeneratie | Lovable | Toegepast |
+| G5 | Adviesrapport — ontbrekende secties + risicoscenario's | Lovable | Prompt geschreven, nog niet toegepast |
 | C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
 | — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
 

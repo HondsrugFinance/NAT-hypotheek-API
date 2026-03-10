@@ -87,6 +87,11 @@ app.include_router(monthly_costs_router)
 register_exception_handlers(app)
 logger.info("Monthly costs calculator endpoint registered: POST /calculate/monthly-costs")
 
+# --- Adviesrapport V2 (backend-driven) ---
+from adviesrapport_v2.route import router as adviesrapport_v2_router
+app.include_router(adviesrapport_v2_router)
+logger.info("Adviesrapport V2 endpoint registered: POST /adviesrapport-pdf-v2")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
