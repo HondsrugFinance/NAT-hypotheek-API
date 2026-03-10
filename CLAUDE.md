@@ -24,10 +24,12 @@ NAT-hypotheek-API/
 ├── calculator_final.py         # NAT 2026 maximale hypotheek calculator
 ├── aow_calculator.py           # AOW-leeftijd berekening
 ├── pdf_generator.py            # PDF generatie: samenvatting + adviesrapport (weasyprint)
+├── chart_generator.py          # Pure Python SVG grafieken (pensioen, overlijden, AO/WW vergelijk)
 ├── graph_client.py             # Microsoft Graph API — concept e-mails in Outlook
 ├── email_templates.py          # HTML e-mail body templates
 ├── config_schemas.py           # Pydantic validatie voor config bestanden
 ├── github_sync.py              # GitHub Contents API — config persistentie over redeploys
+├── test_render_adviesrapport.py # Lokale HTML/PDF preview met testdata (alleenstaand + stel)
 ├── conftest.py                 # Pytest root config (sys.path)
 ├── pytest.ini                  # Pytest configuratie
 │
@@ -66,6 +68,7 @@ NAT-hypotheek-API/
 │   ├── lovable-prompt-e5-onderpanden.md    # Onderpanden[] per scenario
 │   ├── lovable-prompt-f1-email-draft.md    # Verstuur samenvatting als concept e-mail
 │   ├── lovable-prompt-f2-open-outlook.md   # Succes-feedback na e-mail draft
+│   ├── lovable-prompt-g1-adviesrapport.md  # Nieuw advies: aanvraag selectie + PDF generatie
 │   ├── lovable-prompt-stap3.md
 │   ├── lovable-prompt-stap4.md
 │   ├── lovable-prompt-stap6-2fa.md
@@ -75,6 +78,7 @@ NAT-hypotheek-API/
 ├── templates/                  # Jinja2 HTML templates voor PDF generatie
 │   ├── assets/                 # Logo en afbeeldingen voor templates
 │   ├── samenvatting.html       # Samenvatting PDF template (WeasyPrint)
+│   ├── adviesrapport.html      # Adviesrapport PDF template (WeasyPrint, generiek sectie-based)
 │   ├── preview-samenvatting.html         # Browser preview (2 scenario's)
 │   ├── preview-samenvatting-3scenarios.html  # Browser preview (3 scenario's)
 │   ├── preview-single-fullwidth.html     # Browser preview (1 scenario, volle breedte)
@@ -168,7 +172,7 @@ Bewerkbare configs: `fiscaal-frontend`, `fiscaal`, `geldverstrekkers`
 ### PDF Generatie
 ```
 POST /samenvatting-pdf
-POST /adviesrapport-pdf
+POST /adviesrapport-pdf  (geen API-key vereist)
 ```
 
 ### E-mail Draft (API-key vereist)
@@ -206,10 +210,9 @@ GET /health/deep
 ```
 POST /adviesrapport-pdf
 Content-Type: application/json
-X-API-Key: vereist
 ```
 
-De frontend stuurt een generieke structuur met `meta`, `bedrijf` en `sections[]`.
+Geen API-key vereist. De frontend stuurt een generieke structuur met `meta`, `bedrijf` en `sections[]`.
 Alle bedragen en percentages zijn **al geformateerd als strings** door de frontend.
 
 ```json
@@ -256,17 +259,18 @@ Alle bedragen en percentages zijn **al geformateerd als strings** door de fronte
 
 | Section ID | Rendering | Bijzonderheden |
 |------------|-----------|----------------|
-| `summary` | Highlights + narratives + rows card | Highlight-boxen naast elkaar |
-| `client-profile` | Narratives + rows card | Klantgegevens + inkomen + vermogen |
+| `summary` | Highlights + narratives + scenario_checks | 4 highlight-boxen (2×2 grid) + scenario check grid |
+| `client-profile` | Rows + table | Doelstelling, kennis/ervaring + risicobereidheid tabel |
 | `property` | Rows card | Onderpand details |
 | `affordability` | Narratives + rows card | Betaalbaarheid |
 | `financing` | Rows card | Financieringsopzet met spacers |
 | `loan-parts` | Narratives + rows + table | Leningdelen tabel |
 | `tax` | Narratives + plain rows | Fiscale kwalificatie |
-| `risk-death` | Narratives | Overlijdensrisico |
-| `risk-disability` | Narratives | Arbeidsongeschiktheid |
-| `risk-unemployment` | Narratives + rows | Werkloosheid + buffer |
-| `retirement` | Narratives + rows | Pensionering |
+| `retirement` | Narratives + rows + SVG chart | Pensioen: verticale staven + restschuld-lijn |
+| `risk-death` | Columns + SVG chart | Overlijden: vergelijkingsgrafiek per partner |
+| `risk-disability` | Columns + SVG chart | AO: inkomen per fase + vergelijkingsgrafiek |
+| `risk-unemployment` | Columns + SVG chart | WW: inkomen per fase + vergelijkingsgrafiek |
+| `risk-relationship` | Columns + SVG chart | Relatiebeëindiging (alleen stel) |
 | `attention-points` | Bullet list | Aandachtspunten |
 | `disclaimer` | Disclaimer box | Speciale styling |
 
@@ -683,7 +687,10 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 | # | Item | Waar | Status |
 |---|------|------|--------|
 | C4 | Hypotheekrentes handmatig beheren | Supabase + Lovable | Te doen |
-| D2 | Adviesrapport PDF (uitgebreid met adviezen) | NAT API + Lovable | Te doen |
+| D2 | Adviesrapport PDF — backend endpoint | NAT API | Gereed (POST /adviesrapport-pdf) |
+| D2b | Adviesrapport PDF — SVG grafieken + risico-secties | NAT API | Gereed (chart_generator.py) |
+| D2c | Adviesrapport PDF — klantprofiel (kennis/ervaring/risicobereidheid) | NAT API | Gereed |
+| G1 | Adviesrapport PDF — Lovable frontend | Lovable | Prompt geschreven, nog niet toegepast |
 | C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
 | — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
 

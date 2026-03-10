@@ -2,7 +2,13 @@
 // Adviesrapport — Narrative text blocks (conditional, data-driven)
 // ============================================================================
 
-import type { ComputedFields, NarrativeBlock, ReportBuilderInput } from "./types";
+import type {
+  ComputedFields,
+  NarrativeBlock,
+  RelationshipTextBlock,
+  ReportBuilderInput,
+  StandardScenarioTextBlock,
+} from "./types";
 
 const block = (key: string, text: string): NarrativeBlock => ({ key, text });
 
@@ -179,121 +185,235 @@ export const buildTaxNarratives = (
   return blocks;
 };
 
-// --- Risks: death ----------------------------------------------------------
+// --- Centralized scenario text definitions ---------------------------------
 
-export const buildDeathRiskNarratives = (
-  input: ReportBuilderInput,
-  computed: ComputedFields,
-): NarrativeBlock[] => {
-  // ORV already in place
-  if (computed.hasOrv) {
-    return [
-      block(
-        "death-orv-present",
-        "Bij overlijden kan het huishoudinkomen dalen. U beschikt over een " +
-          "overlijdensrisicoverzekering die bedoeld is om dit risico gedeeltelijk op te vangen.",
-      ),
-    ];
-  }
-
-  // Partner present, no ORV
-  if (input.applicants.hasPartner) {
-    const blocks: NarrativeBlock[] = [
-      block(
-        "death-orv-advice",
-        "Bij overlijden van één van de aanvragers kan het inkomen van het huishouden dalen. " +
-          "Een overlijdensrisicoverzekering kan dit risico beperken doordat bij overlijden " +
-          "een verzekerd bedrag beschikbaar komt.",
-      ),
-    ];
-
-    if (input.adviceProfile.customerRejectedOrv) {
-      blocks.push(
-        block(
-          "death-orv-rejected",
-          "U heeft ervoor gekozen om op dit moment geen overlijdensrisicoverzekering af te sluiten.",
-        ),
-      );
-    } else {
-      blocks.push(
-        block(
-          "death-orv-open",
-          "Het afsluiten van een overlijdensrisicoverzekering verdient aandacht " +
-            "binnen uw financiële planning.",
-        ),
-      );
-    }
-
-    return blocks;
-  }
-
-  // Single applicant
-  return [
-    block(
-      "death-single",
-      "Bij overlijden ontstaat geen financieel risico voor een partner, " +
-        "maar het blijft van belang dat eventuele nabestaanden of erfgenamen " +
-        "zich bewust zijn van de gevolgen voor de woningfinanciering.",
-    ),
-  ];
+export const DEATH_TEXT: StandardScenarioTextBlock = {
+  intro:
+    "Wij hebben berekend wat de gevolgen zijn voor de betaalbaarheid van de hypotheek " +
+    "wanneer een van u overlijdt. Daarbij is gekeken of de achterblijvende partner de " +
+    "woonlasten zelfstandig kan blijven dragen.",
+  outcome: {
+    affordable:
+      "Wanneer een van u overlijdt blijft de hypotheek op basis van deze berekening " +
+      "betaalbaar voor de achterblijvende partner.",
+    resolved:
+      "Wanneer een van u overlijdt ontstaat er op basis van de berekening een financieel " +
+      "tekort. De bestaande voorzieningen zijn echter voldoende om dit tekort op te vangen.",
+    attention:
+      "Wanneer een van u overlijdt ontstaat er op basis van deze berekening een beperkt " +
+      "financieel tekort voor de achterblijvende partner. Dit vraagt aandacht.",
+    shortfall:
+      "Wanneer een van u overlijdt ontstaat er op basis van deze berekening een financieel " +
+      "tekort voor de achterblijvende partner dat niet volledig kan worden opgevangen met " +
+      "de huidige voorzieningen.",
+  },
+  advice: {
+    no_action:
+      "Op basis van deze berekening achten wij aanvullende maatregelen op dit moment niet noodzakelijk.",
+    awareness_only:
+      "U heeft aangegeven dit risico te willen accepteren. Het is belangrijk dat u zich " +
+      "bewust bent van de mogelijke financiële gevolgen.",
+    consider_solution:
+      "Om dit risico te beperken kan een overlijdensrisicoverzekering passend zijn.",
+    advise_solution:
+      "Wij adviseren om maatregelen te treffen om dit risico te beperken, bijvoorbeeld door " +
+      "een overlijdensrisicoverzekering af te sluiten of te verhogen.",
+  },
+  nuance: {
+    existing_orv:
+      "Bij deze berekening is rekening gehouden met de bestaande overlijdensrisicoverzekering(en).",
+    existing_life_insurance:
+      "Bij deze berekening is rekening gehouden met aanwezige levensverzekeringen.",
+    savings_used:
+      "Bij deze berekening is rekening gehouden met een deel van het beschikbare spaargeld.",
+    employer_provisions_unknown:
+      "Mogelijke voorzieningen via een werkgever, zoals aanvullende verzekeringen of " +
+      "regelingen bij overlijden, zijn niet in deze berekening meegenomen omdat deze niet " +
+      "altijd volledig bij ons bekend zijn.",
+  },
+  disclaimer:
+    "De berekening is gebaseerd op de gegevens die bij ons bekend zijn op het moment van advies.",
 };
 
-// --- Risks: disability (awareness only) ------------------------------------
+export const RETIREMENT_TEXT: StandardScenarioTextBlock = {
+  intro:
+    "Wij hebben berekend hoe de betaalbaarheid van de hypotheek zich ontwikkelt wanneer u " +
+    "met pensioen gaat. Daarbij is gekeken naar het verwachte inkomen na pensionering en de " +
+    "maximale hypotheek die daarbij past.",
+  outcome: {
+    affordable:
+      "Op basis van deze berekening blijft de geadviseerde hypotheek ook na pensionering " +
+      "passend bij het verwachte inkomen.",
+    resolved:
+      "Na pensionering ontstaat er op basis van de berekening een verschil tussen de " +
+      "geadviseerde hypotheek en de maximale hypotheek die past bij het inkomen op dat moment. " +
+      "De bestaande voorzieningen zijn echter voldoende om dit verschil op te vangen.",
+    attention:
+      "Na pensionering ontstaat er op basis van deze berekening een beperkt verschil tussen " +
+      "de geadviseerde hypotheek en de maximale hypotheek die past bij het verwachte inkomen. " +
+      "Dit vraagt aandacht.",
+    shortfall:
+      "Na pensionering ontstaat er op basis van deze berekening een verschil tussen de " +
+      "geadviseerde hypotheek en de maximale hypotheek die past bij het verwachte inkomen dat " +
+      "niet volledig kan worden opgevangen met de huidige voorzieningen.",
+  },
+  advice: {
+    no_action:
+      "Op basis van deze berekening achten wij aanvullende maatregelen op dit moment niet noodzakelijk.",
+    awareness_only:
+      "U heeft aangegeven dit risico te willen accepteren. Het is belangrijk dat u zich " +
+      "bewust bent van de mogelijke financiële gevolgen.",
+    consider_solution:
+      "Om dit risico te beperken kan het passend zijn om aanvullende maatregelen te treffen, " +
+      "bijvoorbeeld door extra af te lossen op de hypotheek.",
+    advise_extra_repayment:
+      "Wij adviseren om maatregelen te treffen om dit risico te beperken, bijvoorbeeld door " +
+      "extra af te lossen op de hypotheek voor pensionering.",
+  },
+  nuance: {
+    couple_two_aow:
+      "Bij deze berekening is rekening gehouden met de verschillende momenten waarop u beiden " +
+      "de AOW-leeftijd bereikt.",
+    income_decrease:
+      "Na pensionering daalt het huishoudinkomen ten opzichte van de huidige situatie.",
+    later_shortfall:
+      "Wanneer ook de partner met pensioen gaat verandert de inkomenssituatie waardoor het " +
+      "tekort kan toenemen.",
+    income_improves:
+      "Wanneer ook de partner de AOW-leeftijd bereikt verandert de inkomenssituatie waardoor " +
+      "de betaalbaarheid kan verbeteren.",
+    annuity_income_used:
+      "Bij deze berekening is rekening gehouden met inkomen uit lijfrenteverzekeringen.",
+  },
+  disclaimer:
+    "De berekening is gebaseerd op de pensioeninformatie en fiscale regels zoals die op dit " +
+    "moment bekend zijn.",
+};
 
-export const buildDisabilityRiskNarratives = (): NarrativeBlock[] => [
-  block(
-    "disability-1",
-    "Wanneer u arbeidsongeschikt raakt, kan uw inkomen dalen. " +
-      "Hierdoor kan het lastiger worden om de hypotheeklasten te blijven betalen.",
-  ),
-  block(
-    "disability-2",
-    "In dit rapport is geen afzonderlijke productoplossing voor " +
-      "arbeidsongeschiktheid opgenomen. Het doel van dit onderdeel is " +
-      "bewustwording van dit risico.",
-  ),
-];
+export const DISABILITY_TEXT: StandardScenarioTextBlock = {
+  intro:
+    "Wij hebben berekend wat de gevolgen zijn voor de betaalbaarheid van de hypotheek " +
+    "wanneer het inkomen daalt door arbeidsongeschiktheid.",
+  outcome: {
+    affordable:
+      "Op basis van deze berekening blijven de woonlasten ook bij arbeidsongeschiktheid betaalbaar.",
+    resolved:
+      "Bij arbeidsongeschiktheid ontstaat er op basis van de berekening een financieel tekort. " +
+      "De bestaande voorzieningen zijn echter voldoende om dit tekort op te vangen.",
+    attention:
+      "Bij arbeidsongeschiktheid ontstaat er op basis van deze berekening een beperkt " +
+      "financieel tekort. Dit vraagt aandacht.",
+    shortfall:
+      "Bij arbeidsongeschiktheid ontstaat er op basis van deze berekening een financieel " +
+      "tekort dat niet volledig kan worden opgevangen met de huidige voorzieningen.",
+  },
+  advice: {
+    no_action:
+      "Op basis van deze berekening achten wij aanvullende maatregelen op dit moment niet noodzakelijk.",
+    awareness_only:
+      "U heeft aangegeven dit risico te willen accepteren. Het is belangrijk dat u zich " +
+      "bewust bent van de mogelijke financiële gevolgen.",
+    consider_solution:
+      "Om dit risico te beperken kan het passend zijn om aanvullende maatregelen te treffen.",
+    refer_to_specialist:
+      "Wij adviseren om te onderzoeken of aanvullende voorzieningen wenselijk zijn. Hiervoor " +
+      "kan het passend zijn om een specialist te raadplegen.",
+  },
+  nuance: {
+    aov_used:
+      "Bij deze berekening is rekening gehouden met de bestaande arbeidsongeschiktheidsverzekering.",
+    partner_income_used:
+      "Bij deze berekening is rekening gehouden met het inkomen van de partner.",
+  },
+  disclaimer:
+    "De berekening is gebaseerd op een indicatief scenario bij langdurige arbeidsongeschiktheid.",
+};
 
-// --- Risks: unemployment (awareness only) ----------------------------------
+export const UNEMPLOYMENT_TEXT: StandardScenarioTextBlock = {
+  intro:
+    "Wij hebben berekend wat de gevolgen zijn voor de betaalbaarheid van de hypotheek " +
+    "wanneer het inkomen tijdelijk daalt door werkloosheid.",
+  outcome: {
+    affordable:
+      "Op basis van deze berekening blijven de woonlasten ook bij werkloosheid betaalbaar.",
+    resolved:
+      "Bij werkloosheid ontstaat er op basis van de berekening een financieel tekort. " +
+      "De bestaande voorzieningen zijn echter voldoende om dit tekort op te vangen.",
+    attention:
+      "Bij werkloosheid ontstaat er op basis van deze berekening een beperkt financieel " +
+      "tekort. Dit vraagt aandacht.",
+    shortfall:
+      "Bij werkloosheid ontstaat er op basis van deze berekening een financieel tekort dat " +
+      "niet volledig kan worden opgevangen met de huidige voorzieningen.",
+  },
+  advice: {
+    no_action:
+      "Op basis van deze berekening achten wij aanvullende maatregelen op dit moment niet noodzakelijk.",
+    awareness_only:
+      "U heeft aangegeven dit risico te willen accepteren. Het is belangrijk dat u zich " +
+      "bewust bent van de mogelijke financiële gevolgen.",
+    consider_solution:
+      "Om dit risico te beperken kan het passend zijn om aanvullende maatregelen te treffen.",
+    refer_to_specialist:
+      "Wij adviseren om te onderzoeken of aanvullende voorzieningen wenselijk zijn. Hiervoor " +
+      "kan het passend zijn om een specialist te raadplegen.",
+  },
+  nuance: {
+    woonlastenverzekering_used:
+      "Bij deze berekening is rekening gehouden met de bestaande woonlastenverzekering.",
+    partner_income_used:
+      "Bij deze berekening is rekening gehouden met het inkomen van de partner.",
+  },
+  disclaimer:
+    "De berekening is gebaseerd op een indicatief scenario bij werkloosheid. De werkelijke " +
+    "duur van werkloosheid kan afwijken.",
+};
 
-export const buildUnemploymentRiskNarratives = (): NarrativeBlock[] => [
-  block(
-    "unemployment-1",
-    "Bij werkloosheid kan uw inkomen tijdelijk lager zijn. " +
-      "Hierdoor kunnen de maandlasten moeilijker betaalbaar worden.",
-  ),
-  block(
-    "unemployment-2",
-    "Het is daarom belangrijk om voldoende financiële reserves aan te houden " +
-      "om een periode van inkomensdaling op te kunnen vangen.",
-  ),
-];
+export const RELATIONSHIP_TEXT: RelationshipTextBlock = {
+  intro:
+    "Wij hebben indicatief berekend of de hypotheek door ieder van u afzonderlijk gedragen " +
+    "kan worden wanneer de relatie eindigt.",
+  overallOutcome: {
+    affordable_for_both:
+      "Op basis van deze berekening lijkt de hypotheek door ieder van u afzonderlijk betaalbaar.",
+    affordable_for_one:
+      "Op basis van deze berekening lijkt de hypotheek door een van u afzonderlijk betaalbaar.",
+    affordable_for_none:
+      "Op basis van deze berekening lijkt de hypotheek door geen van u afzonderlijk betaalbaar.",
+  },
+  personStatus: {
+    affordable:
+      "De hypotheek blijft op basis van deze berekening betaalbaar.",
+    attention:
+      "Op basis van deze berekening ontstaat een beperkt financieel tekort. Dit vraagt aandacht.",
+    shortfall:
+      "Op basis van deze berekening ontstaat een financieel tekort waardoor de hypotheek niet " +
+      "zonder meer betaalbaar is.",
+  },
+  advice: {
+    awareness_only:
+      "Dit scenario is bedoeld om inzicht te geven in de mogelijke gevolgen voor de " +
+      "betaalbaarheid van de hypotheek.",
+  },
+  disclaimer:
+    "Deze berekening is indicatief. Er is geen rekening gehouden met mogelijke uitkoop, " +
+    "alimentatie, verkoop van de woning of verdeling van vermogen.",
+};
 
-// --- Retirement (inventory only) -------------------------------------------
+// --- Single-person death fallback (centralized texts assume couple) --------
 
-export const buildRetirementNarratives = (
-  _input: ReportBuilderInput,
-  computed: ComputedFields,
-): NarrativeBlock[] => {
-  const blocks: NarrativeBlock[] = [
-    block(
-      "retirement-1",
-      "Wij hebben gekeken naar uw verwachte inkomenssituatie na pensionering " +
-        "op basis van de bij ons bekende pensioeninformatie.",
-    ),
-  ];
+export const DEATH_SINGLE_TEXT =
+  "Bij overlijden ontstaat geen financieel risico voor een partner, " +
+  "maar het blijft van belang dat eventuele nabestaanden of erfgenamen " +
+  "zich bewust zijn van de gevolgen voor de woningfinanciering.";
 
-  if (computed.retirementScenarioRequired) {
-    blocks.push(
-      block(
-        "retirement-2",
-        "Op basis van deze gegevens is beoordeeld of de hypotheeklasten " +
-          "ook na pensionering passend blijven.",
-      ),
-    );
-  }
+// --- Advice text templates (Samenvatting — Advies en onderbouwing) ----------
 
-  return blocks;
+export const ADVICE_RISK_LABELS: Record<string, string> = {
+  affordable: "afgedekt",
+  resolved: "afgedekt",
+  attention: "aandachtspunt",
+  shortfall: "tekort aanwezig",
 };
 
 // --- Attention points ------------------------------------------------------

@@ -718,17 +718,20 @@ class AdviesrapportRow(BaseModel):
     label: str = ""
     value: str = ""
     bold: bool = False
+    sub: bool = False
 
 
 class AdviesrapportTable(BaseModel):
     headers: List[str] = []
     rows: List[List[str]] = []
+    totals: Optional[List[str]] = None
 
 
 class AdviesrapportHighlight(BaseModel):
     label: str
     value: str
     note: str = ""
+    status: str = "ok"
 
 
 class AdviesrapportSection(BaseModel):
@@ -741,6 +744,11 @@ class AdviesrapportSection(BaseModel):
     highlights: Optional[List[AdviesrapportHighlight]] = None
     advisor_note: Optional[str] = None
     chart_data: Optional[Dict[str, Any]] = None
+    advice_text: Optional[List[str]] = None
+    subsections: Optional[List[Dict[str, Any]]] = None
+    columns: Optional[List[Dict[str, Any]]] = None
+    scenario_checks: Optional[List[Dict[str, Any]]] = None
+    mortgage_summary: Optional[List[AdviesrapportRow]] = None
 
 
 class AdviesrapportPdfRequest(BaseModel):

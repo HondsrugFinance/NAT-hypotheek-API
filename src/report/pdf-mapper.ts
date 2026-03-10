@@ -74,6 +74,7 @@ export interface PdfRow {
   label: string;
   value: string;
   bold?: boolean;
+  sub?: boolean;
 }
 
 export interface PdfTable {
@@ -95,6 +96,9 @@ export interface PdfSection {
   rows?: PdfRow[];
   tables?: PdfTable[];
   highlights?: PdfHighlight[];
+  chart_data?: Record<string, unknown>;
+  advisor_note?: string;
+  advice_text?: string[];
 }
 
 export interface PdfReportMeta {
@@ -146,6 +150,7 @@ const mapSummary = (vm: ReportViewModel): PdfSection => ({
   title: "Samenvatting advies",
   visible: true,
   narratives: narrativesToStrings(vm.summary.narrativeBlocks),
+  advice_text: vm.summary.adviceText,
   highlights: [
     {
       label: "Hypotheekbedrag",
@@ -358,15 +363,76 @@ const mapUnemploymentRisk = (vm: ReportViewModel): PdfSection => ({
   ],
 });
 
-const mapRetirement = (vm: ReportViewModel): PdfSection => ({
-  id: "retirement",
-  title: "Pensionering",
-  visible: vm.visibility.showRetirement,
-  narratives: narrativesToStrings(vm.retirement.narrativeBlocks),
-  rows: vm.retirement.expectedIncome > 0
-    ? [{ label: "Verwacht pensioeninkomen (per jaar)", value: formatMoney(vm.retirement.expectedIncome) }]
-    : undefined,
-});
+const mapRetirement = (vm: ReportViewModel): PdfSection => {
+  const rows: PdfRow[] = [];
+  let chart_data: Record<string, unknown> | undefined;
+
+  if (vm.retirement.analysis) {
+    const analysis = vm.retirement.analysis;
+
+    // Income breakdown + max mortgage per retirement moment
+    for (const moment of analysis.moments) {
+      const totalIncome = moment.incomeComponents.reduce(
+        (sum, c) => sum + c.amount,
+        0,
+      );
+      rows.push({
+        label: `Inkomen na ${moment.label}`,
+        value: formatMoney(totalIncome),
+        bold: true,
+      });
+      for (const comp of moment.incomeComponents) {
+        rows.push({
+          label: `${comp.label} ${comp.person}`,
+          value: formatMoney(comp.amount),
+          sub: true,
+        });
+      }
+      rows.push({
+        label: `Max. hypotheek na ${moment.label}`,
+        value: formatMoney(moment.maxMortgage),
+      });
+    }
+
+    // Chart data for Python chart_generator (pensioen chart)
+    chart_data = {
+      type: "pensioen",
+      geadviseerd_hypotheekbedrag: analysis.advisedMortgage,
+      jaren: analysis.moments.map((m) => ({
+        label: m.label,
+        max_hypotheek: m.maxMortgage,
+        restschuld: m.restschuld ?? 0,
+        tekort: m.shortfall,
+      })),
+    };
+  } else if (vm.retirement.expectedIncome > 0) {
+    rows.push({
+      label: "Verwacht pensioeninkomen (per jaar)",
+      value: formatMoney(vm.retirement.expectedIncome),
+    });
+  }
+
+  return {
+    id: "retirement",
+    title: "Pensionering",
+    visible: vm.visibility.showRetirement,
+    narratives: narrativesToStrings(vm.retirement.narrativeBlocks),
+    rows: rows.length > 0 ? rows : undefined,
+    chart_data,
+    advisor_note: vm.retirement.advisorNote ?? undefined,
+  };
+};
+
+const mapRelationshipRisk = (vm: ReportViewModel): PdfSection | null => {
+  if (!vm.risks.relationship) return null;
+
+  return {
+    id: "risk-relationship",
+    title: "Relatiebeëindiging",
+    visible: vm.visibility.showRelationship,
+    narratives: narrativesToStrings(vm.risks.relationship.narrativeBlocks),
+  };
+};
 
 const mapAttentionPoints = (vm: ReportViewModel): PdfSection => ({
   id: "attention-points",
@@ -395,28 +461,33 @@ const mapDisclaimer = (vm: ReportViewModel): PdfSection => ({
  * const pdf = mapToPdf(vm);
  * // Pass pdf.sections to your template engine
  */
-export const mapToPdf = (vm: ReportViewModel): PdfReport => ({
-  meta: {
-    title: vm.meta.title,
-    date: vm.meta.date,
-    dossierNumber: vm.meta.dossierNumber,
-    advisor: vm.meta.advisor,
-    customerName: vm.meta.customerName,
-    propertyAddress: vm.meta.propertyAddress,
-  },
-  sections: [
-    mapSummary(vm),
-    mapClientProfile(vm),
-    mapProperty(vm),
-    mapAffordability(vm),
-    mapFinancing(vm),
-    mapLoanParts(vm),
-    mapTax(vm),
-    mapDeathRisk(vm),
-    mapDisabilityRisk(vm),
-    mapUnemploymentRisk(vm),
-    mapRetirement(vm),
-    mapAttentionPoints(vm),
-    mapDisclaimer(vm),
-  ],
-});
+export const mapToPdf = (vm: ReportViewModel): PdfReport => {
+  const relationship = mapRelationshipRisk(vm);
+
+  return {
+    meta: {
+      title: vm.meta.title,
+      date: vm.meta.date,
+      dossierNumber: vm.meta.dossierNumber,
+      advisor: vm.meta.advisor,
+      customerName: vm.meta.customerName,
+      propertyAddress: vm.meta.propertyAddress,
+    },
+    sections: [
+      mapSummary(vm),
+      mapClientProfile(vm),
+      mapProperty(vm),
+      mapAffordability(vm),
+      mapFinancing(vm),
+      mapLoanParts(vm),
+      mapTax(vm),
+      mapDeathRisk(vm),
+      mapDisabilityRisk(vm),
+      mapUnemploymentRisk(vm),
+      mapRetirement(vm),
+      ...(relationship ? [relationship] : []),
+      mapAttentionPoints(vm),
+      mapDisclaimer(vm),
+    ],
+  };
+};

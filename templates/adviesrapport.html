@@ -31,39 +31,48 @@
     line-height: 1.5;
   }
 
-  /* --- Cover header (logo + bedrijfsinfo) --- */
+  /* --- Cover header (logo) --- */
   .page-cover-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 48px;
+    margin-bottom: 40px;
     padding-top: 10px;
   }
   .page-cover-header img {
     height: 52px;
     width: auto;
   }
-  .page-cover-header .company-info {
-    text-align: right;
-    font-size: 8.5pt;
-    color: #5C4A6E;
-    line-height: 1.6;
-  }
-  .page-cover-header .company-info .company-name {
-    font-weight: 700;
-    color: #2B1E39;
-    font-size: 9pt;
-  }
 
   /* --- Titel --- */
   .page-header-title {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
     color: #2E5644;
     margin-bottom: 4px;
     text-align: center;
     letter-spacing: 0.5px;
-    white-space: nowrap;
+  }
+
+  /* --- Cover footer (bedrijfsinfo onderaan voorblad) --- */
+  .cover-footer {
+    position: absolute;
+    bottom: 15mm;
+    left: 15mm;
+    right: 15mm;
+    padding: 12px 0 0 0;
+    border-top: 1px solid #E5DFC8;
+    font-size: 8pt;
+    color: #5C4A6E;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+  .cover-footer .left {
+    float: left;
+  }
+  .cover-footer .right {
+    float: right;
+    text-align: right;
+  }
+  .cover-footer strong {
+    color: #2B1E39;
   }
   .page-header-subtitle {
     font-size: 10pt;
@@ -78,16 +87,17 @@
     align-items: center;
     justify-content: space-between;
     border-bottom: 0.5pt solid #E5DFC8;
-    padding-bottom: 8px;
-    margin-bottom: 20px;
+    padding-bottom: 5px;
+    margin-bottom: 16px;
   }
   .page-header .left {
-    font-size: 9pt;
-    font-weight: 700;
-    color: #2E5644;
+    font-size: 7.5pt;
+    font-weight: 400;
+    color: #5C4A6E;
   }
   .page-header .right {
-    font-size: 8pt;
+    font-size: 7.5pt;
+    font-weight: 400;
     color: #5C4A6E;
   }
 
@@ -102,7 +112,17 @@
   /* --- Secties --- */
   .section { margin-bottom: 22px; }
 
-  h2.section-title {
+  /* Hoofdstuktitel (Samenvatting, Klantprofiel, Huidige situatie, Financiering, Risico's) */
+  h2.chapter-title {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #2E5644;
+    margin-bottom: 16px;
+    margin-top: 0;
+  }
+
+  /* Sectietitel (subonderdeel binnen hoofdstuk) */
+  h3.section-title {
     font-size: 11pt;
     font-weight: 700;
     color: #2E5644;
@@ -182,7 +202,7 @@
   .row .label {
     display: table-cell;
     color: #5C4A6E;
-    padding: 2px 8px 2px 0;
+    padding: 4px 8px 4px 0;
   }
   .row .value {
     display: table-cell;
@@ -190,13 +210,12 @@
     text-align: right;
     color: #2B1E39;
     white-space: nowrap;
-    padding: 2px 0;
+    padding: 4px 0;
   }
 
   /* Rijen buiten cards: sta wrapping toe voor lange waarden */
   .rows-plain .row .value {
     white-space: normal;
-    text-align: left;
   }
 
   .divider {
@@ -208,6 +227,9 @@
   .row-bold .value {
     font-weight: 700;
     color: #2B1E39;
+  }
+  .row-sub .label {
+    padding-left: 16px;
   }
   .amount-primary {
     display: table;
@@ -253,7 +275,7 @@
     text-align: right;
   }
   .data-table td {
-    padding: 3px 6px 3px 0;
+    padding: 5px 6px 5px 0;
     color: #5C4A6E;
   }
 
@@ -270,6 +292,66 @@
   }
   .highlight-grid .highlight-box:nth-child(2n) {
     float: right;
+  }
+
+  /* --- Highlight status varianten --- */
+  .highlight-warning {
+    background: #FDECEA;
+    border-left-color: #C0392B;
+  }
+  .highlight-warning .highlight-label {
+    color: #C0392B;
+  }
+  .highlight-warning .highlight-value {
+    color: #C0392B;
+  }
+
+  /* --- Scenario checks grid --- */
+  .scenario-heading {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #2B1E39;
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+  .scenario-grid::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
+  .scenario-item {
+    float: left;
+    width: 48%;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    font-size: 8.5pt;
+    line-height: 1.4;
+  }
+  .scenario-item:nth-child(2n) {
+    float: right;
+  }
+  .scenario-ok {
+    background: #E3F0E9;
+    color: #2E5644;
+  }
+  .scenario-warning {
+    background: #FDECEA;
+    color: #C0392B;
+  }
+  .scenario-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  .scenario-ok .scenario-dot {
+    background: #2E5644;
+  }
+  .scenario-warning .scenario-dot {
+    background: #C0392B;
   }
 
   /* --- Disclaimer --- */
@@ -292,33 +374,146 @@
     margin-top: 5px;
   }
 
+  /* --- Risk-analysis scenario tabel --- */
+  .risk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 12px;
+    margin-top: 8px;
+  }
+  .risk-table th {
+    text-align: left;
+    font-weight: 700;
+    color: #5C4A6E;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 4px 6px 5px 0;
+    border-bottom: 0.5pt solid #E5DFC8;
+  }
+  .risk-table th:nth-child(n+2) {
+    text-align: right;
+  }
+  .risk-table td {
+    padding: 4px 6px 4px 0;
+    color: #5C4A6E;
+    border-bottom: 0.5pt solid #E5DFC8;
+  }
+  .risk-table td:nth-child(n+2) {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* --- Risk chart container --- */
+  .risk-chart {
+    margin: 12px 0 16px 0;
+    page-break-inside: avoid;
+  }
+  .risk-chart svg {
+    width: 100%;
+    height: auto;
+  }
+
+  /* --- Toelichting box --- */
+  .advisor-note {
+    background: #E3F0E9;
+    border-left: 3px solid #2E5644;
+    border-radius: 0 6px 6px 0;
+    padding: 8px 12px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    page-break-inside: avoid;
+    font-size: 8.5pt;
+    color: #2B1E39;
+    line-height: 1.5;
+  }
+  .advisor-note .advisor-note-label {
+    font-weight: 700;
+    color: #2E5644;
+    font-size: 8pt;
+    margin-bottom: 2px;
+  }
+
+  /* --- Subsecties (huidige situatie) --- */
+  .subsection {
+    margin-top: 18px;
+    page-break-inside: avoid;
+  }
+  .subsection:first-child {
+    margin-top: 0;
+  }
+  .subsection-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #2E5644;
+    margin: 0 0 6px 0;
+    padding-bottom: 3px;
+    border-bottom: 0.5pt solid #E5DFC8;
+  }
+
+  /* --- Twee-koloms layout (overlijden stel) --- */
+  .dual-columns::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
+  .dual-column {
+    float: left;
+    width: 48%;
+  }
+  .dual-column:nth-child(2) {
+    float: right;
+  }
+  .dual-column-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #2E5644;
+    margin-bottom: 6px;
+    margin-top: 0;
+  }
+  .dual-column .rows-plain .row .label {
+    font-size: 8pt;
+  }
+  .dual-column .rows-plain .row .value {
+    font-size: 8pt;
+  }
+
   /* --- Page breaks --- */
   .page-break {
     page-break-before: always;
   }
 
-  /* --- Browser preview: A4-simulatie --- */
+  /* --- Browser preview: A4 pagina-simulatie --- */
   @media screen {
     html {
-      background: #888;
+      background: #9e9e9e;
     }
     body {
       width: 210mm;
+      margin: 0 auto;
+      padding: 0;
+      background: transparent;
+    }
+    /* Eerste pagina (voorblad) */
+    body > :first-child {
+      /* Wordt gewrapped via .a4-page in screen mode */
+    }
+    .a4-page {
+      width: 210mm;
       min-height: 297mm;
-      margin: 20mm auto;
       padding: 20mm 15mm 25mm 15mm;
+      margin: 20px auto;
       background: white;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+      position: relative;
+      box-sizing: border-box;
     }
     .page-break {
-      /* Visuele paginascheiding in browser */
-      page-break-before: auto;
-      margin: 0 -15mm;
-      padding: 25mm 15mm 0 15mm;
-      border-top: 2px dashed #bbb;
+      /* Verberg de page-break div zelf in screen mode */
+      display: none;
     }
     .page-footer {
-      /* Running footer werkt niet in browser, verberg */
       display: none;
     }
   }
@@ -333,16 +528,13 @@
 {# PAGINA 1: VOORBLAD                                             #}
 {# ═══════════════════════════════════════════════════════════════ #}
 
-<!-- Cover header: logo + bedrijfsinfo -->
+<div class="a4-page">
+<!-- Cover: logo -->
 <div class="page-cover-header">
+  {% if logo_liggend_base64 %}
+  <img src="data:image/png;base64,{{ logo_liggend_base64 }}" alt="{{ bedrijf.naam if bedrijf else 'Hondsrug Finance' }}">
+  {% else %}
   <img src="assets/HF - liggend.png" alt="{{ bedrijf.naam if bedrijf else 'Hondsrug Finance' }}">
-  {% if bedrijf %}
-  <div class="company-info">
-    <span class="company-name">{{ bedrijf.naam }}</span><br>
-    {{ bedrijf.email }}<br>
-    {{ bedrijf.telefoon }}<br>
-    {{ bedrijf.kvk }}
-  </div>
   {% endif %}
 </div>
 
@@ -354,8 +546,8 @@
 <div class="section" style="margin-top: 40px;">
   <div class="info-card-single">
     <div class="row">
-      <span class="label">Klant</span>
-      <span class="value">{{ meta.customerName }}</span>
+      <span class="label" style="font-size:10pt; font-weight:700;">Klant</span>
+      <span class="value" style="font-size:10pt; font-weight:700;">{{ meta.customerName }}</span>
     </div>
     {% if meta.propertyAddress %}
     <div class="row">
@@ -364,52 +556,197 @@
     </div>
     {% endif %}
     <div class="row">
-      <span class="label">Dossiernummer</span>
-      <span class="value">{{ meta.dossierNumber }}</span>
-    </div>
-    <div class="row">
       <span class="label">Adviseur</span>
       <span class="value">{{ meta.advisor }}</span>
     </div>
   </div>
 </div>
 
+<!-- Illustratie -->
+{% if illustratie_base64 %}
+<div style="margin-top: 32px;">
+  <img src="data:image/jpeg;base64,{{ illustratie_base64 }}" alt="Hypotheekadvies illustratie" style="width: 100%; border-radius: 8px;">
+</div>
+{% endif %}
+
+<!-- Bedrijfsinfo onderaan voorblad -->
+{% if bedrijf %}
+<div class="cover-footer">
+  <div class="left">
+    <strong>{{ bedrijf.naam }}</strong><br>
+    {{ bedrijf.adres if bedrijf.adres else '' }}
+  </div>
+  <div class="right">
+    {{ bedrijf.telefoon }}<br>
+    {{ bedrijf.email }}
+  </div>
+</div>
+{% endif %}
+
 
 {# ═══════════════════════════════════════════════════════════════ #}
 {# CONTENT SECTIES                                                 #}
 {# ═══════════════════════════════════════════════════════════════ #}
+</div>{# sluit voorblad a4-page #}
 
-{# Secties waarvoor een paginawissel begint #}
-{% set page_break_before = ['summary', 'client-profile', 'financing', 'tax'] %}
+{# Hoofdstukken: altijd op nieuwe pagina #}
+{% set page_break_before = ['summary', 'client-profile', 'current-situation', 'financing'] %}
+{# Risico-secties: elk scenario op nieuwe pagina #}
+{% set risk_sections = ['retirement', 'risk-death', 'risk-disability', 'risk-unemployment', 'risk-relationship'] %}
 
 {# Secties waarvan rijen in een kaart worden getoond #}
-{% set card_sections = ['summary', 'client-profile', 'property', 'affordability', 'financing'] %}
+{% set card_sections = ['summary', 'client-profile'] %}
 
 {% for section in sections %}
 {% if section.visible %}
 
   {# --- Paginawissel + header --- #}
-  {% if section.id in page_break_before %}
+  {% if section.id in page_break_before or section.id in risk_sections or section.id == 'closing' %}
+  </div>{# sluit vorige a4-page #}
   <div class="page-break"></div>
+  <div class="a4-page">
   <div class="page-header">
     <span class="left">{{ meta.title }} &mdash; {{ meta.customerName }}</span>
     <span class="right">{{ meta.date }}</span>
   </div>
+  {# Hoofdstuktitel #}
+  {% if section.id in page_break_before or section.id == 'closing' %}
+  <h2 class="chapter-title">{{ section.title }}</h2>
+  {% elif section.id == 'retirement' %}
+  <h2 class="chapter-title">Risico's</h2>
+  {% endif %}
   {% endif %}
 
-  {# --- Disclaimer: eigen styling --- #}
-  {% if section.id == 'disclaimer' %}
-  <div class="disclaimer-box">
-    <p><strong>{{ section.title }}</strong></p>
-    {% for text in section.narratives %}
-    <div>{{ text }}</div>
+  {# --- Afsluiting: tekst + ondertekening --- #}
+  {% if section.id == 'closing' %}
+  <div class="section">
+    <div class="text-block">
+      {% for text in section.narratives %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    <div style="margin-top: 40px; font-size: 9pt; line-height: 2;">
+      <div>{{ meta.date }}</div>
+      <div style="margin-top: 8px;"><strong>{{ meta.advisor }}</strong></div>
+      <div>{{ bedrijf.naam if bedrijf else 'Hondsrug Finance' }}</div>
+    </div>
+  </div>
+
+  {# --- Secties met subsecties (huidige situatie, financiering) --- #}
+  {% elif section.subsections %}
+  <div class="section">
+
+    {% for sub in section.subsections %}
+    <div class="subsection">
+      <h4 class="subsection-title">{{ sub.subtitle }}</h4>
+
+      {# Kolommen (aanvrager / partner side-by-side) #}
+      {% if sub.columns %}
+      <div class="dual-columns">
+        {% for col in sub.columns %}
+        <div class="dual-column">
+          {% if col.title %}
+          <div style="font-weight:700; font-size:8pt; color:#5C4A6E; text-transform:uppercase; letter-spacing:0.3px; margin-bottom:4px;">{{ col.title }}</div>
+          {% endif %}
+          {% if col.rows %}
+          <div class="rows-plain">
+            {% for row in col.rows %}
+              {% if not row.label and not row.value %}
+              <div class="divider"></div>
+              {% elif row.bold %}
+              <div class="divider"></div>
+              <div class="row row-bold">
+                <span class="label">{{ row.label }}</span>
+                <span class="value">{{ row.value }}</span>
+              </div>
+              {% else %}
+              <div class="row{% if row.sub %} row-sub{% endif %}">
+                <span class="label">{{ row.label }}</span>
+                <span class="value">{{ row.value }}</span>
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if col.tables %}
+          {% for table in col.tables %}
+          <table class="data-table">
+            <thead><tr>{% for header in table.headers %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for trow in table.rows %}<tr>{% for cell in trow %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+            </tbody>
+            {% if table.totals %}
+            <tfoot><tr style="font-weight:700; border-top:0.5pt solid #E5DFC8;">{% for cell in table.totals %}<td>{{ cell }}</td>{% endfor %}</tr></tfoot>
+            {% endif %}
+          </table>
+          {% endfor %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Rijen (volle breedte) #}
+      {% if sub.rows %}
+      <div class="rows-plain">
+        {% for row in sub.rows %}
+          {% if not row.label and not row.value %}
+          <div class="divider"></div>
+          {% elif row.bold %}
+          <div class="divider"></div>
+          <div class="row row-bold">
+            <span class="label">{{ row.label }}</span>
+            <span class="value">{{ row.value }}</span>
+          </div>
+          {% else %}
+          <div class="row{% if row.sub %} row-sub{% endif %}">
+            <span class="label">{{ row.label }}</span>
+            <span class="value">{{ row.value }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Lijst-items (kinderen onder elkaar) #}
+      {% if sub.list_items %}
+      <div class="rows-plain" style="margin-top:4px;">
+        <div class="row" style="margin-bottom:2px;">
+          <span class="label" style="font-weight:700;">{{ sub.list_label }}</span>
+          <span class="value"></span>
+        </div>
+        {% for item in sub.list_items %}
+        <div class="row row-sub">
+          <span class="label">{{ item }}</span>
+          <span class="value"></span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Tabellen (volle breedte) #}
+      {% if sub.tables %}
+      {% for table in sub.tables %}
+      <table class="data-table">
+        <thead><tr>{% for header in table.headers %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for trow in table.rows %}<tr>{% for cell in trow %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+        {% if table.totals %}
+        <tfoot><tr style="font-weight:700; border-top:0.5pt solid #E5DFC8;">{% for cell in table.totals %}<td>{{ cell }}</td>{% endfor %}</tr></tfoot>
+        {% endif %}
+      </table>
+      {% endfor %}
+      {% endif %}
+
+    </div>
     {% endfor %}
   </div>
 
   {# --- Aandachtspunten: bullet list --- #}
   {% elif section.id == 'attention-points' %}
   <div class="section">
-    <h2 class="section-title">{{ section.title }}</h2>
+    {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
     <div class="text-block">
       <ul>
         {% for text in section.narratives %}
@@ -419,15 +756,132 @@
     </div>
   </div>
 
+  {# --- Risk-analysis: scenario overzicht met tabel + chart --- #}
+  {% elif section.id == 'risk-analysis' %}
+  <div class="section">
+    {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
+
+    {# Inleidende tekst #}
+    {% if section.narratives %}
+    <div class="text-block">
+      {% for text in section.narratives %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Scenario vergelijkingstabel #}
+    {% if section.tables %}
+    {% for table in section.tables %}
+    <table class="risk-table">
+      <thead>
+        <tr>
+          {% for header in table.headers %}
+          <th>{{ header }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for trow in table.rows %}
+        <tr>
+          {% for cell in trow %}
+          <td>{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+    {% endif %}
+
+    {# Inline SVG grafiek (gegenereerd door chart_generator.py) #}
+    {% if section.chart_svg %}
+    <div class="risk-chart">
+      {{ section.chart_svg }}
+    </div>
+    {% endif %}
+
+    {# Toelichting #}
+    {% if section.advisor_note %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Toelichting</div>
+      <div>{{ section.advisor_note }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# --- Sectie met kolommen (overlijden/AO bij stel) --- #}
+  {% elif section.columns %}
+  <div class="section">
+    {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
+
+    {% if section.narratives %}
+    <div class="text-block">
+      {% for text in section.narratives %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="dual-columns">
+      {% for col in section.columns %}
+      <div class="dual-column">
+        <h3 class="dual-column-title">{{ col.title }}</h3>
+
+        {% if col.rows %}
+        <div class="rows-plain">
+          {% for row in col.rows %}
+            {% if not row.label and not row.value %}
+            <div class="divider"></div>
+            {% elif row.bold %}
+            <div class="divider"></div>
+            <div class="row row-bold">
+              <span class="label">{{ row.label }}</span>
+              <span class="value">{{ row.value }}</span>
+            </div>
+            {% else %}
+            <div class="row{% if row.sub %} row-sub{% endif %}">
+              <span class="label">{{ row.label }}</span>
+              <span class="value">{{ row.value }}</span>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if col.chart_svg %}
+        <div class="risk-chart">
+          {{ col.chart_svg }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Top-level SVG grafiek (pensioen: full-width onder kolommen) #}
+    {% if section.chart_svg %}
+    <div class="risk-chart">
+      {{ section.chart_svg }}
+    </div>
+    {% endif %}
+
+    {% if section.advisor_note %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Toelichting</div>
+      <div>{{ section.advisor_note }}</div>
+    </div>
+    {% endif %}
+  </div>
+
   {# --- Generieke sectie --- #}
   {% else %}
   <div class="section">
-    <h2 class="section-title">{{ section.title }}</h2>
+    {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
 
     {# Highlights (samenvatting-pagina) #}
     {% if section.highlights %}
     {% if section.highlights|length == 1 %}
-    <div class="highlight-box">
+    <div class="highlight-box{% if section.highlights[0].status == 'warning' %} highlight-warning{% endif %}">
       <div class="highlight-label">{{ section.highlights[0].label }}</div>
       <div class="highlight-value">{{ section.highlights[0].value }}</div>
       {% if section.highlights[0].note %}
@@ -437,7 +891,7 @@
     {% else %}
     <div class="highlight-grid">
       {% for h in section.highlights %}
-      <div class="highlight-box">
+      <div class="highlight-box{% if h.status == 'warning' %} highlight-warning{% endif %}">
         <div class="highlight-label">{{ h.label }}</div>
         <div class="highlight-value">{{ h.value }}</div>
         {% if h.note %}
@@ -449,12 +903,49 @@
     {% endif %}
     {% endif %}
 
+    {# Hypotheek-samenvatting (hypotheekvorm + rentevastperiode) #}
+    {% if section.mortgage_summary %}
+    <div class="rows-plain" style="margin-top: 12px; margin-bottom: 12px;">
+      {% for row in section.mortgage_summary %}
+      <div class="row">
+        <span class="label">{{ row.label }}</span>
+        <span class="value">{{ row.value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {# Verhaalteksten #}
     {% if section.narratives %}
     <div class="text-block">
       {% for text in section.narratives %}
       <div>{{ text }}</div>
       {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Scenario checks (samenvatting) #}
+    {% if section.scenario_checks %}
+    <div class="scenario-heading">Verantwoord blijven wonen?</div>
+    <div class="scenario-grid">
+      {% for check in section.scenario_checks %}
+      <div class="scenario-item scenario-{{ check.status }}">
+        <span class="scenario-dot"></span>
+        {{ check.label }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Advies en onderbouwing (samenvatting) #}
+    {% if section.advice_text %}
+    <div class="subsection" style="margin-top: 22px;">
+      <h4 class="subsection-title">Advies en onderbouwing</h4>
+      <div class="text-block">
+        {% for text in section.advice_text %}
+        <div>{{ text }}</div>
+        {% endfor %}
+      </div>
     </div>
     {% endif %}
 
@@ -475,7 +966,7 @@
           <span class="value">{{ row.value }}</span>
         </div>
         {% else %}
-        <div class="row">
+        <div class="row{% if row.sub %} row-sub{% endif %}">
           <span class="label">{{ row.label }}</span>
           <span class="value">{{ row.value }}</span>
         </div>
@@ -508,11 +999,27 @@
     {% endfor %}
     {% endif %}
 
+    {# Inline SVG grafiek (gegenereerd door chart_generator.py) #}
+    {% if section.chart_svg %}
+    <div class="risk-chart">
+      {{ section.chart_svg }}
+    </div>
+    {% endif %}
+
+    {# Toelichting (op elke generieke sectie) #}
+    {% if section.advisor_note %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Toelichting</div>
+      <div>{{ section.advisor_note }}</div>
+    </div>
+    {% endif %}
+
   </div>
   {% endif %}
 
 {% endif %}
 {% endfor %}
+</div>{# sluit laatste a4-page #}
 
 </body>
 </html>

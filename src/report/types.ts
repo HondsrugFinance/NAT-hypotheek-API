@@ -366,6 +366,97 @@ export interface AdviceProfile {
   customerRejectedOrv?: boolean | null;
 }
 
+// --- Retirement analysis ---------------------------------------------------
+
+export interface RetirementIncomeComponent {
+  label: string;
+  person: string;
+  amount: Money;
+}
+
+export interface RetirementMoment {
+  label: string;
+  year: number;
+  personName: string;
+  maxMortgage: Money;
+  restschuld?: Money | null;
+  incomeComponents: RetirementIncomeComponent[];
+}
+
+export interface RetirementAnalysisInput {
+  advisedMortgage: Money;
+  moments: RetirementMoment[];
+  advisorNote?: string | null;
+}
+
+export type RetirementShortfallSeverity = "none" | "limited" | "material";
+
+export type RetirementScenarioKind =
+  | "single-no-shortfall"
+  | "single-limited-shortfall"
+  | "single-material-shortfall"
+  | "couple-none-both"
+  | "couple-shortfall-increasing"
+  | "couple-none-then-shortfall"
+  | "couple-shortfall-then-none"
+  | "couple-shortfall-stable";
+
+export interface RetirementMomentAnalysis {
+  label: string;
+  year: number;
+  personName: string;
+  maxMortgage: Money;
+  restschuld: Money | null;
+  shortfall: Money;
+  shortfallPercentage: number;
+  severity: RetirementShortfallSeverity;
+  incomeComponents: RetirementIncomeComponent[];
+}
+
+export interface RetirementScenarioAnalysis {
+  kind: RetirementScenarioKind;
+  moments: RetirementMomentAnalysis[];
+  advisedMortgage: Money;
+  hasShortfall: boolean;
+  worstShortfall: Money;
+  worstShortfallPercentage: number;
+}
+
+// --- Scenario text engine types --------------------------------------------
+
+export type StandardScenarioStatus = "affordable" | "resolved" | "attention" | "shortfall";
+
+export type StandardAdviceType =
+  | "no_action"
+  | "awareness_only"
+  | "consider_solution"
+  | "advise_solution"
+  | "advise_extra_repayment"
+  | "refer_to_specialist";
+
+export interface StandardScenarioTextBlock {
+  intro: string;
+  outcome: Record<StandardScenarioStatus, string>;
+  advice: Partial<Record<StandardAdviceType, string>>;
+  nuance?: Record<string, string>;
+  disclaimer?: string;
+}
+
+export type RelationshipOverallStatus =
+  | "affordable_for_both"
+  | "affordable_for_one"
+  | "affordable_for_none";
+
+export type RelationshipPersonStatus = "affordable" | "attention" | "shortfall";
+
+export interface RelationshipTextBlock {
+  intro: string;
+  overallOutcome: Record<RelationshipOverallStatus, string>;
+  personStatus: Record<RelationshipPersonStatus, string>;
+  advice: { awareness_only: string };
+  disclaimer: string;
+}
+
 // --- Top-level input -------------------------------------------------------
 
 export interface ReportBuilderInput {
@@ -384,6 +475,7 @@ export interface ReportBuilderInput {
   calculations: Calculations;
   fiscalHistory: FiscalHistory;
   adviceProfile: AdviceProfile;
+  retirementAnalysis?: RetirementAnalysisInput | null;
 }
 
 // --- Viewmodel row types ---------------------------------------------------
@@ -433,6 +525,7 @@ export interface SummarySection {
   netMonthly: Money;
   equityContribution: Money;
   narrativeBlocks: NarrativeBlock[];
+  adviceText: string[];
 }
 
 export interface ClientProfileSection {
@@ -506,16 +599,25 @@ export interface UnemploymentRiskSection extends RiskSubSection {
   liquidBuffer: Money;
 }
 
+export interface RelationshipRiskSection extends RiskSubSection {
+  overallStatus: RelationshipOverallStatus;
+  applicantStatus: RelationshipPersonStatus;
+  partnerStatus: RelationshipPersonStatus;
+}
+
 export interface RisksSection {
   death: DeathRiskSection;
   disability: DisabilityRiskSection;
   unemployment: UnemploymentRiskSection;
+  relationship: RelationshipRiskSection | null;
 }
 
 export interface RetirementSection {
   show: boolean;
   expectedIncome: Money;
   narrativeBlocks: NarrativeBlock[];
+  analysis: RetirementScenarioAnalysis | null;
+  advisorNote: string | null;
 }
 
 export interface AttentionPointsSection {
@@ -538,6 +640,7 @@ export interface ReportVisibility {
   showGroundLease: boolean;
   showRenovationValue: boolean;
   showMaxMortgageRetirement: boolean;
+  showRelationship: boolean;
 }
 
 export interface ReportViewModel {
@@ -614,6 +717,9 @@ export interface ComputedFields {
   hasOrv: boolean;
   totalOrvCoverage: Money;
   hasAov: boolean;
+  hasLifeInsurance: boolean;
+  hasAnnuityIncome: boolean;
+  hasPartnerIncome: boolean;
   liquidBuffer: Money;
   bufferMonthsEstimate: number | null;
 

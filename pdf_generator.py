@@ -21,8 +21,10 @@ logger = logging.getLogger("nat-api.pdf")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 LOGO_PATH = os.path.join(TEMPLATES_DIR, "assets", "hondsrug-logo.png")
+LOGO_LIGGEND_PATH = os.path.join(TEMPLATES_DIR, "assets", "HF - liggend.png")
+ILLUSTRATIE_PATH = os.path.join(TEMPLATES_DIR, "assets", "voorpagina-illustratie.jpg")
 
-# --- Logo als base64 laden (eenmalig bij import) ---
+# --- Afbeeldingen als base64 laden (eenmalig bij import) ---
 LOGO_BASE64 = ""
 try:
     with open(LOGO_PATH, "rb") as f:
@@ -30,6 +32,22 @@ try:
     logger.info("Logo geladen: %s", LOGO_PATH)
 except FileNotFoundError:
     logger.warning("Logo niet gevonden: %s", LOGO_PATH)
+
+LOGO_LIGGEND_BASE64 = ""
+try:
+    with open(LOGO_LIGGEND_PATH, "rb") as f:
+        LOGO_LIGGEND_BASE64 = base64.b64encode(f.read()).decode("utf-8")
+    logger.info("Logo liggend geladen: %s", LOGO_LIGGEND_PATH)
+except FileNotFoundError:
+    logger.warning("Logo liggend niet gevonden: %s", LOGO_LIGGEND_PATH)
+
+ILLUSTRATIE_BASE64 = ""
+try:
+    with open(ILLUSTRATIE_PATH, "rb") as f:
+        ILLUSTRATIE_BASE64 = base64.b64encode(f.read()).decode("utf-8")
+    logger.info("Illustratie geladen: %s", ILLUSTRATIE_PATH)
+except FileNotFoundError:
+    logger.warning("Illustratie niet gevonden: %s", ILLUSTRATIE_PATH)
 
 # --- Jinja2 environment ---
 jinja_env = Environment(
@@ -122,6 +140,61 @@ def genereer_adviesrapport_pdf(data: dict) -> bytes:
     if not meta.get("date"):
         meta["date"] = date.today().strftime("%d-%m-%Y")
         data["meta"] = meta
+
+    # Afbeeldingen als base64 injecteren
+    data["logo_liggend_base64"] = LOGO_LIGGEND_BASE64
+    data["illustratie_base64"] = ILLUSTRATIE_BASE64
+
+    # Genereer SVG grafieken voor secties met chart_data
+    from markupsafe import Markup
+    import chart_generator
+    for section in data.get("sections", []):
+        # Top-level chart_data
+        cd = section.get("chart_data")
+        if cd:
+            sid = section.get("id", "")
+            if sid == "retirement":
+                section["chart_svg"] = Markup(chart_generator.genereer_pensioen_chart_svg(
+                    jaren=cd.get("jaren", []),
+                    geadviseerd_hypotheekbedrag=cd.get("geadviseerd_hypotheekbedrag", 0),
+                ))
+            elif cd.get("type") == "overlijden_vergelijk":
+                section["chart_svg"] = Markup(chart_generator.genereer_overlijden_vergelijk_svg(
+                    huidig_max_hypotheek=cd.get("huidig_max_hypotheek", 0),
+                    max_hypotheek_na_overlijden=cd.get("max_hypotheek_na_overlijden", 0),
+                    geadviseerd_hypotheekbedrag=cd.get("geadviseerd_hypotheekbedrag", 0),
+                    label_bar1=cd.get("label_bar1", "Huidig"),
+                    label_bar2=cd.get("label_bar2", "Na overlijden"),
+                ))
+            elif cd.get("type") == "vergelijk_fasen":
+                section["chart_svg"] = Markup(chart_generator.genereer_vergelijk_chart_svg(
+                    fasen=cd.get("fasen", []),
+                    geadviseerd_hypotheekbedrag=cd.get("geadviseerd_hypotheekbedrag", 0),
+                ))
+            else:
+                section["chart_svg"] = Markup(chart_generator.genereer_risico_chart_svg(
+                    scenarios=cd.get("scenarios", []),
+                    geadviseerd_hypotheekbedrag=cd.get("geadviseerd_hypotheekbedrag", 0),
+                ))
+
+        # Column chart_data (overlijden/AO side-by-side)
+        for col in section.get("columns", []):
+            col_cd = col.get("chart_data")
+            if not col_cd:
+                continue
+            if col_cd.get("type") == "overlijden_vergelijk":
+                col["chart_svg"] = Markup(chart_generator.genereer_overlijden_vergelijk_svg(
+                    huidig_max_hypotheek=col_cd.get("huidig_max_hypotheek", 0),
+                    max_hypotheek_na_overlijden=col_cd.get("max_hypotheek_na_overlijden", 0),
+                    geadviseerd_hypotheekbedrag=col_cd.get("geadviseerd_hypotheekbedrag", 0),
+                    label_bar1=col_cd.get("label_bar1", "Huidig"),
+                    label_bar2=col_cd.get("label_bar2", "Na overlijden"),
+                ))
+            elif col_cd.get("type") == "vergelijk_fasen":
+                col["chart_svg"] = Markup(chart_generator.genereer_vergelijk_chart_svg(
+                    fasen=col_cd.get("fasen", []),
+                    geadviseerd_hypotheekbedrag=col_cd.get("geadviseerd_hypotheekbedrag", 0),
+                ))
 
     # Render HTML
     template = jinja_env.get_template("adviesrapport.html")

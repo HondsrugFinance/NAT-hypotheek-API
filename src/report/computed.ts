@@ -251,6 +251,12 @@ export const buildComputedFields = (input: ReportBuilderInput): ComputedFields =
   const hasOrv = input.protections.orv.length > 0;
   const totalOrvCoverage = sumBy(input.protections.orv, (i) => i.verzekerdBedrag);
   const hasAov = input.protections.aov.length > 0;
+  const hasLifeInsurance = input.protections.lifeInsurance.length > 0;
+  const hasAnnuityIncome =
+    sumAnnuity(input.income.primary) > 0 ||
+    sumAnnuity(input.income.partner) > 0;
+  const hasPartnerIncome =
+    input.applicants.hasPartner && sumGrossIncome(input.income.partner) > 0;
 
   // Buffer
   const liquidBuffer = totalSavings;
@@ -308,6 +314,9 @@ export const buildComputedFields = (input: ReportBuilderInput): ComputedFields =
     hasOrv,
     totalOrvCoverage,
     hasAov,
+    hasLifeInsurance,
+    hasAnnuityIncome,
+    hasPartnerIncome,
     liquidBuffer,
     bufferMonthsEstimate,
     retirementScenarioRequired,

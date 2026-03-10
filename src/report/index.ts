@@ -8,6 +8,21 @@ export type {
   // Input
   ReportBuilderInput,
   ComputedFields,
+  // Scenario text engine
+  StandardScenarioStatus,
+  StandardAdviceType,
+  StandardScenarioTextBlock,
+  RelationshipOverallStatus,
+  RelationshipPersonStatus,
+  RelationshipTextBlock,
+  // Retirement analysis
+  RetirementAnalysisInput,
+  RetirementMoment,
+  RetirementIncomeComponent,
+  RetirementShortfallSeverity,
+  RetirementScenarioKind,
+  RetirementMomentAnalysis,
+  RetirementScenarioAnalysis,
   // Viewmodel
   ReportViewModel,
   ReportVisibility,
@@ -20,6 +35,7 @@ export type {
   LoanPartsSection,
   TaxSection,
   RisksSection,
+  RelationshipRiskSection,
   RetirementSection,
   AttentionPointsSection,
   DisclaimerSection,
@@ -43,6 +59,28 @@ export {
   determineFiscalBox,
   buildTaxQualificationText,
 } from "./builders";
+
+// --- Scenario text engine --------------------------------------------------
+
+export {
+  DEATH_TEXT,
+  RETIREMENT_TEXT,
+  DISABILITY_TEXT,
+  UNEMPLOYMENT_TEXT,
+  RELATIONSHIP_TEXT,
+  DEATH_SINGLE_TEXT,
+} from "./texts";
+
+export { compactKeys, renderStandardScenario, renderRelationshipScenario } from "./scenario-renderer";
+
+// --- Retirement analysis ---------------------------------------------------
+
+export {
+  analyzeRetirementScenario,
+  buildRetirementAnalysisNarratives,
+  calculateRetirementShortfall,
+  getRetirementShortfallSeverity,
+} from "./retirement";
 
 // --- PDF mapper ------------------------------------------------------------
 

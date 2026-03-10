@@ -16,8 +16,10 @@ import type {
   LoanPartRow,
   LoanPartsSection,
   MoneyRow,
+  NarrativeBlock,
   NewLoanPart,
   PropertySection,
+  RelationshipRiskSection,
   RepaymentType,
   ReportBuilderInput,
   ReportMetaSection,
@@ -25,6 +27,8 @@ import type {
   ReportViewModel,
   RetirementSection,
   RisksSection,
+  StandardAdviceType,
+  StandardScenarioStatus,
   SummarySection,
   TaxSection,
 } from "./types";
@@ -32,21 +36,37 @@ import { buildComputedFields, buildFullName, formatAddressInline } from "./compu
 import {
   buildAffordabilityNarratives,
   buildAttentionPoints,
-  buildDeathRiskNarratives,
-  buildDisabilityRiskNarratives,
+  DEATH_SINGLE_TEXT,
+  DEATH_TEXT,
   buildDisclaimerNarratives,
+  DISABILITY_TEXT,
   buildLoanPartNarratives,
-  buildRetirementNarratives,
+  RELATIONSHIP_TEXT,
+  RETIREMENT_TEXT,
   buildSummaryNarratives,
   buildTaxNarratives,
-  buildUnemploymentRiskNarratives,
+  UNEMPLOYMENT_TEXT,
+  ADVICE_RISK_LABELS,
 } from "./texts";
+import { analyzeRetirementScenario } from "./retirement";
+import { compactKeys, renderRelationshipScenario, renderStandardScenario } from "./scenario-renderer";
 
 // --- Internal helpers ------------------------------------------------------
 
 /** Safe number coercion: null/undefined/NaN → 0. */
 const num = (v: number | null | undefined): number =>
   typeof v === "number" && !Number.isNaN(v) ? v : 0;
+
+/** Wrap plain strings from a renderer into NarrativeBlock[]. */
+const toNarrativeBlocks = (prefix: string, texts: string[]): NarrativeBlock[] =>
+  texts.map((text, i) => ({ key: `${prefix}-${i}`, text }));
+
+/** Format a number as Dutch currency for inline text (whole euros only). */
+const fmtMoney = (amount: number): string => {
+  const whole = Math.round(Math.abs(amount)).toString();
+  const thousands = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return amount < 0 ? `\u20ac -${thousands}` : `\u20ac ${thousands}`;
+};
 
 /** Push a MoneyRow only when amount > 0. */
 const addIfPositive = (
@@ -248,6 +268,7 @@ export const buildVisibility = (
     num(input.property.marketValueAfterRenovation) !==
       num(input.property.marketValue),
   showMaxMortgageRetirement: computed.retirementScenarioRequired,
+  showRelationship: input.applicants.hasPartner,
 });
 
 // --- Section builders ------------------------------------------------------
@@ -264,6 +285,101 @@ const buildMetaSection = (
   propertyAddress: computed.propertyAddressLine,
 });
 
+// --- Advice text builder (Samenvatting — Advies en onderbouwing) -----------
+
+const summariseRepaymentTypes = (parts: ReportBuilderInput["newMortgage"]["loanParts"]): string => {
+  const types = [...new Set(parts.map((p) => repaymentLabel(p.aflosvorm).toLowerCase()))];
+  if (types.length === 1) return `een ${types[0]}e`;
+  return `een combinatie van ${types.slice(0, -1).join(", ")} en ${types[types.length - 1]}`;
+};
+
+const longestRvp = (parts: ReportBuilderInput["newMortgage"]["loanParts"]): string => {
+  const periods = parts
+    .map((p) => p.rentevastePeriode)
+    .filter((v): v is string => !!v);
+  if (periods.length === 0) return "";
+  // Sort descending by numeric prefix (e.g. "20 jaar" > "10 jaar")
+  periods.sort((a, b) => {
+    const na = parseInt(a, 10) || 0;
+    const nb = parseInt(b, 10) || 0;
+    return nb - na;
+  });
+  return periods[0];
+};
+
+const buildAdviceText = (
+  input: ReportBuilderInput,
+  computed: ComputedFields,
+): string[] => {
+  const paragraphs: string[] = [];
+
+  // Alinea 1 — Hypotheekadvies
+  const lender = input.newMortgage.lender ?? "de geldverstrekker";
+  const repayment = summariseRepaymentTypes(input.newMortgage.loanParts);
+  const rvp = longestRvp(input.newMortgage.loanParts);
+  let p1 = `Wij adviseren een hypotheek van ${fmtMoney(computed.requiredMortgageAmount)} bij ${lender}` +
+    `, met ${repayment} aflossingsvorm` +
+    (rvp ? ` en een rentevaste periode van ${rvp}` : "") +
+    ".";
+  if (input.financingSetup.nhg.selected) {
+    p1 += " De hypotheek wordt aangevraagd met Nationale Hypotheek Garantie.";
+  }
+  paragraphs.push(p1);
+
+  // Alinea 2 — Betaalbaarheid
+  const maxNow = num(input.calculations.maxMortgageNow?.maximaleHypotheekBox1);
+  const marge = maxNow > 0 && computed.requiredMortgageAmount <= maxNow * 0.9 ? "ruim " : "";
+  paragraphs.push(
+    `De bruto maandlast bedraagt ${fmtMoney(computed.grossMonthlyPaymentTotal)}, ` +
+    `wat na belastingvoordeel neerkomt op een netto maandlast van ${fmtMoney(computed.netMonthlyPaymentTotal)}. ` +
+    `Het geadviseerde hypotheekbedrag past ${marge}binnen de maximaal toegestane hypotheek van ${fmtMoney(maxNow)}.`,
+  );
+
+  // Alinea 3 — Risico-overzicht
+  const riskParts: string[] = [];
+
+  // Overlijden
+  if (!input.applicants.hasPartner) {
+    riskParts.push("Overlijden: niet van toepassing (alleenstaand)");
+  } else {
+    const death = deriveDeathStatus(input, computed);
+    riskParts.push(`Overlijden: ${ADVICE_RISK_LABELS[death.status] ?? death.status}`);
+  }
+
+  // AO
+  const disability = deriveDisabilityStatus(computed);
+  const aoLabel = ADVICE_RISK_LABELS[disability.status] ?? disability.status;
+  riskParts.push(
+    disability.adviceType === "refer_to_specialist"
+      ? `Arbeidsongeschiktheid: ${aoLabel}, verwijzing naar specialist`
+      : `Arbeidsongeschiktheid: ${aoLabel}`,
+  );
+
+  // WW
+  const unemployment = deriveUnemploymentStatus(computed);
+  const wwLabel = ADVICE_RISK_LABELS[unemployment.status] ?? unemployment.status;
+  if (unemployment.status === "affordable") {
+    riskParts.push("Werkloosheid: voldoende buffer");
+  } else {
+    riskParts.push(`Werkloosheid: ${wwLabel}`);
+  }
+
+  // Pensioen
+  riskParts.push("Pensionering: afgedekt");
+
+  paragraphs.push(riskParts.join(". ") + ".");
+
+  // Alinea 4 — Klantprioriteit (conditioneel)
+  const priority = input.adviceProfile.customerPriority?.trim();
+  if (priority) {
+    paragraphs.push(
+      `Bij dit advies is rekening gehouden met uw prioriteit: ${priority.toLowerCase()}.`,
+    );
+  }
+
+  return paragraphs;
+};
+
 const buildSummarySection = (
   input: ReportBuilderInput,
   computed: ComputedFields,
@@ -276,6 +392,7 @@ const buildSummarySection = (
   netMonthly: computed.netMonthlyPaymentTotal,
   equityContribution: computed.totalOwnFunds,
   narrativeBlocks: buildSummaryNarratives(input, computed),
+  adviceText: buildAdviceText(input, computed),
 });
 
 const buildClientProfileSection = (
@@ -351,6 +468,121 @@ const buildTaxSection = (
   narrativeBlocks: buildTaxNarratives(input, computed),
 });
 
+// --- Scenario status derivation --------------------------------------------
+
+const deriveDeathStatus = (
+  input: ReportBuilderInput,
+  computed: ComputedFields,
+): { status: StandardScenarioStatus; adviceType: StandardAdviceType } => {
+  if (!input.applicants.hasPartner) return { status: "affordable", adviceType: "no_action" };
+  if (computed.hasOrv) return { status: "resolved", adviceType: "no_action" };
+  if (input.adviceProfile.customerRejectedOrv) return { status: "attention", adviceType: "awareness_only" };
+  return { status: "attention", adviceType: "consider_solution" };
+};
+
+const deriveDisabilityStatus = (
+  computed: ComputedFields,
+): { status: StandardScenarioStatus; adviceType: StandardAdviceType } => {
+  if (computed.hasAov) return { status: "resolved", adviceType: "no_action" };
+  return { status: "attention", adviceType: "refer_to_specialist" };
+};
+
+const deriveUnemploymentStatus = (
+  computed: ComputedFields,
+): { status: StandardScenarioStatus; adviceType: StandardAdviceType } => {
+  const months = computed.bufferMonthsEstimate;
+  if (months != null && months >= 6) return { status: "affordable", adviceType: "no_action" };
+  if (months != null && months >= 3) return { status: "attention", adviceType: "consider_solution" };
+  return { status: "attention", adviceType: "consider_solution" };
+};
+
+// --- Risks section builder -------------------------------------------------
+
+const buildDeathRiskNarratives = (
+  input: ReportBuilderInput,
+  computed: ComputedFields,
+): NarrativeBlock[] => {
+  // Single applicant: centralised texts assume couple, use fallback
+  if (!input.applicants.hasPartner) {
+    return [{ key: "death-single", text: DEATH_SINGLE_TEXT }];
+  }
+
+  const { status, adviceType } = deriveDeathStatus(input, computed);
+  const nuanceKeys = compactKeys(
+    ["existing_orv", computed.hasOrv],
+    ["existing_life_insurance", computed.hasLifeInsurance],
+    ["savings_used", false], // no savings-buffer calculation yet
+    ["employer_provisions_unknown", true], // always include
+  );
+
+  return toNarrativeBlocks("death", renderStandardScenario({
+    text: DEATH_TEXT,
+    status,
+    adviceType,
+    nuanceKeys,
+  }));
+};
+
+const buildDisabilityRiskNarratives = (
+  computed: ComputedFields,
+): NarrativeBlock[] => {
+  const { status, adviceType } = deriveDisabilityStatus(computed);
+  const nuanceKeys = compactKeys(
+    ["aov_used", computed.hasAov],
+    ["partner_income_used", computed.hasPartnerIncome],
+  );
+
+  return toNarrativeBlocks("disability", renderStandardScenario({
+    text: DISABILITY_TEXT,
+    status,
+    adviceType,
+    nuanceKeys,
+  }));
+};
+
+const buildUnemploymentRiskNarratives = (
+  computed: ComputedFields,
+): NarrativeBlock[] => {
+  const { status, adviceType } = deriveUnemploymentStatus(computed);
+  const nuanceKeys = compactKeys(
+    ["woonlastenverzekering_used", false], // no woonlastenverzekering data yet
+    ["partner_income_used", computed.hasPartnerIncome],
+  );
+
+  return toNarrativeBlocks("unemployment", renderStandardScenario({
+    text: UNEMPLOYMENT_TEXT,
+    status,
+    adviceType,
+    nuanceKeys,
+  }));
+};
+
+const buildRelationshipRiskSection = (
+  input: ReportBuilderInput,
+  _computed: ComputedFields,
+): RelationshipRiskSection | null => {
+  if (!input.applicants.hasPartner) return null;
+
+  // Default to 'attention' for both — refined when calculations are added
+  const applicantStatus = "attention" as const;
+  const partnerStatus = "attention" as const;
+  const overallStatus = "affordable_for_none" as const;
+
+  const paragraphs = renderRelationshipScenario({
+    text: RELATIONSHIP_TEXT,
+    overallStatus,
+    applicantStatus,
+    partnerStatus,
+  });
+
+  return {
+    overallStatus,
+    applicantStatus,
+    partnerStatus,
+    narrativeBlocks: toNarrativeBlocks("relationship", paragraphs),
+  };
+};
+
 const buildRisksSection = (
   input: ReportBuilderInput,
   computed: ComputedFields,
@@ -362,26 +594,82 @@ const buildRisksSection = (
   },
   disability: {
     hasAov: computed.hasAov,
-    narrativeBlocks: buildDisabilityRiskNarratives(),
+    narrativeBlocks: buildDisabilityRiskNarratives(computed),
   },
   unemployment: {
     liquidBuffer: computed.liquidBuffer,
-    narrativeBlocks: buildUnemploymentRiskNarratives(),
+    narrativeBlocks: buildUnemploymentRiskNarratives(computed),
   },
+  relationship: buildRelationshipRiskSection(input, computed),
 });
 
 const buildRetirementSection = (
   input: ReportBuilderInput,
   computed: ComputedFields,
-): RetirementSection => ({
-  show:
+): RetirementSection => {
+  const show =
     computed.retirementScenarioRequired ||
     computed.pensionIncomeApplicantTotal > 0 ||
-    computed.pensionIncomePartnerTotal > 0,
-  expectedIncome:
-    computed.pensionIncomeApplicantTotal + computed.pensionIncomePartnerTotal,
-  narrativeBlocks: buildRetirementNarratives(input, computed),
-});
+    computed.pensionIncomePartnerTotal > 0;
+  const expectedIncome =
+    computed.pensionIncomeApplicantTotal + computed.pensionIncomePartnerTotal;
+
+  // When retirement analysis input is provided, run the full scenario analysis
+  if (input.retirementAnalysis && input.retirementAnalysis.moments.length > 0) {
+    const analysis = analyzeRetirementScenario(input.retirementAnalysis);
+
+    // Map analysis severity → standard status
+    let status: StandardScenarioStatus = "affordable";
+    let adviceType: StandardAdviceType = "no_action";
+    if (analysis.hasShortfall) {
+      const allLimited = analysis.moments.every(
+        (m) => m.severity === "limited" || m.severity === "none",
+      );
+      status = allLimited ? "attention" : "shortfall";
+      adviceType = allLimited ? "awareness_only" : "advise_extra_repayment";
+    }
+
+    // Determine retirement change pattern from scenario kind
+    const isLaterShortfall =
+      analysis.kind === "couple-shortfall-increasing" ||
+      analysis.kind === "couple-none-then-shortfall";
+    const isImproving = analysis.kind === "couple-shortfall-then-none";
+
+    const nuanceKeys = compactKeys(
+      ["couple_two_aow", input.applicants.hasPartner],
+      ["income_decrease", expectedIncome < computed.grossIncomeHouseholdTotal],
+      ["later_shortfall", isLaterShortfall],
+      ["income_improves", isImproving],
+      ["annuity_income_used", computed.hasAnnuityIncome],
+    );
+
+    return {
+      show: true,
+      expectedIncome,
+      narrativeBlocks: toNarrativeBlocks("retirement", renderStandardScenario({
+        text: RETIREMENT_TEXT,
+        status,
+        adviceType,
+        nuanceKeys,
+      })),
+      analysis,
+      advisorNote: input.retirementAnalysis.advisorNote ?? null,
+    };
+  }
+
+  // Fallback: generic narratives without scenario analysis
+  return {
+    show,
+    expectedIncome,
+    narrativeBlocks: toNarrativeBlocks("retirement", renderStandardScenario({
+      text: RETIREMENT_TEXT,
+      status: "affordable",
+      adviceType: "no_action",
+    })),
+    analysis: null,
+    advisorNote: null,
+  };
+};
 
 const buildDisclaimerSection = (): DisclaimerSection => ({
   narrativeBlocks: buildDisclaimerNarratives(),
