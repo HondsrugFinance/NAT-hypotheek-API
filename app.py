@@ -780,7 +780,7 @@ async def adviesrapport_pdf(
     )
 
     try:
-        data = request_body.model_dump()
+        data = request_body.model_dump(exclude_none=True)
         pdf_bytes = pdf_generator.genereer_adviesrapport_pdf(data)
         klant_naam = request_body.meta.customerName or "klant"
         filename = f"adviesrapport-{klant_naam.replace(' ', '-').lower()}.pdf"
