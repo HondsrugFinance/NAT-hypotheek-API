@@ -59,6 +59,11 @@ def build_risk_disability_section(
 
         for sc in scenarios:
             naam = sc.get("naam", "")
+
+            # Loondoorbetaling overslaan (niet relevant voor advies)
+            if "loondoorbetaling" in naam.lower():
+                continue
+
             inkomen = sc.get("inkomen_aanvrager", 0) + sc.get("inkomen_partner", 0)
             max_hyp = sc.get("max_hypotheek_annuitair", 0)
 
