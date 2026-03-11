@@ -10,7 +10,8 @@
   "dagloon": {
     "werkdagen_per_jaar": 261,
     "maandloon_factor": 21.75,
-    "toelichting": "WIA-dagloon = sv_loon_12m / 261. WIA-maandloon = dagloon * 21.75."
+    "maximum_dagloon": 304.25,
+    "toelichting": "WIA-dagloon = sv_loon_12m / 261. WIA-maandloon = dagloon * 21.75. Max dagloon 2026: 304.25."
   },
   "wachttijd_standaard_weken": 104,
   "minimum_ao_percentage_wia": 35,

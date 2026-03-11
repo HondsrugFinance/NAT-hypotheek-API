@@ -28,6 +28,7 @@ with open(os.path.join(BASE_DIR, 'config', 'wia.json'), 'r', encoding='utf-8') a
     WIA_CONFIG = json.load(f)
 
 DAGLOON_CFG = WIA_CONFIG['dagloon']
+MAX_DAGLOON = DAGLOON_CFG.get('maximum_dagloon', 0)
 WGA_LGU_CFG = WIA_CONFIG['wga_lgu']
 WGA_LA_CFG = WIA_CONFIG['wga_loonaanvulling']
 WGA_VERVOLG_CFG = WIA_CONFIG['wga_vervolg']
@@ -757,6 +758,7 @@ def bereken_wia_bruto_jaar(
         employment_history_years_to_2015=employment_history_years_to_2015,
         employment_history_years_from_2016=employment_history_years_from_2016,
         minimum_wage_month_reference=minimum_wage_month_reference,
+        maximum_day_wage_reference=MAX_DAGLOON,
     )
 
     return {
