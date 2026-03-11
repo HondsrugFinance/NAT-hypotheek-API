@@ -444,19 +444,39 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
                 overig += jaarbedrag
 
         elif item_type == "pensioen":
-            # Diagnostiek: dump alle pensioen velden
-            logger.info("Pensioen item: keys=%s, soort=%s, type=%s, jaarbedrag=%.0f, all=%s",
-                        sorted(item.keys()),
-                        item.get("soort", "?"),
-                        item.get("type", "?"),
-                        jaarbedrag,
-                        {k: str(v)[:80] for k, v in item.items()})
+            # Diagnostiek: dump pensioenData volledig
+            pensioen_data = item.get("pensioenData")
+            logger.info("Pensioen item: soort=%s, jaarbedrag=%.0f, pensioenData=%s",
+                        item.get("soort", "?"), jaarbedrag, pensioen_data)
 
+            # Nabestaandenpensioen: check soort veld of pensioenData
             soort = str(item.get("soort") or "").lower()
             if "nabestaanden" in soort or "partner" in soort:
                 nabestaandenpensioen += jaarbedrag
             else:
                 pensioen += jaarbedrag
+                # Extraheer nabestaandenpensioen uit pensioenData genest object
+                if isinstance(pensioen_data, dict):
+                    pp = pensioen_data.get("partnerpensioen") or {}
+                    if isinstance(pp, dict):
+                        nb_bedrag = _to_float(pp.get("verzekerd") or pp.get("jaarbedrag"))
+                        if nb_bedrag > 0:
+                            nabestaandenpensioen += nb_bedrag
+                            logger.info("Nabestaandenpensioen uit pensioenData: %.0f", nb_bedrag)
+                elif isinstance(pensioen_data, str):
+                    # Soms is pensioenData een string-representatie van een dict
+                    try:
+                        import ast
+                        pd_parsed = ast.literal_eval(pensioen_data)
+                        if isinstance(pd_parsed, dict):
+                            pp = pd_parsed.get("partnerpensioen") or {}
+                            if isinstance(pp, dict):
+                                nb_bedrag = _to_float(pp.get("verzekerd") or pp.get("jaarbedrag"))
+                                if nb_bedrag > 0:
+                                    nabestaandenpensioen += nb_bedrag
+                                    logger.info("Nabestaandenpensioen uit pensioenData (str): %.0f", nb_bedrag)
+                    except (ValueError, SyntaxError):
+                        pass
 
         elif item_type == "ander_inkomen":
             overig += _to_float(
