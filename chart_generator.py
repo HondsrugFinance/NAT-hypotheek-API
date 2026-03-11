@@ -190,8 +190,8 @@ def genereer_pensioen_chart_svg(
                     f'stroke="{COLOR_LABEL}" stroke-width="0.8" '
                     f'stroke-dasharray="3,2"/>'
                 )
-                # Label boven de grafiek, licht verschoven bij meerdere markers
-                label_y = margin_top - 3 + mi * 8
+                # Label boven de grafiek, alle op dezelfde hoogte
+                label_y = margin_top - 4
                 svg.append(
                     f'<text x="{m_x:.1f}" y="{label_y:.1f}" '
                     f'font-size="5.5" fill="{COLOR_LABEL}" text-anchor="middle">'

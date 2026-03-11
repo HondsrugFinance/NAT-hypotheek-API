@@ -2,6 +2,7 @@
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData, NormalizedVerzekering
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 
 
 def build_risk_death_section(
@@ -90,9 +91,14 @@ def build_risk_death_section(
 
         columns.append({"title": naam, "rows": col_rows, "chart_data": chart_data})
 
+    align_columns_at_totaal(columns)
+
+    for sc in overlijden_scenarios:
+        sc_naam = sc.get("naam", "Overlijden")
+        max_hyp = sc.get("max_hypotheek_annuitair", 0)
         if hypotheek > max_hyp:
             tekort = hypotheek - max_hyp
-            tekorten.append((naam, tekort))
+            tekorten.append((sc_naam, tekort))
 
     section = {
         "id": "risk-death",

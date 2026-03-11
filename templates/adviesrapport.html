@@ -452,6 +452,11 @@
     border-bottom: 0.5pt solid #E5DFC8;
   }
 
+  /* --- Onzichtbare spacer-rij (voor kolom-uitlijning) --- */
+  .spacer-row {
+    visibility: hidden;
+  }
+
   /* --- Twee-koloms layout (overlijden stel) --- */
   .dual-columns::after {
     content: "";
@@ -831,7 +836,12 @@
         {% if col.rows %}
         <div class="rows-plain">
           {% for row in col.rows %}
-            {% if not row.label and not row.value %}
+            {% if row.spacer %}
+            <div class="row spacer-row">
+              <span class="label">&nbsp;</span>
+              <span class="value">&nbsp;</span>
+            </div>
+            {% elif not row.label and not row.value %}
             <div class="divider"></div>
             {% elif row.bold %}
             <div class="divider"></div>

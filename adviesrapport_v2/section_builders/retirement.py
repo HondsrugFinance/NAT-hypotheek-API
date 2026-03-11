@@ -2,6 +2,7 @@
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 
 
 def build_retirement_section(
@@ -133,6 +134,8 @@ def build_retirement_section(
             })
 
             columns.append({"title": naam, "rows": col_rows})
+
+        align_columns_at_totaal(columns)
 
         section = {
             "id": "retirement",

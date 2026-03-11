@@ -4,6 +4,7 @@ import re
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 
 
 def build_risk_unemployment_section(
@@ -92,6 +93,8 @@ def build_risk_unemployment_section(
         }
 
         columns.append({"title": titel, "rows": col_rows, "chart_data": chart_data})
+
+    align_columns_at_totaal(columns)
 
     section = {
         "id": "risk-unemployment",

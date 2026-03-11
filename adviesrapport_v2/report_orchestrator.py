@@ -623,8 +623,11 @@ def _build_pensioen_chart_data(
     start_jaar = date.today().year
     alleenstaande = "NEE" if not data.alleenstaand else "JA"
 
-    # Parse AOW-momenten met datum, inkomen en label
-    aow_events = []  # [(jaar, peildatum_str, label)]
+    # Parse AOW-momenten met datum, inkomen en label (met voornaam)
+    naam_aanvrager = (data.aanvrager.naam or "aanvr.").split()[0]
+    naam_partner = ((data.partner.naam if data.partner else None) or "partner").split()[0]
+
+    aow_events = []  # [(jaar, wie, label)]
     for sc in aow_scenarios:
         peildatum = sc.get("peildatum", "")
         try:
@@ -632,7 +635,8 @@ def _build_pensioen_chart_data(
         except (ValueError, IndexError):
             continue
         wie = sc.get("van_toepassing_op", "")
-        label = "AOW partner" if wie == "partner" else "AOW aanvr."
+        naam = naam_partner if wie == "partner" else naam_aanvrager
+        label = f"AOW {naam}"
         aow_events.append((aow_jaar, wie, label))
 
     aow_events.sort(key=lambda x: x[0])
