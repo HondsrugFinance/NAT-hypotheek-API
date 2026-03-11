@@ -67,7 +67,7 @@ De backend leest zelf Supabase, doet alle berekeningen, bouwt alle secties, en r
 }
 ```
 
-**Geen API-key nodig.** Geen `getApiHeaders()`. Alleen `Content-Type: application/json`.
+**Geen NAT API-key nodig.** Geen `getApiHeaders()`. Wel moet de **Supabase session token** meegestuurd worden in de `Authorization` header, zodat de backend namens de ingelogde gebruiker data kan lezen uit Supabase (RLS).
 
 **Response:** PDF bytes (`application/pdf`). Direct downloadbaar als blob.
 
@@ -324,9 +324,19 @@ async function generateAdviesrapportV2(
   options: AdviesrapportV2Options,
   customerName: string,
 ): Promise<void> {
+  // Haal de Supabase session token op — nodig zodat de backend
+  // namens de ingelogde gebruiker data uit Supabase kan lezen (RLS)
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Niet ingelogd — log opnieuw in en probeer het nog eens");
+  }
+
   const response = await fetch(`${API_BASE_URL}/adviesrapport-pdf-v2`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session.access_token}`,
+    },
     body: JSON.stringify({
       dossier_id: dossierId,
       aanvraag_id: aanvraagId,
@@ -541,13 +551,13 @@ Als de aanvraag geen `hypotheekverstrekker` of `nhg` veld heeft, zoek dan in de 
 | **Verwijder:** `buildSection*()` functies (13 section builders) | Was: per-sectie opbouw |
 | **Verwijder:** API calls naar `/risk-scenarios`, `/calculate` ×2, `/monthly-costs` in rapport-context | Was: 3-4 API calls |
 | **Wijzig:** AdviesrapportDialog stap 2 | Verwijder sectie-checkboxes, voeg klantprofiel/risicobereidheid velden toe |
-| **Nieuw:** `generateAdviesrapportV2()` functie | ~30 regels: verzamel opties + 1 fetch call |
+| **Nieuw:** `generateAdviesrapportV2()` functie | ~35 regels: haal session token + verzamel opties + 1 fetch call |
 | **Behoud:** Wizard stap 1 (aanvraag selectie) | Ongewijzigd |
 | **Behoud:** Dialog state management | Ongewijzigd |
 | **Behoud:** toast feedback patronen | Ongewijzigd |
 
 **API endpoint:** `POST https://nat-hypotheek-api.onrender.com/adviesrapport-pdf-v2`
 
-**Geen API-key nodig.** Geen `getApiHeaders()`. Alleen `Content-Type: application/json`.
+**Auth:** Supabase session token meesturen via `Authorization: Bearer <token>`. Haal op via `supabase.auth.getSession()`. Geen NAT API-key nodig.
 
 **Risico:** Laag. De oude `POST /adviesrapport-pdf` (v1) endpoint blijft bestaan voor backward compatibility. De nieuwe `/adviesrapport-pdf-v2` endpoint werkt onafhankelijk.

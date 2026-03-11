@@ -1,6 +1,15 @@
 """Supabase REST API client — read-only, voor dossier/aanvraag data.
 
 Gebruikt httpx (al een dependency) ipv supabase-py om dependencies minimaal te houden.
+
+Auth strategie:
+  - SUPABASE_URL: project URL (verplicht)
+  - SUPABASE_ANON_KEY: public anon key voor `apikey` header (verplicht)
+  - access_token: session JWT van de ingelogde Lovable-gebruiker (per request)
+
+  Lovable stuurt de Supabase session token mee in de Authorization header.
+  De backend forwardt die naar Supabase, zodat RLS gewoon werkt.
+  Geen service_role key nodig (die is niet beschikbaar bij Lovable-managed projecten).
 """
 
 import os
@@ -11,19 +20,39 @@ import httpx
 logger = logging.getLogger("nat-api.adviesrapport_v2")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+# Backward compatibility: als SUPABASE_SERVICE_KEY gezet is, gebruik die als fallback
+_FALLBACK_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 
-def _headers() -> dict[str, str]:
+def _get_api_key() -> str:
+    """Return de API key voor de `apikey` header."""
+    return SUPABASE_ANON_KEY or _FALLBACK_KEY
+
+
+def _headers(access_token: str | None = None) -> dict[str, str]:
+    """Bouw Supabase request headers.
+
+    Args:
+        access_token: Supabase session JWT van de ingelogde gebruiker.
+                      Als None, fallback naar service_role key (env var).
+    """
+    api_key = _get_api_key()
+    auth_token = access_token or _FALLBACK_KEY
+
     return {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "apikey": api_key,
+        "Authorization": f"Bearer {auth_token}",
         "Content-Type": "application/json",
     }
 
 
-async def lees_dossier(dossier_id: str) -> dict:
+async def lees_dossier(dossier_id: str, access_token: str | None = None) -> dict:
     """Lees een dossier uit Supabase (tabel: dossiers).
+
+    Args:
+        dossier_id: UUID van het dossier
+        access_token: Supabase session JWT (optioneel, voor RLS)
 
     Returns:
         dict met dossier data inclusief `invoer` JSONB kolom.
@@ -39,7 +68,7 @@ async def lees_dossier(dossier_id: str) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url, headers=_headers(), params=params)
+        resp = await client.get(url, headers=_headers(access_token), params=params)
         resp.raise_for_status()
 
     rows = resp.json()
@@ -50,8 +79,12 @@ async def lees_dossier(dossier_id: str) -> dict:
     return rows[0]
 
 
-async def lees_aanvraag(aanvraag_id: str) -> dict:
+async def lees_aanvraag(aanvraag_id: str, access_token: str | None = None) -> dict:
     """Lees een aanvraag uit Supabase (tabel: aanvragen).
+
+    Args:
+        aanvraag_id: UUID van de aanvraag
+        access_token: Supabase session JWT (optioneel, voor RLS)
 
     Returns:
         dict met aanvraag data.
@@ -67,7 +100,7 @@ async def lees_aanvraag(aanvraag_id: str) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url, headers=_headers(), params=params)
+        resp = await client.get(url, headers=_headers(access_token), params=params)
         resp.raise_for_status()
 
     rows = resp.json()

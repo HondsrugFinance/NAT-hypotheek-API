@@ -1,15 +1,22 @@
-"""Field mapper: Supabase invoer JSONB → genormaliseerde Python dataclasses.
+"""Field mapper: Supabase dossier/aanvraag → genormaliseerde Python dataclasses.
 
 Dit is het hart van Optie B. Alle veldnaam-variaties (camelCase vs snake_case,
 Lovable vs API, percentage vs decimaal) worden hier afgevangen. Als Lovable
 ooit veldnamen verandert, hoeft alleen dit bestand aangepast te worden.
 
-Bekende invoer JSONB structuur (uit G6 diagnostiek):
-  invoer.klantGegevens: { naamAanvrager, naamPartner, geboortedatumAanvrager, ... }
-  invoer.haalbaarheidsBerekeningen: [{ naam, inkomenKeys: [...] }]
-  invoer.berekeningen: [{ naam, aankoopsomWoning, eigenGeld }]
-  invoer._dossierScenario1: { leningDelen: [{ bedrag, rentepercentage, aflossingsvorm, ... }] }
-  invoer._dossierScenario2: { leningDelen: [...] }
+Supabase tabelstructuur (productie):
+  dossiers tabel:
+    invoer (JSONB):
+      klantGegevens: { naamAanvrager, roepnaamAanvrager, achternaamAanvrager, ... }
+      haalbaarheidsBerekeningen: [{ naam, inkomenGegevens: {...}, leningDelen: [...] }]
+      berekeningen: [{ naam, aankoopsomWoning, eigenGeld, ... }]
+      inkomenGegevens: { hoofdinkomenAanvrager, ... }
+    scenario1 (JSON): { id, naam, leningDelen: [...] }  ← aparte kolom!
+    scenario2 (JSON): { id, naam, leningDelen: [...] }  ← aparte kolom!
+    klant_contact_gegevens (JSONB): { aanvrager: { voornaam, achternaam, email, ... } }
+
+  aanvragen tabel:
+    data (JSON): { hypotheekverstrekker, nhg, ... }  ← genest in data kolom!
 """
 
 import logging
@@ -233,27 +240,38 @@ def _is_overbrugging(raw_aflosvorm: str) -> bool:
     return (raw_aflosvorm or "").lower().strip() in ONGELDIGE_API_AFLOSVORM
 
 
-def _extract_leningdelen(invoer: dict) -> list[NormalizedLeningdeel]:
-    """Extraheer en normaliseer leningdelen uit invoer JSONB.
+def _extract_leningdelen(
+    invoer: dict,
+    scenario_kolom: dict | None = None,
+) -> list[NormalizedLeningdeel]:
+    """Extraheer en normaliseer leningdelen.
 
-    Bekende paden:
-    - invoer._dossierScenario1.leningDelen (Lovable standaard, camelCase)
-    - invoer.scenarios[0].leningdelen
-    - invoer.leningdelen
+    Zoekt in volgorde:
+    1. scenario_kolom (dossier.scenario1 — aparte kolom in Supabase productie)
+    2. invoer._dossierScenario1 (legacy/test data)
+    3. invoer.haalbaarheidsBerekeningen[0].leningDelen
+    4. invoer.leningdelen / invoer.hypotheekDelen (direct)
     """
-    # Probeer meerdere paden
-    dossier_scenario = _get(invoer, "_dossierScenario1", "_dossierScenario") or {}
-    raw_delen = (
-        _get(dossier_scenario, "leningDelen", "leningdelen")
-        or _get(invoer, "leningdelen", "hypotheekDelen", "hypotheek_delen")
-        or []
-    )
+    raw_delen = None
 
-    # Fallback: scenarios array
+    # 1. Scenario kolom (productie Supabase — aparte kolom op dossier tabel)
+    if scenario_kolom and isinstance(scenario_kolom, dict):
+        raw_delen = _get(scenario_kolom, "leningDelen", "leningdelen")
+
+    # 2. _dossierScenario1 in invoer (legacy test data)
     if not raw_delen:
-        scenarios = _get(invoer, "scenarios") or []
-        if scenarios and isinstance(scenarios, list):
-            raw_delen = _get(scenarios[0], "leningdelen", "leningDelen") or []
+        dossier_scenario = _get(invoer, "_dossierScenario1", "_dossierScenario") or {}
+        raw_delen = _get(dossier_scenario, "leningDelen", "leningdelen")
+
+    # 3. haalbaarheidsBerekeningen[0].leningDelen
+    if not raw_delen:
+        haalb_list = _get(invoer, "haalbaarheidsBerekeningen") or []
+        if haalb_list and isinstance(haalb_list, list):
+            raw_delen = _get(haalb_list[0], "leningDelen", "leningdelen")
+
+    # 4. Direct op invoer
+    if not raw_delen:
+        raw_delen = _get(invoer, "leningdelen", "hypotheekDelen", "hypotheek_delen") or []
 
     if not raw_delen:
         logger.warning("Geen leningdelen gevonden in invoer")
@@ -380,24 +398,75 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
     return inkomen
 
 
-def _extract_persoon(invoer: dict, suffix: str = "Aanvrager") -> NormalizedPersoon:
-    """Extraheer persoonsgegevens voor aanvrager of partner."""
+def _extract_persoon(
+    invoer: dict,
+    suffix: str = "Aanvrager",
+    contact_gegevens: dict | None = None,
+) -> NormalizedPersoon:
+    """Extraheer persoonsgegevens voor aanvrager of partner.
+
+    Args:
+        invoer: invoer JSONB uit dossier
+        suffix: "Aanvrager" of "Partner"
+        contact_gegevens: klant_contact_gegevens kolom van dossier (optioneel)
+    """
     klant = _get(invoer, "klantGegevens", "klant") or {}
     suffix_camel = suffix
     suffix_lower = suffix.lower()
 
+    # Contact gegevens uit aparte dossier kolom
+    contact = {}
+    if contact_gegevens and isinstance(contact_gegevens, dict):
+        contact = contact_gegevens.get(suffix_lower) or {}
+
+    # Naam: probeer naamAanvrager, fallback naar roepnaam + tussenvoegsel + achternaam
     naam = str(
         _get(klant, f"naam{suffix_camel}", f"naam_{suffix_lower}")
         or ""
-    )
+    ).strip()
+
+    if not naam:
+        # Compose naam uit onderdelen (productie Supabase data)
+        roepnaam = str(_get(klant, f"roepnaam{suffix_camel}") or
+                       _get(contact, "voornaam") or "").strip()
+        tussenvoegsel = str(_get(klant, f"tussenvoegsel{suffix_camel}") or
+                            _get(contact, "tussenvoegsel") or "").strip()
+        achternaam = str(_get(klant, f"achternaam{suffix_camel}") or
+                         _get(contact, "achternaam") or "").strip()
+        parts = [p for p in [roepnaam, tussenvoegsel, achternaam] if p]
+        naam = " ".join(parts)
+
     geboortedatum = str(
         _get(klant, f"geboortedatum{suffix_camel}", f"geboortedatum_{suffix_lower}")
         or ""
     )
+
+    # Adres: uit klantGegevens of contact_gegevens
     adres = str(_get(klant, f"adres{suffix_camel}", "adres") or "")
+    if not adres and contact:
+        straat = str(_get(contact, "straat") or "")
+        huisnummer = str(_get(contact, "huisnummer") or "")
+        if straat or huisnummer:
+            adres = f"{straat} {huisnummer}".strip()
+
     postcode_plaats = str(_get(klant, f"postcodePlaats{suffix_camel}", "postcodePlaats") or "")
-    telefoon = str(_get(klant, f"telefoon{suffix_camel}", "telefoon") or "")
-    email = str(_get(klant, f"email{suffix_camel}", "email") or "")
+    if not postcode_plaats and contact:
+        postcode = str(_get(contact, "postcode") or "")
+        woonplaats = str(_get(contact, "woonplaats") or "")
+        if postcode or woonplaats:
+            postcode_plaats = f"{postcode} {woonplaats}".strip()
+
+    # Telefoon en email: klantGegevens of contact_gegevens
+    telefoon = str(
+        _get(klant, f"telefoon{suffix_camel}", "telefoon")
+        or _get(contact, "telefoonnummer", "telefoon")
+        or ""
+    )
+    email = str(
+        _get(klant, f"email{suffix_camel}", "email")
+        or _get(contact, "email")
+        or ""
+    )
 
     inkomen = _extract_inkomen(invoer, suffix)
 
@@ -503,6 +572,15 @@ def extract_dossier_data(
 
     klant = _get(invoer, "klantGegevens", "klant") or {}
 
+    # Contact gegevens uit aparte kolom (productie Supabase)
+    contact_gegevens = dossier.get("klant_contact_gegevens")
+    if isinstance(contact_gegevens, str):
+        try:
+            import json
+            contact_gegevens = json.loads(contact_gegevens)
+        except (json.JSONDecodeError, TypeError):
+            contact_gegevens = None
+
     # Alleenstaand?
     alleenstaand_raw = _get(klant, "alleenstaand", "is_alleenstaand")
     if isinstance(alleenstaand_raw, bool):
@@ -511,26 +589,38 @@ def extract_dossier_data(
         alleenstaand = alleenstaand_raw.lower() in ("true", "ja", "yes", "1")
     else:
         # Fallback: check of er partnergegevens zijn
-        alleenstaand = not bool(_get(klant, "naamPartner", "naam_partner"))
+        has_partner_naam = bool(_get(klant, "naamPartner", "naam_partner"))
+        has_partner_parts = bool(
+            _get(klant, "achternaamPartner") or _get(klant, "roepnaamPartner")
+        )
+        alleenstaand = not (has_partner_naam or has_partner_parts)
 
     # Personen
-    aanvrager = _extract_persoon(invoer, "Aanvrager")
+    aanvrager = _extract_persoon(invoer, "Aanvrager", contact_gegevens)
     partner = None
     if not alleenstaand:
-        partner = _extract_persoon(invoer, "Partner")
+        partner = _extract_persoon(invoer, "Partner", contact_gegevens)
 
-    # Leningdelen
-    leningdelen = _extract_leningdelen(invoer)
+    # Leningdelen — scenario1 is aparte kolom op dossier tabel in productie
+    scenario_kolom = dossier.get("scenario1")
+    if isinstance(scenario_kolom, str):
+        try:
+            import json
+            scenario_kolom = json.loads(scenario_kolom)
+        except (json.JSONDecodeError, TypeError):
+            scenario_kolom = None
+    leningdelen = _extract_leningdelen(invoer, scenario_kolom=scenario_kolom)
 
     # Financiering
     financiering = _extract_financiering(invoer)
 
-    # Aanvraag-data kan extra info bevatten
+    # Aanvraag-data: productie Supabase heeft geneste `data` JSON kolom
     if aanvraag:
+        aanvraag_data = aanvraag.get("data") if isinstance(aanvraag.get("data"), dict) else aanvraag
         financiering.hypotheekverstrekker = str(
-            _get(aanvraag, "hypotheekverstrekker", "geldverstrekker") or ""
+            _get(aanvraag_data, "hypotheekverstrekker", "geldverstrekker") or ""
         )
-        nhg_raw = _get(aanvraag, "nhg", "met_nhg")
+        nhg_raw = _get(aanvraag_data, "nhg", "met_nhg")
         if nhg_raw is not None:
             financiering.nhg = bool(nhg_raw)
 

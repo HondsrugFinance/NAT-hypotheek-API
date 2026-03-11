@@ -247,3 +247,305 @@ class TestAlleenstaandExtractie:
         assert len(data.leningdelen) == 1
         assert data.leningdelen[0].werkelijke_rente == pytest.approx(0.045)
         assert data.hypotheek_bedrag == 300000
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Productie Supabase data format (scenario1 als aparte kolom)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Gebaseerd op echte dossiers-export CSV (Bob Kakisina dossier)
+PRODUCTIE_DOSSIER = {
+    "id": "cb86f23a-1cc5-49c0-8e5e-8b88fa4bfcd0",
+    "type": "aankoop",
+    "klant_naam": "Kakisina, Bob",
+    "klant_contact_gegevens": {
+        "aanvrager": {
+            "achternaam": "Kakisina",
+            "email": "bob@example.com",
+            "huisnummer": "145",
+            "postcode": "9406TS",
+            "telefoonnummer": "0614503175",
+            "tussenvoegsel": "",
+            "voornaam": "Bob",
+            "straat": "Hoofdstraat",
+            "woonplaats": "Assen",
+        }
+    },
+    "invoer": {
+        "berekeningen": [
+            {
+                "id": "ber1",
+                "naam": "Berekening 1",
+                "aankoopsomWoning": 475000,
+                "eigenGeld": 0,
+                "nhgToepassen": False,
+                "woningType": "bestaande_bouw",
+            },
+        ],
+        "haalbaarheidsBerekeningen": [
+            {
+                "id": "hb1",
+                "naam": "Huidige situatie",
+                "inkomenGegevens": {
+                    "hoofdinkomenAanvrager": 55000,
+                    "hoofdinkomenPartner": 35000,
+                },
+                "leningDelen": [
+                    {
+                        "aflossingsvorm": "annuiteit",
+                        "bedrag": 0,
+                        "bedragBox3": 0,
+                        "rentepercentage": 5,
+                        "origineleLooptijd": 360,
+                        "restantLooptijd": 360,
+                        "rentevastePeriode": 120,
+                    },
+                ],
+            },
+        ],
+        "inkomenGegevens": {
+            "hoofdinkomenAanvrager": 0,
+            "hoofdinkomenPartner": 0,
+        },
+        "klantGegevens": {
+            "achternaamAanvrager": "Kakisina",
+            "achternaamPartner": "Kakisina",
+            "alleenstaand": False,
+            "geboortedatumAanvrager": "1985-03-15",
+            "geboortedatumPartner": "1987-06-20",
+            "naamAanvrager": "",
+            "naamPartner": "",
+            "roepnaamAanvrager": "Bob",
+            "roepnaamPartner": "Lisa",
+            "tussenvoegselAanvrager": "",
+            "tussenvoegselPartner": "",
+        },
+    },
+    # scenario1 en scenario2 zijn APARTE kolommen (niet in invoer!)
+    "scenario1": {
+        "id": "sc1",
+        "naam": "Berekening 1",
+        "leningDelen": [
+            {
+                "aflossingsvorm": "annuiteit",
+                "bedrag": 181250,
+                "bedragBox3": 0,
+                "rentepercentage": 3.83,
+                "origineleLooptijd": 360,
+                "restantLooptijd": 360,
+                "rentevastePeriode": 120,
+            },
+            {
+                "aflossingsvorm": "aflossingsvrij",
+                "bedrag": 308750,
+                "bedragBox3": 0,
+                "rentepercentage": 4.3,
+                "origineleLooptijd": 360,
+                "restantLooptijd": 24,
+                "rentevastePeriode": 1,
+            },
+        ],
+    },
+    "scenario2": {
+        "id": "sc2",
+        "naam": "Berekening 2",
+        "leningDelen": [
+            {
+                "aflossingsvorm": "annuiteit",
+                "bedrag": 181250,
+                "bedragBox3": 0,
+                "rentepercentage": 3.83,
+                "origineleLooptijd": 360,
+                "restantLooptijd": 360,
+                "rentevastePeriode": 120,
+            },
+        ],
+    },
+}
+
+# Aanvraag met geneste data kolom (productie format)
+PRODUCTIE_AANVRAAG = {
+    "id": "aanvraag-prod-1",
+    "dossier_id": "cb86f23a-1cc5-49c0-8e5e-8b88fa4bfcd0",
+    "naam": "Aanvraag 1",
+    "data": {
+        "hypotheekverstrekker": "ABN AMRO",
+        "nhg": False,
+    },
+}
+
+
+class TestProductieDataFormat:
+    """Test met echte Supabase productie data structuur."""
+
+    def test_leningdelen_from_scenario1_column(self):
+        """scenario1 als aparte kolom wordt correct gelezen."""
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert len(data.leningdelen) == 2
+        assert data.leningdelen[0].bedrag_box1 == 181250
+        assert data.leningdelen[1].bedrag_box1 == 308750
+
+    def test_leningdelen_rente_from_scenario1(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.leningdelen[0].werkelijke_rente == pytest.approx(0.0383)
+        assert data.leningdelen[1].werkelijke_rente == pytest.approx(0.043)
+
+    def test_leningdelen_aflosvorm_from_scenario1(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.leningdelen[0].aflos_type == "Annuïteit"
+        assert data.leningdelen[1].aflos_type == "Aflosvrij"
+
+    def test_hypotheek_bedrag(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.hypotheek_bedrag == pytest.approx(490000)  # 181250 + 308750
+
+    def test_naam_composed_from_parts(self):
+        """naamAanvrager is leeg → samengesteld uit roepnaam + achternaam."""
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.naam == "Bob Kakisina"
+
+    def test_partner_naam_composed(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.partner is not None
+        assert data.partner.naam == "Lisa Kakisina"
+
+    def test_alleenstaand_false_with_partner_parts(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.alleenstaand is False
+
+    def test_aanvraag_data_nested(self):
+        """hypotheekverstrekker zit in aanvraag.data (genest)."""
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.financiering.hypotheekverstrekker == "ABN AMRO"
+        assert data.financiering.nhg is False
+
+    def test_contact_gegevens_email(self):
+        """Email uit klant_contact_gegevens kolom."""
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.email == "bob@example.com"
+
+    def test_contact_gegevens_telefoon(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.telefoon == "0614503175"
+
+    def test_contact_gegevens_adres(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.adres == "Hoofdstraat 145"
+
+    def test_contact_gegevens_postcode_plaats(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.postcode_plaats == "9406TS Assen"
+
+    def test_inkomen_from_haalbaarheidsberekeningen(self):
+        """Inkomen uit haalbaarheidsBerekeningen (niet uit top-level inkomenGegevens)."""
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.inkomen_aanvrager_huidig == 55000
+        assert data.inkomen_partner_huidig == 35000
+
+    def test_koopsom(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.financiering.koopsom == 475000
+
+    def test_geboortedatum(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.aanvrager.geboortedatum == "1985-03-15"
+        assert data.partner.geboortedatum == "1987-06-20"
+
+
+class TestProductieAlleenstaand:
+    """Test productie format met alleenstaand dossier."""
+
+    def test_alleenstaand_with_empty_partner_fields(self):
+        """Alleenstaand dossier waar achternaamPartner leeg is."""
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "achternaamAanvrager": "Hardholt",
+                    "alleenstaand": True,
+                    "geboortedatumAanvrager": "1956-06-05",
+                    "naamAanvrager": "Elly Hardholt",
+                    "roepnaamAanvrager": "Elly",
+                    "achternaamPartner": "",
+                    "roepnaamPartner": "",
+                },
+                "berekeningen": [{"aankoopsomWoning": 250000}],
+            },
+            "scenario1": {
+                "leningDelen": [
+                    {
+                        "aflossingsvorm": "aflossingsvrij",
+                        "bedrag": 135000,
+                        "bedragBox3": 0,
+                        "rentepercentage": 5,
+                        "origineleLooptijd": 360,
+                        "restantLooptijd": 360,
+                        "rentevastePeriode": 120,
+                    },
+                ],
+            },
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.alleenstaand is True
+        assert data.partner is None
+        assert data.aanvrager.naam == "Elly Hardholt"
+        assert len(data.leningdelen) == 1
+        assert data.leningdelen[0].bedrag_box1 == 135000
+
+
+class TestNaamTussenvoegsel:
+    """Test naam compositie met tussenvoegsel."""
+
+    def test_naam_with_tussenvoegsel(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "",
+                    "roepnaamAanvrager": "Jan",
+                    "tussenvoegselAanvrager": "van der",
+                    "achternaamAanvrager": "Berg",
+                    "alleenstaand": True,
+                },
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 200000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.aanvrager.naam == "Jan van der Berg"
+
+
+class TestScenarioKolomPriority:
+    """Test dat scenario1 kolom prioriteit heeft over invoer._dossierScenario1."""
+
+    def test_scenario_kolom_takes_priority(self):
+        """Als zowel scenario1 kolom als _dossierScenario1 bestaan,
+        scenario1 kolom wint."""
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "Test",
+                    "alleenstaand": True,
+                },
+                "_dossierScenario1": {
+                    "leningDelen": [
+                        {"bedrag": 100000, "aflossingsvorm": "annuiteit",
+                         "rentepercentage": 5, "origineleLooptijd": 360,
+                         "restantLooptijd": 360, "rentevastePeriode": 120},
+                    ],
+                },
+            },
+            "scenario1": {
+                "leningDelen": [
+                    {"bedrag": 250000, "aflossingsvorm": "lineair",
+                     "rentepercentage": 4, "origineleLooptijd": 360,
+                     "restantLooptijd": 360, "rentevastePeriode": 120},
+                ],
+            },
+        }
+        data = extract_dossier_data(dossier, {})
+        # scenario1 kolom (250k lineair) moet winnen, niet _dossierScenario1 (100k)
+        assert len(data.leningdelen) == 1
+        assert data.leningdelen[0].bedrag_box1 == 250000
+        assert data.leningdelen[0].aflos_type == "Lineair"
