@@ -6,7 +6,7 @@ Gebruikt invoer JSONB snapshots gebaseerd op de G6 diagnostiek output.
 import pytest
 from adviesrapport_v2.field_mapper import (
     extract_dossier_data, _normalize_rente, _map_aflosvorm,
-    _is_overbrugging, _extract_leningdelen, _get,
+    _is_overbrugging, _extract_leningdelen, _get, _map_woning_type,
 )
 
 
@@ -549,3 +549,168 @@ class TestScenarioKolomPriority:
         assert len(data.leningdelen) == 1
         assert data.leningdelen[0].bedrag_box1 == 250000
         assert data.leningdelen[0].aflos_type == "Lineair"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Fix 1-5: Nieuwe extracties
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestBurgerlijkeStaat:
+    """Fix 1: Burgerlijke staat afleiden uit alleenstaand flag."""
+
+    def test_stel_gehuwd(self):
+        data = extract_dossier_data(DOSSIER_SNAPSHOT, AANVRAAG_SNAPSHOT)
+        assert data.burgerlijke_staat == "Gehuwd"
+
+    def test_alleenstaand(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "Jan",
+                    "alleenstaand": True,
+                },
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 200000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.burgerlijke_staat == "Alleenstaand"
+
+    def test_explicit_value_override(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "Jan",
+                    "naamPartner": "Piet",
+                    "alleenstaand": False,
+                    "burgerlijkeStaat": "Geregistreerd partnerschap",
+                },
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 200000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.burgerlijke_staat == "Geregistreerd partnerschap"
+
+
+class TestHuwelijkseVoorwaarden:
+    """Fix 2: Huwelijkse voorwaarden extractie."""
+
+    def test_empty_when_not_present(self):
+        data = extract_dossier_data(DOSSIER_SNAPSHOT, AANVRAAG_SNAPSHOT)
+        assert data.huwelijkse_voorwaarden == ""
+
+    def test_extracted_when_present(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "Jan",
+                    "naamPartner": "Piet",
+                    "alleenstaand": False,
+                    "huwelijkseVoorwaarden": "Koude uitsluiting",
+                },
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 200000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.huwelijkse_voorwaarden == "Koude uitsluiting"
+
+
+class TestKinderen:
+    """Fix 3: Kinderen extractie."""
+
+    def test_no_kinderen(self):
+        data = extract_dossier_data(DOSSIER_SNAPSHOT, AANVRAAG_SNAPSHOT)
+        assert data.kinderen == []
+        assert data.heeft_kind_onder_18 is False
+
+    def test_kinderen_as_dicts(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {
+                    "naamAanvrager": "Jan",
+                    "alleenstaand": True,
+                    "kinderen": [
+                        {"naam": "Emma", "geboortedatum": "2015-06-01"},
+                        {"naam": "Lucas", "geboortedatum": "2020-03-15"},
+                    ],
+                },
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 200000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert len(data.kinderen) == 2
+        assert "Emma" in data.kinderen[0]
+        assert "Lucas" in data.kinderen[1]
+        assert data.heeft_kind_onder_18 is True
+        assert data.geboortedatum_jongste_kind == "2020-03-15"
+
+
+class TestWoningType:
+    """Fix 4: Type woning extractie."""
+
+    def test_default_bestaande_bouw(self):
+        data = extract_dossier_data(DOSSIER_SNAPSHOT, AANVRAAG_SNAPSHOT)
+        assert data.financiering.type_woning == "Bestaande bouw"
+
+    def test_bestaande_bouw_from_berekeningen(self):
+        data = extract_dossier_data(PRODUCTIE_DOSSIER, PRODUCTIE_AANVRAAG)
+        assert data.financiering.type_woning == "Bestaande bouw"
+
+    def test_nieuwbouw(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {"naamAanvrager": "Jan", "alleenstaand": True},
+                "berekeningen": [{"aankoopsomWoning": 400000, "woningType": "nieuwbouw"}],
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 350000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.financiering.type_woning == "Nieuwbouw"
+
+    def test_map_woning_type_helper(self):
+        assert _map_woning_type("bestaande_bouw") == "Bestaande bouw"
+        assert _map_woning_type("nieuwbouw") == "Nieuwbouw"
+        assert _map_woning_type("") == "Bestaande bouw"
+        assert _map_woning_type("onbekend") == "Bestaande bouw"
+
+
+class TestKostenKoper:
+    """Fix 5: Kosten koper extractie."""
+
+    def test_default_zero(self):
+        data = extract_dossier_data(DOSSIER_SNAPSHOT, AANVRAAG_SNAPSHOT)
+        assert data.financiering.kosten_koper == 0
+
+    def test_extracted_from_berekeningen(self):
+        dossier = {
+            "invoer": {
+                "klantGegevens": {"naamAanvrager": "Jan", "alleenstaand": True},
+                "berekeningen": [{"aankoopsomWoning": 400000, "kostenKoper": 15000}],
+            },
+            "scenario1": {"leningDelen": [
+                {"bedrag": 350000, "aflossingsvorm": "annuiteit",
+                 "rentepercentage": 4, "origineleLooptijd": 360,
+                 "restantLooptijd": 360, "rentevastePeriode": 120},
+            ]},
+        }
+        data = extract_dossier_data(dossier, {})
+        assert data.financiering.kosten_koper == 15000

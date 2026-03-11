@@ -40,25 +40,38 @@ def build_retirement_section(
             "te nemen in uw financiële planning."
         )
 
-    # Columns voor stel, rows voor alleenstaand
+    # Fix 9: Pensioen breakdown — toon AOW/pensioen uitsplitsing per persoon
+    # Haal AOW en pensioen apart uit de NormalizedInkomen als beschikbaar
+    aow_aanvrager = data.aanvrager.inkomen.aow_uitkering
+    pensioen_aanvrager = data.aanvrager.inkomen.pensioen
+    aow_partner = data.partner.inkomen.aow_uitkering if data.partner else 0
+    pensioen_partner = data.partner.inkomen.pensioen if data.partner else 0
+
     if data.alleenstaand:
         # Alleenstaand: rows met inkomen na AOW
         rows = []
         for sc in aow_scenarios:
             naam = sc.get("naam", "AOW")
+            ink_totaal = sc.get("inkomen_aanvrager", 0) + sc.get("inkomen_partner", 0)
             rows.append({
-                "label": f"Inkomen na {naam}",
-                "value": format_bedrag(sc.get("inkomen_aanvrager", 0) + sc.get("inkomen_partner", 0)),
+                "label": f"Totaal inkomen na {naam}",
+                "value": format_bedrag(ink_totaal),
                 "bold": True,
             })
-            if sc.get("inkomen_aanvrager", 0) > 0:
+            # Breakdown: AOW en pensioen apart als beschikbaar
+            if aow_aanvrager > 0:
+                rows.append({"label": "AOW-uitkering", "value": format_bedrag(aow_aanvrager), "sub": True})
+            if pensioen_aanvrager > 0:
+                rows.append({"label": "Pensioen", "value": format_bedrag(pensioen_aanvrager), "sub": True})
+            if aow_aanvrager == 0 and pensioen_aanvrager == 0 and sc.get("inkomen_aanvrager", 0) > 0:
                 rows.append({
                     "label": f"Inkomen {data.aanvrager.naam or 'aanvrager'}",
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
                     "sub": True,
                 })
+            rows.append({"label": "", "value": ""})  # Spacer
             rows.append({
-                "label": f"Maximale hypotheek na AOW",
+                "label": "Maximale hypotheek na AOW",
                 "value": format_bedrag(sc.get("max_hypotheek_annuitair", 0)),
             })
 
@@ -76,23 +89,32 @@ def build_retirement_section(
             naam = sc.get("naam", "AOW")
             col_rows = []
 
-            # Inkomens-breakdown
             ink_aanvrager = sc.get("inkomen_aanvrager", 0)
             ink_partner = sc.get("inkomen_partner", 0)
             totaal = ink_aanvrager + ink_partner
 
+            # Per-persoon breakdown met AOW/pensioen uitsplitsing
             if ink_aanvrager > 0:
                 col_rows.append({
                     "label": f"Inkomen {data.aanvrager.naam}",
                     "value": format_bedrag(ink_aanvrager),
                     "sub": True,
                 })
-            if ink_partner > 0:
+                if aow_aanvrager > 0:
+                    col_rows.append({"label": "  AOW-uitkering", "value": format_bedrag(aow_aanvrager), "sub": True})
+                if pensioen_aanvrager > 0:
+                    col_rows.append({"label": "  Pensioen", "value": format_bedrag(pensioen_aanvrager), "sub": True})
+            if ink_partner > 0 and data.partner:
                 col_rows.append({
                     "label": f"Inkomen {data.partner.naam}",
                     "value": format_bedrag(ink_partner),
                     "sub": True,
                 })
+                if aow_partner > 0:
+                    col_rows.append({"label": "  AOW-uitkering", "value": format_bedrag(aow_partner), "sub": True})
+                if pensioen_partner > 0:
+                    col_rows.append({"label": "  Pensioen", "value": format_bedrag(pensioen_partner), "sub": True})
+
             col_rows.append({
                 "label": "Totaal inkomen",
                 "value": format_bedrag(totaal),

@@ -68,22 +68,40 @@ def build_summary_section(
     ]
 
     # Narratives
+    adres_tekst = data.financiering.adres or "de aangekochte woning"
     if data.alleenstaand:
-        intro = (
-            f"U wilt een hypotheek afsluiten voor {data.financiering.adres or 'de aangekochte woning'}."
-        )
+        intro = f"U wilt een hypotheek afsluiten voor {adres_tekst}."
     else:
         intro = (
             f"U wilt samen een hypotheek afsluiten voor de aankoop van een "
-            f"woning aan {data.financiering.adres or 'het opgegeven adres'}."
+            f"woning aan {adres_tekst}."
         )
 
-    narratives = [
-        intro,
-        "Op basis van uw financiële situatie, uw wensen en de geldende "
-        "leennormen hebben wij beoordeeld dat de geadviseerde financiering "
-        "passend is binnen uw situatie.",
-    ]
+    # Advies en onderbouwing — specifieke advies-paragraaf
+    verstrekker = hypotheekverstrekker or fin.hypotheekverstrekker or "de geldverstrekker"
+    nhg_tekst = " met Nationale Hypotheek Garantie (NHG)" if fin.nhg else ""
+
+    advies = (
+        f"Wij adviseren een hypotheek van {format_bedrag(hypotheek)} bij {verstrekker}, "
+        f"met {hypotheekvorm_tekst.lower()} als aflossingsvorm en een rentevaste periode "
+        f"van {rvp_jaren} jaar{nhg_tekst}. "
+        f"De bruto maandlast bedraagt {format_bedrag(bruto_maandlast)} en de netto maandlast "
+        f"{format_bedrag(netto_maandlast)}."
+    )
+
+    verantwoord = (
+        f"Op basis van de geldende leennormen is een verantwoord hypotheekbedrag van "
+        f"{format_bedrag(max_hypotheek)} berekend. "
+    )
+    if hypotheek <= max_hypotheek:
+        verantwoord += "Het geadviseerde hypotheekbedrag valt binnen deze norm."
+    else:
+        verantwoord += (
+            f"Het geadviseerde hypotheekbedrag overschrijdt deze norm met "
+            f"{format_bedrag(hypotheek - max_hypotheek)}."
+        )
+
+    narratives = [intro, advies, verantwoord]
     if fin.nhg:
         narratives.append("De hypotheek wordt aangevraagd met Nationale Hypotheek Garantie.")
 

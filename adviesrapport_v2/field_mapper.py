@@ -240,6 +240,23 @@ def _is_overbrugging(raw_aflosvorm: str) -> bool:
     return (raw_aflosvorm or "").lower().strip() in ONGELDIGE_API_AFLOSVORM
 
 
+# Woning type mapping
+WONING_TYPE_MAPPING = {
+    "bestaande_bouw": "Bestaande bouw",
+    "bestaandebouw": "Bestaande bouw",
+    "bestaande bouw": "Bestaande bouw",
+    "nieuwbouw": "Nieuwbouw",
+    "nieuw_bouw": "Nieuwbouw",
+}
+
+
+def _map_woning_type(raw: str) -> str:
+    """Map woning type naar display-naam. 'bestaande_bouw' → 'Bestaande bouw'."""
+    if not raw:
+        return "Bestaande bouw"
+    return WONING_TYPE_MAPPING.get(raw, "Bestaande bouw")
+
+
 def _extract_leningdelen(
     invoer: dict,
     scenario_kolom: dict | None = None,
@@ -543,12 +560,29 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
         or ""
     )
 
+    # Fix 4: Type woning — lees uit berekeningen[0].woningType
+    woning_type_raw = str(
+        _get(ber, "woningType", "woning_type", "typeWoning")
+        or _get(fin, "woningType", "typeWoning")
+        or _get(invoer, "woningType")
+        or ""
+    ).lower().strip()
+    type_woning = _map_woning_type(woning_type_raw)
+
+    # Fix 5: Kosten koper — lees uit berekeningen of bereken
+    kosten_koper = _to_float(
+        _get(ber, "kostenKoper", "kosten_koper")
+        or _get(fin, "kostenKoper", "kosten_koper")
+        or _get(invoer, "kostenKoper", "kosten_koper")
+    )
+
     return NormalizedFinanciering(
         koopsom=koopsom,
-        kosten_koper=0,  # Wordt berekend door orchestrator
+        kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
         woningwaarde=woningwaarde,
         energielabel=energielabel,
+        type_woning=type_woning,
         adres=adres,
     )
 
@@ -643,10 +677,56 @@ def extract_dossier_data(
         or _get(invoer, "jaarlast_overige_kredieten", "overigeKredieten")
     )
 
+    # Fix 1: Burgerlijke staat — afleiden uit alleenstaand flag
+    burgerlijke_staat = "Alleenstaand" if alleenstaand else "Gehuwd"
+    # Override met expliciete waarde als beschikbaar
+    bs_raw = _get(klant, "burgerlijkeStaat", "burgerlijke_staat", "burgelijkeStaat")
+    if bs_raw and isinstance(bs_raw, str) and bs_raw.strip():
+        burgerlijke_staat = bs_raw.strip()
+
+    # Fix 2: Huwelijkse voorwaarden
+    huwelijkse_voorwaarden = str(
+        _get(klant, "huwelijkseVoorwaarden", "huwelijkse_voorwaarden",
+             "huwelijksVoorwaarden")
+        or ""
+    ).strip()
+
+    # Fix 3: Kinderen
+    kinderen_raw = _get(klant, "kinderen") or []
+    kinderen = []
+    heeft_kind_onder_18 = False
+    geboortedatum_jongste_kind = ""
+
+    if isinstance(kinderen_raw, list):
+        for kind in kinderen_raw:
+            if isinstance(kind, dict):
+                naam = str(_get(kind, "naam", "voornaam") or "").strip()
+                geb = str(_get(kind, "geboortedatum") or "").strip()
+                if naam or geb:
+                    kinderen.append(f"{naam} ({geb})" if geb else naam)
+                    if geb:
+                        try:
+                            from datetime import date as dt_date
+                            geb_date = dt_date.fromisoformat(geb)
+                            leeftijd = (dt_date.today() - geb_date).days / 365.25
+                            if leeftijd < 18:
+                                heeft_kind_onder_18 = True
+                            if not geboortedatum_jongste_kind or geb > geboortedatum_jongste_kind:
+                                geboortedatum_jongste_kind = geb
+                        except (ValueError, TypeError):
+                            pass
+            elif isinstance(kind, str) and kind.strip():
+                kinderen.append(kind.strip())
+
     data = NormalizedDossierData(
         aanvrager=aanvrager,
         partner=partner,
         alleenstaand=alleenstaand,
+        burgerlijke_staat=burgerlijke_staat,
+        huwelijkse_voorwaarden=huwelijkse_voorwaarden,
+        kinderen=kinderen,
+        heeft_kind_onder_18=heeft_kind_onder_18,
+        geboortedatum_jongste_kind=geboortedatum_jongste_kind,
         financiering=financiering,
         leningdelen=leningdelen,
         limieten_bkr=limieten_bkr,

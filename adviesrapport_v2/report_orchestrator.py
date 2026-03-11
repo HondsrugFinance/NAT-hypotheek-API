@@ -335,6 +335,21 @@ def _safe_call(label: str, func, **kwargs):
         return None
 
 
+def _bereken_leeftijd(geboortedatum: str) -> int:
+    """Bereken leeftijd uit geboortedatum string (YYYY-MM-DD). Fallback: 35."""
+    if not geboortedatum:
+        return 35
+    try:
+        geb = date.fromisoformat(geboortedatum)
+        vandaag = date.today()
+        leeftijd = vandaag.year - geb.year
+        if (vandaag.month, vandaag.day) < (geb.month, geb.day):
+            leeftijd -= 1
+        return max(18, min(120, leeftijd))
+    except (ValueError, TypeError):
+        return 35
+
+
 def _bereken_max_hypotheek(data: NormalizedDossierData) -> float:
     """Bereken maximale hypotheek via calculator_final."""
     hypotheek_delen = [ld.to_api_dict() for ld in data.leningdelen_voor_api]
@@ -443,18 +458,20 @@ def _bereken_maandlasten(data: NormalizedDossierData) -> tuple[float, float]:
         if not loan_parts:
             return 0, 0
 
-        # Partners
+        # Partners — bereken leeftijd uit geboortedatum
+        age_aanvrager = _bereken_leeftijd(data.aanvrager.geboortedatum)
         partners = [Partner(
             id="aanvrager",
             taxable_income=data.inkomen_aanvrager_huidig,
-            age=35,  # Placeholder — wordt berekend uit geboortedatum
+            age=age_aanvrager,
             is_aow=False,
         )]
         if data.partner:
+            age_partner = _bereken_leeftijd(data.partner.geboortedatum)
             partners.append(Partner(
                 id="partner",
                 taxable_income=data.inkomen_partner_huidig,
-                age=35,
+                age=age_partner,
                 is_aow=False,
             ))
 
