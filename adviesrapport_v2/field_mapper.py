@@ -215,6 +215,7 @@ class NormalizedFinanciering:
     kosten_koper: float = 0
     eigen_middelen: float = 0
     woningwaarde: float = 0
+    woz_waarde: float = 0
     energielabel: str = "Geen (geldig) Label"
     type_woning: str = "Bestaande bouw"
     adres: str = ""
@@ -612,6 +613,9 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     # Woningwaarde uit onderpand (marktwaarde)
     woningwaarde = _to_float(onderpand.get("marktwaarde")) or koopsom
 
+    # WOZ-waarde uit onderpand
+    woz_waarde = _to_float(onderpand.get("wozWaarde") or onderpand.get("woz_waarde"))
+
     # Energielabel uit onderpand
     energielabel = str(onderpand.get("energielabel") or "Geen (geldig) Label")
 
@@ -644,6 +648,7 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
         woningwaarde=woningwaarde,
+        woz_waarde=woz_waarde,
         energielabel=energielabel,
         type_woning=type_woning,
         adres=adres,
@@ -1332,6 +1337,12 @@ def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
         or _get(invoer, "woningwaarde")
     ) or koopsom
 
+    woz_waarde = _to_float(
+        _get(haalb_onderpand, "wozWaarde", "woz_waarde")
+        or _get(ber, "wozWaarde", "woz_waarde")
+        or _get(invoer, "wozWaarde", "woz_waarde")
+    )
+
     energielabel = str(
         _get(haalb_onderpand, "energielabel")
         or _get(ber, "energielabel")
@@ -1373,6 +1384,7 @@ def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
         kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
         woningwaarde=woningwaarde,
+        woz_waarde=woz_waarde,
         energielabel=energielabel,
         type_woning=type_woning,
         adres=adres,

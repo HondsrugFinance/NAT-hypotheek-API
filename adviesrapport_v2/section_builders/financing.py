@@ -20,6 +20,8 @@ def build_financing_section(
         onderpand_rows.append({"label": "Adres", "value": fin.adres})
     onderpand_rows.append({"label": "Type woning", "value": fin.type_woning})
     onderpand_rows.append({"label": "Marktwaarde", "value": format_bedrag(fin.woningwaarde)})
+    if fin.woz_waarde > 0:
+        onderpand_rows.append({"label": "WOZ-waarde", "value": format_bedrag(fin.woz_waarde)})
     onderpand_rows.append({"label": "Energielabel", "value": fin.energielabel})
     subsections.append({"subtitle": "Onderpand", "rows": onderpand_rows})
 
