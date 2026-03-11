@@ -1,7 +1,7 @@
-"""Huidige situatie sectie — persoonsgegevens, inkomen, vermogen."""
+"""Huidige situatie sectie — persoonsgegevens, inkomen, vermogen, woningen, etc."""
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
-from adviesrapport_v2.formatters import format_bedrag, format_datum
+from adviesrapport_v2.formatters import format_bedrag, format_datum, format_percentage
 
 
 def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
@@ -126,6 +126,33 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         gezin_sub["list_label"] = "Kinderen"
     subsections.append(gezin_sub)
 
+    # --- Werkgever ---
+    if data.werkgever_aanvrager or data.werkgever_partner:
+        if data.alleenstaand and data.werkgever_aanvrager:
+            wg = data.werkgever_aanvrager
+            wg_rows = [{"label": "Werkgever", "value": wg.naam}]
+            if wg.dienstverband:
+                wg_rows.append({"label": "Dienstverband", "value": wg.dienstverband})
+            if wg.datum_in_dienst:
+                wg_rows.append({"label": "In dienst sinds", "value": format_datum(wg.datum_in_dienst)})
+            subsections.append({"subtitle": "Werkgever", "rows": wg_rows})
+        elif not data.alleenstaand:
+            cols = []
+            for naam, wg in [
+                (data.aanvrager.naam, data.werkgever_aanvrager),
+                (data.partner.naam if data.partner else "Partner", data.werkgever_partner),
+            ]:
+                if wg:
+                    wg_rows = [{"label": "Werkgever", "value": wg.naam}]
+                    if wg.dienstverband:
+                        wg_rows.append({"label": "Dienstverband", "value": wg.dienstverband})
+                    if wg.datum_in_dienst:
+                        wg_rows.append({"label": "In dienst sinds", "value": format_datum(wg.datum_in_dienst)})
+                    cols.append({"title": naam, "rows": wg_rows})
+                else:
+                    cols.append({"title": naam, "rows": [{"label": "Werkgever", "value": "-"}]})
+            subsections.append({"subtitle": "Werkgever", "columns": cols})
+
     # --- Inkomen ---
     if data.alleenstaand:
         subsections.append({
@@ -157,8 +184,113 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
                 ],
             })
 
+    # --- Bestaande woning ---
+    for i, woning in enumerate(data.bestaande_woningen):
+        label = "Bestaande woning" if len(data.bestaande_woningen) == 1 else f"Bestaande woning {i+1}"
+        w_rows = []
+        if woning.adres:
+            w_rows.append({"label": "Adres", "value": woning.adres})
+        if woning.postcode_plaats:
+            w_rows.append({"label": "Postcode en plaats", "value": woning.postcode_plaats})
+        if woning.type_woning:
+            w_rows.append({"label": "Type woning", "value": woning.type_woning})
+        if woning.marktwaarde > 0:
+            w_rows.append({"label": "Marktwaarde", "value": format_bedrag(woning.marktwaarde)})
+        if woning.woz_waarde > 0:
+            w_rows.append({"label": "WOZ-waarde", "value": format_bedrag(woning.woz_waarde)})
+        if woning.energielabel:
+            w_rows.append({"label": "Energielabel", "value": woning.energielabel})
+        if woning.status:
+            w_rows.append({"label": "Status", "value": woning.status.replace("_", " ").capitalize()})
+        w_rows.append({"label": "Erfpacht", "value": "Ja" if woning.erfpacht else "Nee"})
+        if w_rows:
+            subsections.append({"subtitle": label, "rows": w_rows})
+
+    # --- Bestaande hypotheek ---
+    for i, hyp in enumerate(data.bestaande_hypotheken):
+        label = "Bestaande hypotheek" if len(data.bestaande_hypotheken) == 1 else f"Bestaande hypotheek {i+1}"
+        h_rows = []
+        if hyp.verstrekker:
+            h_rows.append({"label": "Hypotheekverstrekker", "value": hyp.verstrekker})
+        h_rows.append({"label": "NHG", "value": "Ja" if hyp.nhg else "Nee"})
+        if hyp.hoofdsom > 0:
+            h_rows.append({"label": "Oorspronkelijke hoofdsom", "value": format_bedrag(hyp.hoofdsom)})
+        if hyp.restschuld > 0:
+            h_rows.append({"label": "Huidige restschuld", "value": format_bedrag(hyp.restschuld)})
+
+        sub = {"subtitle": label, "rows": h_rows}
+
+        # Leningdelen tabel
+        if hyp.leningdelen:
+            ld_rows = []
+            for ld in hyp.leningdelen:
+                bedrag = format_bedrag(ld.get("bedrag", 0))
+                rente = f"{ld.get('rente', 0):.2f}%".replace(".", ",") if ld.get("rente") else "-"
+                aflosvorm = ld.get("aflosvorm", "-")
+                ld_rows.append([bedrag, rente, aflosvorm])
+            sub["tables"] = [{
+                "headers": ["Bedrag", "Rente", "Aflosvorm"],
+                "rows": ld_rows,
+            }]
+
+        subsections.append(sub)
+
     # --- Vermogen ---
-    # TODO: vermogensgegevens worden later toegevoegd als Supabase schema bekend is
+    if data.vermogen:
+        v_rows = []
+        totaal = 0
+        for item in data.vermogen:
+            label_parts = [item.type_display]
+            if item.maatschappij:
+                label_parts.append(f"({item.maatschappij})")
+            v_rows.append([" ".join(label_parts), format_bedrag(item.saldo)])
+            totaal += item.saldo
+
+        subsections.append({
+            "subtitle": "Vermogen",
+            "tables": [{
+                "headers": ["Omschrijving", "Bedrag"],
+                "rows": v_rows,
+                "totals": ["Totaal", format_bedrag(totaal)],
+            }],
+        })
+
+    # --- Verplichtingen ---
+    if data.verplichtingen_details:
+        v_rows = []
+        for vpl in data.verplichtingen_details:
+            omschr = vpl["type"]
+            if vpl.get("omschrijving"):
+                omschr = f"{vpl['type']} ({vpl['omschrijving']})"
+            maandbedrag = format_bedrag(vpl["maandbedrag"]) + " p/m" if vpl["maandbedrag"] > 0 else "-"
+            saldo = format_bedrag(vpl["saldo"]) if vpl["saldo"] > 0 else "-"
+            v_rows.append([omschr, saldo, maandbedrag])
+
+        subsections.append({
+            "subtitle": "Verplichtingen",
+            "tables": [{
+                "headers": ["Omschrijving", "Saldo", "Maandlast"],
+                "rows": v_rows,
+            }],
+        })
+
+    # --- Voorzieningen / Verzekeringen ---
+    if data.verzekeringen:
+        v_rows = []
+        for verz in data.verzekeringen:
+            aanbieder = verz.aanbieder or "-"
+            type_display = verz.type_display
+            verzekerde = verz.verzekerde.replace("_", " ").capitalize() if verz.verzekerde else "-"
+            dekking = format_bedrag(verz.dekking) if verz.dekking > 0 else "-"
+            v_rows.append([aanbieder, type_display, verzekerde, dekking])
+
+        subsections.append({
+            "subtitle": "Voorzieningen",
+            "tables": [{
+                "headers": ["Aanbieder", "Type", "Verzekerde", "Uitkering"],
+                "rows": v_rows,
+            }],
+        })
 
     return {
         "id": "current-situation",

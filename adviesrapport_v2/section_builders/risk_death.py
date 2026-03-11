@@ -1,6 +1,6 @@
 """Overlijden sectie — alleen bij stel."""
 
-from adviesrapport_v2.field_mapper import NormalizedDossierData
+from adviesrapport_v2.field_mapper import NormalizedDossierData, NormalizedVerzekering
 from adviesrapport_v2.formatters import format_bedrag
 
 
@@ -102,12 +102,32 @@ def build_risk_death_section(
         "columns": columns,
     }
 
+    # Bestaande ORV dekking vermelden
+    orv_list = [v for v in (data.verzekeringen or []) if "overlijden" in v.type.lower()]
+
     if tekorten:
         grootste = max(tekorten, key=lambda x: x[1])
+        if orv_list:
+            orv_tekst = ", ".join(
+                f"{v.aanbieder} ({format_bedrag(v.dekking)})" for v in orv_list
+            )
+            section["advisor_note"] = (
+                f"Bij {grootste[0].lower()} ontstaat een tekort van "
+                f"{format_bedrag(grootste[1])}. U heeft reeds een ORV afgesloten "
+                f"bij {orv_tekst}. Controleer of de dekking voldoende is."
+            )
+        else:
+            section["advisor_note"] = (
+                f"Bij {grootste[0].lower()} ontstaat een tekort van "
+                f"{format_bedrag(grootste[1])}. Wij adviseren een "
+                "overlijdensrisicoverzekering (ORV) te overwegen."
+            )
+    elif orv_list:
+        orv_tekst = ", ".join(
+            f"{v.aanbieder} ({format_bedrag(v.dekking)})" for v in orv_list
+        )
         section["advisor_note"] = (
-            f"Bij {grootste[0].lower()} ontstaat een tekort van "
-            f"{format_bedrag(grootste[1])}. Wij adviseren een "
-            "overlijdensrisicoverzekering (ORV) te overwegen."
+            f"U heeft een ORV afgesloten bij {orv_tekst}."
         )
 
     return section

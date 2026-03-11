@@ -137,6 +137,73 @@ class NormalizedPersoon:
 
 
 @dataclass
+class NormalizedVerzekering:
+    """Eén verzekering (ORV, AOV, etc.)."""
+    type: str = ""           # "overlijdensrisicoverzekering", "arbeidsongeschiktheid", etc.
+    aanbieder: str = ""
+    polisnummer: str = ""
+    verzekerde: str = ""     # "aanvrager", "partner", "beiden"
+    dekking: float = 0       # Jaarlijks of eenmalig uitkeringsbedrag
+    soort_dekking: str = ""  # "gelijkblijvend", "annuïtair", etc.
+    einddatum: str = ""      # YYYY-MM-DD
+
+    @property
+    def type_display(self) -> str:
+        """Leesbare weergave van verzekering type."""
+        mapping = {
+            "overlijdensrisicoverzekering": "ORV",
+            "arbeidsongeschiktheidsverzekering": "AOV",
+            "arbeidsongeschiktheid": "AOV",
+            "woonlastenverzekering": "Woonlastenverzekering",
+        }
+        return mapping.get(self.type.lower(), self.type.capitalize())
+
+
+@dataclass
+class NormalizedVermogensItem:
+    """Eén vermogenspost (spaargeld, schenking, etc.)."""
+    type: str = ""           # "spaargeld", "schenking", "belegging", etc.
+    saldo: float = 0
+    eigenaar: str = ""       # "aanvrager", "partner", "gezamenlijk"
+    maatschappij: str = ""   # Bank/instelling
+
+    @property
+    def type_display(self) -> str:
+        return self.type.replace("_", " ").capitalize() if self.type else "Overig"
+
+
+@dataclass
+class NormalizedBestaandeWoning:
+    """Gegevens van een bestaande woning."""
+    adres: str = ""
+    postcode_plaats: str = ""
+    type_woning: str = ""
+    marktwaarde: float = 0
+    woz_waarde: float = 0
+    status: str = ""         # "verkopen", "verhuren", "aanhouden", etc.
+    erfpacht: bool = False
+    energielabel: str = ""
+
+
+@dataclass
+class NormalizedBestaandeHypotheek:
+    """Gegevens van een bestaande hypotheek."""
+    verstrekker: str = ""
+    nhg: bool = False
+    hoofdsom: float = 0
+    restschuld: float = 0
+    leningdelen: list = field(default_factory=list)  # [{bedrag, rente, aflosvorm}]
+
+
+@dataclass
+class NormalizedWerkgever:
+    """Werkgevergegevens."""
+    naam: str = ""
+    dienstverband: str = ""  # "vast", "tijdelijk", etc.
+    datum_in_dienst: str = ""
+
+
+@dataclass
 class NormalizedFinanciering:
     """Financieringsgegevens."""
     koopsom: float = 0
@@ -176,6 +243,17 @@ class NormalizedDossierData:
     studielening_maandlast: float = 0
     erfpachtcanon_per_maand: float = 0
     overige_kredieten_maandlast: float = 0
+    verplichtingen_details: list = field(default_factory=list)  # [{type, maandbedrag, saldo, omschrijving}]
+
+    # Verzekeringen, vermogen, woningen, hypotheken
+    verzekeringen: list[NormalizedVerzekering] = field(default_factory=list)
+    vermogen: list[NormalizedVermogensItem] = field(default_factory=list)
+    bestaande_woningen: list[NormalizedBestaandeWoning] = field(default_factory=list)
+    bestaande_hypotheken: list[NormalizedBestaandeHypotheek] = field(default_factory=list)
+
+    # Werkgever per persoon
+    werkgever_aanvrager: Optional[NormalizedWerkgever] = None
+    werkgever_partner: Optional[NormalizedWerkgever] = None
 
     # Berekende waarden (afgeleid)
     @property
@@ -598,6 +676,198 @@ def _extract_kinderen_from_aanvraag(aanvraag_data: dict) -> tuple[list[str], boo
                     pass
 
     return kinderen, heeft_kind_onder_18, geboortedatum_jongste_kind
+
+
+def _extract_werkgever_from_aanvraag(persoon_data: dict) -> Optional[NormalizedWerkgever]:
+    """Extraheer werkgever uit aanvraag.data.aanvrager/partner.werkgever."""
+    wg = persoon_data.get("werkgever")
+    if not wg or not isinstance(wg, dict):
+        return None
+
+    naam = str(wg.get("naamWerkgever") or wg.get("naam") or "").strip()
+    if not naam:
+        return None
+
+    dienstverband = str(wg.get("soortDienstverband") or wg.get("dienstverband") or "").strip()
+    datum = str(wg.get("datumInDienst") or wg.get("datum_in_dienst") or "").strip()
+
+    return NormalizedWerkgever(naam=naam, dienstverband=dienstverband, datum_in_dienst=datum)
+
+
+def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedVerzekering]:
+    """Extraheer verzekeringen uit aanvraag.data.voorzieningen.verzekeringen[].
+
+    Structuur per item: { type, aanbieder, polisnummer, orvDekking, soortDekking, ... }
+    """
+    voorzieningen = aanvraag_data.get("voorzieningen") or {}
+    items = voorzieningen.get("verzekeringen") or []
+
+    if not items:
+        return []
+
+    result = []
+    for item in items:
+        vtype = str(item.get("type") or "").strip()
+        aanbieder = str(item.get("aanbieder") or "").strip()
+        polisnummer = str(item.get("polisnummer") or "").strip()
+        verzekerde = str(item.get("verzekerde") or item.get("verzekerdeNaam") or "").strip()
+        soort_dekking = str(item.get("soortDekking") or "").strip()
+        einddatum = str(item.get("einddatum") or "").strip()
+
+        # Dekking: ORV heeft orvDekking, AOV heeft aovDekking of dekking
+        dekking = _to_float(
+            item.get("orvDekking")
+            or item.get("aovDekking")
+            or item.get("dekking")
+            or item.get("uitkering")
+        )
+
+        result.append(NormalizedVerzekering(
+            type=vtype,
+            aanbieder=aanbieder,
+            polisnummer=polisnummer,
+            verzekerde=verzekerde,
+            dekking=dekking,
+            soort_dekking=soort_dekking,
+            einddatum=einddatum,
+        ))
+
+    logger.info("Verzekeringen: %d gevonden", len(result))
+    return result
+
+
+def _extract_vermogen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedVermogensItem]:
+    """Extraheer vermogensposten uit aanvraag.data.vermogenSectie.items[]."""
+    sectie = aanvraag_data.get("vermogenSectie") or {}
+    items = sectie.get("items") or []
+
+    if not items:
+        return []
+
+    result = []
+    for item in items:
+        vtype = str(item.get("type") or "").strip()
+        saldo = _to_float(item.get("saldo") or item.get("bedrag"))
+        eigenaar = str(item.get("eigenaar") or "").strip()
+        maatschappij = str(item.get("maatschappij") or item.get("bank") or "").strip()
+
+        result.append(NormalizedVermogensItem(
+            type=vtype,
+            saldo=saldo,
+            eigenaar=eigenaar,
+            maatschappij=maatschappij,
+        ))
+
+    logger.info("Vermogensposten: %d gevonden, totaal=%.0f",
+                len(result), sum(v.saldo for v in result))
+    return result
+
+
+def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBestaandeWoning]:
+    """Extraheer bestaande woningen uit aanvraag.data.woningen[]."""
+    items = aanvraag_data.get("woningen") or []
+
+    if not items:
+        return []
+
+    result = []
+    for w in items:
+        straat = str(w.get("straat") or "").strip()
+        huisnr = str(w.get("huisnummer") or "").strip()
+        toev = str(w.get("toevoeging") or "").strip()
+        adres = f"{straat} {huisnr}".strip()
+        if toev:
+            adres = f"{adres}{toev}"
+
+        postcode = str(w.get("postcode") or "").strip()
+        woonplaats = str(w.get("woonplaats") or "").strip()
+        postcode_plaats = f"{postcode} {woonplaats}".strip()
+
+        type_woning = str(w.get("typeWoning") or w.get("soortWoning") or "").strip()
+        marktwaarde = _to_float(w.get("waardeWoning") or w.get("marktwaarde"))
+        woz_waarde = _to_float(w.get("wozWaarde"))
+        status = str(w.get("woningstatus") or w.get("status") or "").strip()
+        erfpacht = bool(w.get("erfpacht"))
+        energielabel = str(w.get("energielabel") or "").strip()
+
+        result.append(NormalizedBestaandeWoning(
+            adres=adres,
+            postcode_plaats=postcode_plaats,
+            type_woning=type_woning,
+            marktwaarde=marktwaarde,
+            woz_waarde=woz_waarde,
+            status=status,
+            erfpacht=erfpacht,
+            energielabel=energielabel,
+        ))
+
+    logger.info("Bestaande woningen: %d gevonden", len(result))
+    return result
+
+
+def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBestaandeHypotheek]:
+    """Extraheer bestaande hypotheken uit aanvraag.data.hypotheken[]."""
+    items = aanvraag_data.get("hypotheken") or []
+
+    if not items:
+        return []
+
+    result = []
+    for h in items:
+        verstrekker = str(h.get("geldverstrekker") or h.get("verstrekker") or "").strip()
+        nhg = bool(h.get("nhg"))
+        hoofdsom = _to_float(h.get("hoofdsom") or h.get("oorspronkelijkeHoofdsom"))
+        restschuld = _to_float(h.get("restschuld") or h.get("huidigeSaldo"))
+
+        # Leningdelen van bestaande hypotheek
+        ld_items = h.get("leningdelen") or []
+        leningdelen = []
+        for ld in ld_items:
+            leningdelen.append({
+                "bedrag": _to_float(ld.get("bedrag") or ld.get("hoofdsom")),
+                "rente": _to_float(ld.get("rentePercentage") or ld.get("rente")),
+                "aflosvorm": str(ld.get("aflosvorm") or "").strip(),
+            })
+
+        result.append(NormalizedBestaandeHypotheek(
+            verstrekker=verstrekker,
+            nhg=nhg,
+            hoofdsom=hoofdsom,
+            restschuld=restschuld,
+            leningdelen=leningdelen,
+        ))
+
+    logger.info("Bestaande hypotheken: %d gevonden", len(result))
+    return result
+
+
+def _extract_verplichtingen_details_from_aanvraag(aanvraag_data: dict) -> list[dict]:
+    """Extraheer gedetailleerde verplichtingen voor display in rapport."""
+    items = aanvraag_data.get("verplichtingen") or []
+    result = []
+
+    TYPE_DISPLAY = {
+        "studieschuld": "Studielening",
+        "doorlopend_krediet": "Doorlopend krediet",
+        "persoonlijke_lening": "Persoonlijke lening",
+        "huurkoop": "Huurkoop/Private lease",
+        "creditcard": "Creditcard",
+    }
+
+    for item in items:
+        vtype = str(item.get("type") or "").strip()
+        maandbedrag = _to_float(item.get("maandbedrag"))
+        saldo = _to_float(item.get("saldo"))
+        omschrijving = str(item.get("omschrijving") or item.get("naam") or "").strip()
+
+        result.append({
+            "type": TYPE_DISPLAY.get(vtype, vtype.replace("_", " ").capitalize()),
+            "maandbedrag": maandbedrag,
+            "saldo": saldo,
+            "omschrijving": omschrijving,
+        })
+
+    return result
 
 
 # ─── Dossier-based extraction (FALLBACK) ───
@@ -1089,6 +1359,43 @@ def extract_dossier_data(
             or ""
         ).strip()
 
+    # ── Werkgever ──
+    werkgever_aanvrager = None
+    werkgever_partner = None
+    if has_aanvraag:
+        werkgever_aanvrager = _extract_werkgever_from_aanvraag(
+            aanvraag_data.get("aanvrager") or {}
+        )
+        if not alleenstaand:
+            werkgever_partner = _extract_werkgever_from_aanvraag(
+                aanvraag_data.get("partner") or {}
+            )
+
+    # ── Verzekeringen ──
+    verzekeringen = []
+    if has_aanvraag:
+        verzekeringen = _extract_verzekeringen_from_aanvraag(aanvraag_data)
+
+    # ── Vermogen ──
+    vermogen = []
+    if has_aanvraag:
+        vermogen = _extract_vermogen_from_aanvraag(aanvraag_data)
+
+    # ── Bestaande woningen ──
+    bestaande_woningen = []
+    if has_aanvraag:
+        bestaande_woningen = _extract_woningen_from_aanvraag(aanvraag_data)
+
+    # ── Bestaande hypotheken ──
+    bestaande_hypotheken = []
+    if has_aanvraag:
+        bestaande_hypotheken = _extract_hypotheken_from_aanvraag(aanvraag_data)
+
+    # ── Verplichtingen details ──
+    verplichtingen_details = []
+    if has_aanvraag:
+        verplichtingen_details = _extract_verplichtingen_details_from_aanvraag(aanvraag_data)
+
     # ── Kinderen ──
     if has_aanvraag and aanvraag_data.get("kinderen"):
         kinderen, heeft_kind_onder_18, geboortedatum_jongste_kind = \
@@ -1134,6 +1441,13 @@ def extract_dossier_data(
         studielening_maandlast=studielening,
         erfpachtcanon_per_maand=erfpacht,
         overige_kredieten_maandlast=overig_krediet,
+        verplichtingen_details=verplichtingen_details,
+        verzekeringen=verzekeringen,
+        vermogen=vermogen,
+        bestaande_woningen=bestaande_woningen,
+        bestaande_hypotheken=bestaande_hypotheken,
+        werkgever_aanvrager=werkgever_aanvrager,
+        werkgever_partner=werkgever_partner,
     )
 
     logger.info(

@@ -1,6 +1,6 @@
 """Arbeidsongeschiktheid sectie — AO-scenario's per persoon."""
 
-from adviesrapport_v2.field_mapper import NormalizedDossierData
+from adviesrapport_v2.field_mapper import NormalizedDossierData, NormalizedVerzekering
 from adviesrapport_v2.formatters import format_bedrag
 
 
@@ -100,12 +100,32 @@ def build_risk_disability_section(
         "columns": columns,
     }
 
+    # Bestaande AOV dekking
+    aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]
+
     # Advisor note als max hypotheek daalt
     if min_max_hyp < hypotheek:
         verschil = hypotheek - min_max_hyp
+        if aov_list:
+            aov_tekst = ", ".join(
+                f"{v.aanbieder} ({format_bedrag(v.dekking)})" for v in aov_list
+            )
+            section["advisor_note"] = (
+                f"Bij {ao_percentage:.0f}% AO daalt uw maximale hypotheek met "
+                f"{format_bedrag(verschil)}. U heeft reeds een AOV afgesloten "
+                f"bij {aov_tekst}. Controleer of de dekking voldoende is."
+            )
+        else:
+            section["advisor_note"] = (
+                f"Bij {ao_percentage:.0f}% AO daalt uw maximale hypotheek met "
+                f"{format_bedrag(verschil)}. Een AOV-verzekering verdient overweging."
+            )
+    elif aov_list:
+        aov_tekst = ", ".join(
+            f"{v.aanbieder} ({format_bedrag(v.dekking)})" for v in aov_list
+        )
         section["advisor_note"] = (
-            f"Bij {ao_percentage:.0f}% AO daalt uw maximale hypotheek met "
-            f"{format_bedrag(verschil)}. Een AOV-verzekering verdient overweging."
+            f"U heeft een AOV afgesloten bij {aov_tekst}."
         )
 
     return section
