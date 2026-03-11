@@ -34,8 +34,7 @@ def build_risk_unemployment_section(
         naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
         ww_duur_sc = [sc for sc in scenarios if "ww" in sc.get("naam", "").lower() and "na ww" not in sc.get("naam", "").lower()]
         if ww_duur_sc:
-            # Haal WW-duur uit naam, bijv. "Werkloosheid aanvrager — 13 maanden WW"
-            duur = _extract_ww_duur(ww_duur_sc[0].get("naam", ""))
+            duur = _extract_ww_duur(ww_duur_sc[0])
             if duur:
                 narrative_parts.append(f"{naam} heeft recht op {duur} WW-uitkering.")
             else:
@@ -112,12 +111,20 @@ def build_risk_unemployment_section(
     return section
 
 
-def _extract_ww_duur(scenario_naam: str) -> str:
-    """Haal WW-duur uit scenario naam.
+def _extract_ww_duur(scenario: dict) -> str:
+    """Haal WW-duur uit scenario dict.
 
-    'Werkloosheid aanvrager — 13 maanden WW' → '13 maanden'
+    Leest ww_details.ww_duur_maanden (int) uit het scenario.
+    Fallback: regex op scenario naam.
     """
-    match = re.search(r'(\d+)\s*maanden?', scenario_naam, re.IGNORECASE)
+    ww_details = scenario.get("ww_details") or {}
+    maanden = ww_details.get("ww_duur_maanden", 0)
+    if maanden and maanden > 0:
+        return f"{maanden} maanden"
+
+    # Fallback: regex op naam
+    naam = scenario.get("naam", "")
+    match = re.search(r'(\d+)\s*maanden?', naam, re.IGNORECASE)
     if match:
         return f"{match.group(1)} maanden"
     return ""

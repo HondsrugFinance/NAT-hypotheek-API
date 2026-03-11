@@ -13,7 +13,9 @@ Flow:
 10. Genereer PDF (pdf_generator)
 """
 
+import json
 import logging
+import os
 from datetime import date, timedelta
 
 import calculator_final
@@ -110,6 +112,19 @@ def generate_report(
         geadviseerd_hypotheekbedrag=data.hypotheek_bedrag,
     )
 
+    # AOW-inkomen: gebruik data uit Supabase, of schat op basis van standaard AOW
+    inkomen_aanvrager_aow = data.inkomen_aanvrager_aow
+    inkomen_partner_aow = data.inkomen_partner_aow
+
+    if inkomen_aanvrager_aow == 0 and data.inkomen_aanvrager_huidig > 0:
+        inkomen_aanvrager_aow = _schat_aow_inkomen(data.alleenstaand)
+        data.aanvrager.inkomen.aow_uitkering = inkomen_aanvrager_aow
+        logger.info("AOW aanvrager geschat op %.0f (geen data in Supabase)", inkomen_aanvrager_aow)
+    if data.partner and inkomen_partner_aow == 0 and data.inkomen_partner_huidig > 0:
+        inkomen_partner_aow = _schat_aow_inkomen(data.alleenstaand)
+        data.partner.inkomen.aow_uitkering = inkomen_partner_aow
+        logger.info("AOW partner geschat op %.0f (geen data in Supabase)", inkomen_partner_aow)
+
     # 5a: AOW-scenario's
     aow_result = _safe_call(
         "AOW scenarios",
@@ -118,11 +133,11 @@ def generate_report(
         ingangsdatum_hypotheek=ingangsdatum,
         geboortedatum_aanvrager=data.aanvrager.geboortedatum,
         inkomen_aanvrager_huidig=data.inkomen_aanvrager_huidig,
-        inkomen_aanvrager_aow=data.inkomen_aanvrager_aow,
+        inkomen_aanvrager_aow=inkomen_aanvrager_aow,
         alleenstaande="NEE" if not data.alleenstaand else "JA",
         geboortedatum_partner=data.partner.geboortedatum if data.partner else None,
         inkomen_partner_huidig=data.inkomen_partner_huidig,
-        inkomen_partner_aow=data.inkomen_partner_aow,
+        inkomen_partner_aow=inkomen_partner_aow,
         **common_risk_params,
     )
     aow_scenarios = (aow_result or {}).get("scenarios", [])
@@ -348,6 +363,26 @@ def _bereken_leeftijd(geboortedatum: str) -> int:
         return max(18, min(120, leeftijd))
     except (ValueError, TypeError):
         return 35
+
+
+def _schat_aow_inkomen(alleenstaand: bool) -> float:
+    """Schat bruto AOW-jaarinkomen als Supabase geen AOW/pensioen-bedragen bevat.
+
+    Leest de officiële bedragen uit config/anw.json.
+    Alleenstaand: ~€ 20.929/jr, samenwonend per persoon: ~€ 14.379/jr.
+    """
+    try:
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "config", "anw.json",
+        )
+        with open(config_path, "r", encoding="utf-8") as f:
+            aow = json.load(f).get("aow_maandbedragen", {})
+        if alleenstaand:
+            return aow.get("alleenstaand_jaarbedrag_incl_vakantiegeld", 20929)
+        return aow.get("samenwonend_jaarbedrag_incl_vakantiegeld_pp", 14379)
+    except Exception:
+        return 20929 if alleenstaand else 14379
 
 
 def _bereken_max_hypotheek(data: NormalizedDossierData) -> float:
