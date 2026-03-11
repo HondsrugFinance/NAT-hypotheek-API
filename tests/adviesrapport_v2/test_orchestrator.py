@@ -179,22 +179,50 @@ class TestSectionBuilders:
 
 class TestPensioenChartData:
     def test_chart_data_structure(self):
-        """Pensioen chart data moet jaren array bevatten."""
+        """Pensioen chart data moet jaren array en aow_markers bevatten."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
         aow = [{
             "max_hypotheek_annuitair": 280000,
+            "max_hypotheek_niet_annuitair": 300000,
+            "van_toepassing_op": "aanvrager",
             "peildatum": "2057-09-15",
         }]
         chart = _build_pensioen_chart_data(data, aow, 400000)
         assert chart is not None
         assert "jaren" in chart
-        assert len(chart["jaren"]) == 30
+        assert len(chart["jaren"]) >= 25
         assert "geadviseerd_hypotheekbedrag" in chart
+        assert "aow_markers" in chart
+        assert len(chart["aow_markers"]) == 1
+        assert chart["aow_markers"][0]["jaar"] == 2057
+
+    def test_chart_step_function(self):
+        """Max hypotheek moet constant zijn vóór AOW, dan dalen."""
+        data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
+        aow = [{
+            "max_hypotheek_annuitair": 280000,
+            "max_hypotheek_niet_annuitair": 300000,
+            "van_toepassing_op": "aanvrager",
+            "peildatum": "2057-09-15",
+        }]
+        chart = _build_pensioen_chart_data(data, aow, 400000)
+        # Vóór AOW: max moet gelijk zijn aan huidig (400000)
+        eerste = chart["jaren"][0]["max_hypotheek"]
+        assert eerste == 400000
+        # Na AOW: max moet gelijk zijn aan max(280000, 300000) = 300000
+        aow_idx = 2057 - chart["jaren"][0]["jaar"]
+        if aow_idx < len(chart["jaren"]):
+            assert chart["jaren"][aow_idx]["max_hypotheek"] == 300000
 
     def test_chart_restschuld_decreasing(self):
         """Restschuld moet afnemen over tijd (annuïteit)."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
-        aow = [{"max_hypotheek_annuitair": 280000, "peildatum": "2057-09-15"}]
+        aow = [{
+            "max_hypotheek_annuitair": 280000,
+            "max_hypotheek_niet_annuitair": 300000,
+            "van_toepassing_op": "aanvrager",
+            "peildatum": "2057-09-15",
+        }]
         chart = _build_pensioen_chart_data(data, aow, 400000)
         eerste = chart["jaren"][0]["restschuld"]
         laatste = chart["jaren"][-1]["restschuld"]

@@ -50,18 +50,20 @@ def _format_bedrag_kort(value: float) -> str:
 def genereer_pensioen_chart_svg(
     jaren: list[dict],
     geadviseerd_hypotheekbedrag: float,
+    aow_markers: list[dict] | None = None,
     width: int = 480,
-    height: int = 220,
+    height: int = 230,
     margin_left: int = 50,
     margin_right: int = 10,
-    margin_top: int = 15,
+    margin_top: int = 25,
     margin_bottom: int = 30,
 ) -> str:
     """
     Genereer een pensioen-grafiek als inline SVG.
 
-    Verticale staven per jaar met max hypotheek, plus een lijn voor
-    de resterende hypotheekschuld. Stippellijn voor geadviseerd bedrag.
+    Verticale staven per jaar met max hypotheek (trapfunctie), plus een
+    lijn voor de resterende hypotheekschuld. Verticale stippellijnen
+    markeren AOW-momenten.
 
     Args:
         jaren: List van dicts met:
@@ -69,6 +71,9 @@ def genereer_pensioen_chart_svg(
             - 'max_hypotheek': float
             - 'restschuld': float
         geadviseerd_hypotheekbedrag: Referentiewaarde (stippellijn)
+        aow_markers: Optioneel, lijst van dicts met:
+            - 'jaar': int (kalenderjaar van AOW-moment)
+            - 'label': str (bijv. "AOW aanvr." of "AOW partner")
         width, height: SVG afmetingen
 
     Returns:
@@ -168,6 +173,30 @@ def genereer_pensioen_chart_svg(
             f'<polyline points="{" ".join(points)}" '
             f'fill="none" stroke="{COLOR_LINE}" stroke-width="1.5"/>'
         )
+
+    # AOW-markeringslijnen (verticale stippellijnen)
+    if aow_markers and jaren:
+        jaar_start = jaren[0].get("jaar", 0)
+        for mi, marker in enumerate(aow_markers):
+            m_jaar = marker.get("jaar", 0)
+            m_label = _escape(marker.get("label", "AOW"))
+            # Bereken x-positie op basis van jaarindex
+            idx = m_jaar - jaar_start
+            if 0 <= idx < n:
+                m_x = margin_left + idx * bar_step + bar_step / 2
+                svg.append(
+                    f'<line x1="{m_x:.1f}" y1="{margin_top}" '
+                    f'x2="{m_x:.1f}" y2="{margin_top + chart_h:.1f}" '
+                    f'stroke="{COLOR_LABEL}" stroke-width="0.8" '
+                    f'stroke-dasharray="3,2"/>'
+                )
+                # Label boven de grafiek, licht verschoven bij meerdere markers
+                label_y = margin_top - 3 + mi * 8
+                svg.append(
+                    f'<text x="{m_x:.1f}" y="{label_y:.1f}" '
+                    f'font-size="5.5" fill="{COLOR_LABEL}" text-anchor="middle">'
+                    f'{m_label}</text>'
+                )
 
     # Legenda
     legend_y = margin_top + chart_h + 22

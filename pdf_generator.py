@@ -157,6 +157,7 @@ def genereer_adviesrapport_pdf(data: dict) -> bytes:
                 section["chart_svg"] = Markup(chart_generator.genereer_pensioen_chart_svg(
                     jaren=cd.get("jaren", []),
                     geadviseerd_hypotheekbedrag=cd.get("geadviseerd_hypotheekbedrag", 0),
+                    aow_markers=cd.get("aow_markers"),
                 ))
             elif cd.get("type") == "overlijden_vergelijk":
                 section["chart_svg"] = Markup(chart_generator.genereer_overlijden_vergelijk_svg(

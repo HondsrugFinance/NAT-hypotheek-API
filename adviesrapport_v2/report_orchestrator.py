@@ -587,33 +587,42 @@ def _build_pensioen_chart_data(
     aow_scenarios: list,
     max_hypotheek_huidig: float,
 ) -> dict | None:
-    """Bouw pensioen chart data voor SVG grafiek."""
+    """Bouw pensioen chart data voor SVG grafiek.
+
+    Gebruikt trapfunctie (step-function) i.p.v. lineaire interpolatie:
+    - Vóór eerste AOW: max_hypotheek_huidig (constant)
+    - Tussen AOW 1 en 2: max uit scenario 1
+    - Na AOW 2: max uit scenario 2
+    """
     if not aow_scenarios:
         return None
 
     hypotheek = data.hypotheek_bedrag
-
-    # Bepaal tijdsperiode
     start_jaar = date.today().year
-    n_jaren = 30
 
-    # Max hypotheek op AOW-datum
-    if aow_scenarios:
-        max_hyp_aow = min(sc.get("max_hypotheek_annuitair", 0) for sc in aow_scenarios)
-    else:
-        max_hyp_aow = max_hypotheek_huidig
-
-    # Bepaal AOW-jaar (vroegste AOW)
-    aow_peildatums = [sc.get("peildatum", "") for sc in aow_scenarios]
-    aow_jaren = []
-    for pd in aow_peildatums:
+    # Bouw AOW stappen: [(jaar, max_hyp, label)] gesorteerd op jaar
+    aow_steps = []
+    for sc in aow_scenarios:
+        peildatum = sc.get("peildatum", "")
         try:
-            aow_jaren.append(int(pd[:4]))
+            aow_jaar = int(peildatum[:4])
         except (ValueError, IndexError):
-            pass
-    aow_jaar = min(aow_jaren) if aow_jaren else start_jaar + 30
+            continue
+        max_hyp = max(
+            sc.get("max_hypotheek_annuitair", 0),
+            sc.get("max_hypotheek_niet_annuitair", 0),
+        )
+        wie = sc.get("van_toepassing_op", "")
+        label = "AOW partner" if wie == "partner" else "AOW aanvr."
+        aow_steps.append((aow_jaar, max_hyp, label))
 
-    # Bouw jaren array met restschuld + max hypotheek
+    aow_steps.sort(key=lambda x: x[0])
+
+    # Tijdspan: tot 5 jaar na laatste AOW, minimaal 25 jaar
+    laatste_aow_jaar = aow_steps[-1][0] if aow_steps else start_jaar + 25
+    n_jaren = max(laatste_aow_jaar - start_jaar + 5, 25)
+
+    # Bouw jaren array met restschuld + max hypotheek (trapfunctie)
     jaren = []
     for y in range(n_jaren):
         jaar = start_jaar + y
@@ -625,12 +634,11 @@ def _build_pensioen_chart_data(
             for ld in data.leningdelen_voor_api
         )
 
-        # Max hypotheek: lineair interpoleren
-        if jaar <= aow_jaar:
-            t = y / max(1, aow_jaar - start_jaar)
-            max_hyp = max_hypotheek_huidig + (max_hyp_aow - max_hypotheek_huidig) * t
-        else:
-            max_hyp = max_hyp_aow
+        # Max hypotheek: step-function op AOW-jaren
+        max_hyp = max_hypotheek_huidig
+        for aow_jaar, aow_max, _label in aow_steps:
+            if jaar >= aow_jaar:
+                max_hyp = aow_max
 
         jaren.append({
             "jaar": jaar,
@@ -638,9 +646,13 @@ def _build_pensioen_chart_data(
             "restschuld": round(restschuld),
         })
 
+    # AOW markers voor verticale lijnen in de grafiek
+    aow_markers = [{"jaar": aj, "label": lbl} for aj, _mh, lbl in aow_steps]
+
     return {
         "geadviseerd_hypotheekbedrag": hypotheek,
         "jaren": jaren,
+        "aow_markers": aow_markers,
     }
 
 
