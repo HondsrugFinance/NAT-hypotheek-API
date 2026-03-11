@@ -395,6 +395,14 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
         or "Loondienst"
     )
 
+    logger.debug(
+        "Inkomen %s: hoofd=%.0f, aow=%.0f, pensioen=%.0f, "
+        "lijfrente=%.0f, huur=%.0f, dienstverband=%s | "
+        "ink_obj_keys=%s",
+        suffix, hoofd, aow, pensioen, lijfrente, huur, dienstverband,
+        list(ink_obj.keys()) if ink_obj else "leeg",
+    )
+
     # Verdeel hoofdinkomen over loondienst/onderneming/roz
     inkomen = NormalizedInkomen(
         aow_uitkering=aow,
@@ -576,6 +584,16 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
         or _get(invoer, "kostenKoper", "kosten_koper")
     )
 
+    logger.debug(
+        "Financiering: koopsom=%.0f, woningwaarde=%.0f, eigen_geld=%.0f, "
+        "kosten_koper=%.0f, energielabel=%s, adres=%s, type_woning=%s | "
+        "ber_keys=%s, fin_keys=%s",
+        koopsom, woningwaarde, eigen_geld, kosten_koper, energielabel,
+        adres or "(leeg)", type_woning,
+        list(ber.keys()) if ber else "leeg",
+        list(fin.keys()) if fin else "leeg",
+    )
+
     return NormalizedFinanciering(
         koopsom=koopsom,
         kosten_koper=kosten_koper,
@@ -603,8 +621,11 @@ def extract_dossier_data(
     # De `invoer` JSONB zit op het dossier
     invoer = dossier.get("invoer") or dossier
     logger.info("Invoer keys: %s", list(invoer.keys()) if isinstance(invoer, dict) else "niet-dict")
+    logger.info("Dossier top-level keys: %s", list(dossier.keys()) if isinstance(dossier, dict) else "niet-dict")
+    logger.info("Aanvraag keys: %s", list(aanvraag.keys()) if isinstance(aanvraag, dict) else "niet-dict")
 
     klant = _get(invoer, "klantGegevens", "klant") or {}
+    logger.debug("klantGegevens keys: %s", list(klant.keys()) if klant else "leeg")
 
     # Contact gegevens uit aparte kolom (productie Supabase)
     contact_gegevens = dossier.get("klant_contact_gegevens")
