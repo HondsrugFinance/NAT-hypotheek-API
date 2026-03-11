@@ -35,10 +35,13 @@ def _headers(access_token: str | None = None) -> dict[str, str]:
 
     Args:
         access_token: Supabase session JWT van de ingelogde gebruiker.
-                      Als None, fallback naar service_role key (env var).
+                      Als None, fallback naar service_role key, dan anon key.
     """
     api_key = _get_api_key()
-    auth_token = access_token or _FALLBACK_KEY
+    auth_token = access_token or _FALLBACK_KEY or api_key
+
+    if not auth_token:
+        raise ValueError("Geen Supabase auth token beschikbaar (geen session, service key, of anon key)")
 
     return {
         "apikey": api_key,
