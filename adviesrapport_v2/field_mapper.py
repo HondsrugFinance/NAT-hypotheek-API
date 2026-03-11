@@ -455,28 +455,28 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
                 nabestaandenpensioen += jaarbedrag
             else:
                 pensioen += jaarbedrag
-                # Extraheer nabestaandenpensioen uit pensioenData genest object
-                if isinstance(pensioen_data, dict):
-                    pp = pensioen_data.get("partnerpensioen") or {}
-                    if isinstance(pp, dict):
-                        nb_bedrag = _to_float(pp.get("verzekerd") or pp.get("jaarbedrag"))
-                        if nb_bedrag > 0:
-                            nabestaandenpensioen += nb_bedrag
-                            logger.info("Nabestaandenpensioen uit pensioenData: %.0f", nb_bedrag)
-                elif isinstance(pensioen_data, str):
-                    # Soms is pensioenData een string-representatie van een dict
+                # Extraheer nabestaandenpensioen uit pensioenData.partnerpensioen
+                # Velden: verzekerdVoor (vóór AOW), verzekerdVanaf (na AOW)
+                pd = pensioen_data
+                if isinstance(pd, str):
                     try:
                         import ast
-                        pd_parsed = ast.literal_eval(pensioen_data)
-                        if isinstance(pd_parsed, dict):
-                            pp = pd_parsed.get("partnerpensioen") or {}
-                            if isinstance(pp, dict):
-                                nb_bedrag = _to_float(pp.get("verzekerd") or pp.get("jaarbedrag"))
-                                if nb_bedrag > 0:
-                                    nabestaandenpensioen += nb_bedrag
-                                    logger.info("Nabestaandenpensioen uit pensioenData (str): %.0f", nb_bedrag)
+                        pd = ast.literal_eval(pd)
                     except (ValueError, SyntaxError):
-                        pass
+                        pd = None
+                if isinstance(pd, dict):
+                    pp = pd.get("partnerpensioen") or {}
+                    if isinstance(pp, dict):
+                        nb_bedrag = _to_float(
+                            pp.get("verzekerdVoor") or pp.get("verzekerdVanaf")
+                            or pp.get("verzekerd") or pp.get("jaarbedrag")
+                        )
+                        if nb_bedrag > 0:
+                            nabestaandenpensioen += nb_bedrag
+                            logger.info("Nabestaandenpensioen uit pensioenData: %.0f (voor=%.0f, vanaf=%.0f)",
+                                        nb_bedrag,
+                                        _to_float(pp.get("verzekerdVoor")),
+                                        _to_float(pp.get("verzekerdVanaf")))
 
         elif item_type == "ander_inkomen":
             overig += _to_float(
