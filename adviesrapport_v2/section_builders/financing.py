@@ -24,17 +24,47 @@ def build_financing_section(
     subsections.append({"subtitle": "Onderpand", "rows": onderpand_rows})
 
     # --- Financieringsopzet ---
-    totale_investering = data.totale_investering
     opzet_rows = [
-        {"label": "Koopsom", "value": format_bedrag(fin.koopsom)},
+        {"label": "Aankoop", "value": format_bedrag(fin.koopsom)},
     ]
-    if fin.kosten_koper > 0:
-        opzet_rows.append({"label": "Kosten koper", "value": format_bedrag(fin.kosten_koper)})
-    opzet_rows.append({"label": "Totale investering", "value": format_bedrag(totale_investering), "bold": True})
+    # Individuele kostenposten (alleen tonen als > 0)
+    if fin.overdrachtsbelasting > 0:
+        opzet_rows.append({"label": "Overdrachtsbelasting", "value": format_bedrag(fin.overdrachtsbelasting)})
+    if fin.notariskosten > 0:
+        opzet_rows.append({"label": "Notariskosten", "value": format_bedrag(fin.notariskosten)})
+    if fin.verbouwing > 0:
+        opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
+    if fin.ebv_ebb > 0:
+        opzet_rows.append({"label": "EBB", "value": format_bedrag(fin.ebv_ebb)})
+    if fin.advies_bemiddeling > 0:
+        opzet_rows.append({"label": "Hypotheekadvies", "value": format_bedrag(fin.advies_bemiddeling)})
+    if fin.taxatiekosten > 0:
+        opzet_rows.append({"label": "Taxatiekosten", "value": format_bedrag(fin.taxatiekosten)})
+    if fin.bankgarantie > 0:
+        opzet_rows.append({"label": "Bankgarantie", "value": format_bedrag(fin.bankgarantie)})
+    if fin.nhg_kosten > 0:
+        opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
+
+    # Totaal
+    totale_investering = fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+    opzet_rows.append({"label": "Totaal", "value": format_bedrag(totale_investering), "bold": True})
     opzet_rows.append({"label": "", "value": ""})  # Spacer
+
+    # Overbrugging (aftrekpost)
+    overbrugging = fin.overbrugging
+    if not overbrugging:
+        # Zoek overbrugging in leningdelen
+        for ld in data.leningdelen:
+            if ld.is_overbrugging:
+                overbrugging += ld.totaal_bedrag
+    if overbrugging > 0:
+        opzet_rows.append({"label": "Overbrugging", "value": f"-/{format_bedrag(overbrugging)}"})
+
+    # Eigen middelen (aftrekpost)
     if fin.eigen_middelen > 0:
-        opzet_rows.append({"label": "Eigen middelen", "value": format_bedrag(fin.eigen_middelen)})
-    opzet_rows.append({"label": "Benodigd hypotheekbedrag", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
+        opzet_rows.append({"label": "Af: Eigen geld", "value": f"-/{format_bedrag(fin.eigen_middelen)}"})
+
+    opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
     subsections.append({"subtitle": "Financieringsopzet", "rows": opzet_rows})
 
     # --- Hypotheekconstructie ---

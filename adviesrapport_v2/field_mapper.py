@@ -192,7 +192,8 @@ class NormalizedBestaandeHypotheek:
     nhg: bool = False
     hoofdsom: float = 0
     restschuld: float = 0
-    leningdelen: list = field(default_factory=list)  # [{bedrag, rente, aflosvorm}]
+    leningdelen: list = field(default_factory=list)
+    # Leningdelen: [{bedrag, rente, aflosvorm, looptijd, rentevast, ingangsdatum}]
 
 
 @dataclass
@@ -215,6 +216,16 @@ class NormalizedFinanciering:
     adres: str = ""
     nhg: bool = True
     hypotheekverstrekker: str = ""
+    # Individuele kostenposten (voor gedetailleerde weergave)
+    overdrachtsbelasting: float = 0
+    notariskosten: float = 0       # hypotheekakte + transportakte
+    taxatiekosten: float = 0
+    advies_bemiddeling: float = 0
+    nhg_kosten: float = 0
+    bankgarantie: float = 0
+    verbouwing: float = 0
+    ebv_ebb: float = 0             # Energiebesparende voorzieningen/budget
+    overbrugging: float = 0        # Overbruggingskrediet bedrag
 
 
 @dataclass
@@ -513,17 +524,22 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
 
     koopsom = _to_float(fin.get("aankoopsomWoning"))
     eigen_geld = _to_float(fin.get("eigenGeld"))
-    verbouwing = _to_float(fin.get("verbouwing"))
 
-    # Kosten koper: som van individuele kostenposten
+    # Individuele kostenposten
+    overdrachtsbelasting = _to_float(fin.get("overdrachtsbelasting"))
+    bankgarantie = _to_float(fin.get("bankgarantie"))
+    hypotheekakte = _to_float(fin.get("hypotheekakte"))
+    transportakte = _to_float(fin.get("transportakte"))
+    taxatiekosten = _to_float(fin.get("taxatiekosten"))
+    advies_bemiddeling = _to_float(fin.get("adviesBemiddeling"))
+    nhg_kosten = _to_float(fin.get("nhgKosten"))
+    verbouwing = _to_float(fin.get("verbouwing"))
+    ebv_ebb = _to_float(fin.get("ebvEbb") or fin.get("energiebesparendBudget"))
+
+    notariskosten = hypotheekakte + transportakte
     kosten_koper = (
-        _to_float(fin.get("overdrachtsbelasting"))
-        + _to_float(fin.get("bankgarantie"))
-        + _to_float(fin.get("hypotheekakte"))
-        + _to_float(fin.get("transportakte"))
-        + _to_float(fin.get("taxatiekosten"))
-        + _to_float(fin.get("adviesBemiddeling"))
-        + _to_float(fin.get("nhgKosten"))
+        overdrachtsbelasting + bankgarantie + notariskosten
+        + taxatiekosten + advies_bemiddeling + nhg_kosten
     )
 
     # Woningwaarde uit onderpand (marktwaarde)
@@ -553,6 +569,9 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         adres or "(leeg)", hypotheekverstrekker,
     )
 
+    # Overbrugging: zoek in leningdelen
+    overbrugging = _to_float(fin.get("overbrugging"))
+
     return NormalizedFinanciering(
         koopsom=koopsom,
         kosten_koper=kosten_koper,
@@ -563,6 +582,15 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         adres=adres,
         nhg=nhg,
         hypotheekverstrekker=hypotheekverstrekker,
+        overdrachtsbelasting=overdrachtsbelasting,
+        notariskosten=notariskosten,
+        taxatiekosten=taxatiekosten,
+        advies_bemiddeling=advies_bemiddeling,
+        nhg_kosten=nhg_kosten,
+        bankgarantie=bankgarantie,
+        verbouwing=verbouwing,
+        ebv_ebb=ebv_ebb,
+        overbrugging=overbrugging,
     )
 
 
@@ -697,7 +725,12 @@ def _extract_werkgever_from_aanvraag(persoon_data: dict) -> Optional[NormalizedW
 def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedVerzekering]:
     """Extraheer verzekeringen uit aanvraag.data.voorzieningen.verzekeringen[].
 
-    Structuur per item: { type, aanbieder, polisnummer, orvDekking, soortDekking, ... }
+    Lovable slaat verzekeringen op met geneste verzekerdePersonen[]:
+      { type, aanbieder, polisnummer, soortDekking, einddatum,
+        verzekerdePersonen: [{ verzekerde: "aanvrager", orvDekking: 30000 }, ...] }
+
+    Elke verzekerde persoon wordt een apart NormalizedVerzekering record.
+    Fallback: als er geen verzekerdePersonen array is, gebruik flat velden.
     """
     voorzieningen = aanvraag_data.get("voorzieningen") or {}
     items = voorzieningen.get("verzekeringen") or []
@@ -710,29 +743,59 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
         vtype = str(item.get("type") or "").strip()
         aanbieder = str(item.get("aanbieder") or "").strip()
         polisnummer = str(item.get("polisnummer") or "").strip()
-        verzekerde = str(item.get("verzekerde") or item.get("verzekerdeNaam") or "").strip()
         soort_dekking = str(item.get("soortDekking") or "").strip()
         einddatum = str(item.get("einddatum") or "").strip()
 
-        # Dekking: ORV heeft orvDekking, AOV heeft aovDekking of dekking
-        dekking = _to_float(
-            item.get("orvDekking")
-            or item.get("aovDekking")
-            or item.get("dekking")
-            or item.get("uitkering")
+        # Geneste verzekerdePersonen array (Lovable structuur)
+        personen = (
+            item.get("verzekerdePersonen")
+            or item.get("verzekerden")
+            or item.get("verzekerde_personen")
+            or []
         )
 
-        result.append(NormalizedVerzekering(
-            type=vtype,
-            aanbieder=aanbieder,
-            polisnummer=polisnummer,
-            verzekerde=verzekerde,
-            dekking=dekking,
-            soort_dekking=soort_dekking,
-            einddatum=einddatum,
-        ))
+        if personen and isinstance(personen, list):
+            # Split: één record per verzekerde persoon
+            for vp in personen:
+                if not isinstance(vp, dict):
+                    continue
+                verzekerde = str(
+                    vp.get("verzekerde") or vp.get("type")
+                    or vp.get("naam") or ""
+                ).strip()
+                dekking = _to_float(
+                    vp.get("orvDekking") or vp.get("aovDekking")
+                    or vp.get("dekking") or vp.get("uitkering")
+                )
+                result.append(NormalizedVerzekering(
+                    type=vtype,
+                    aanbieder=aanbieder,
+                    polisnummer=polisnummer,
+                    verzekerde=verzekerde,
+                    dekking=dekking,
+                    soort_dekking=soort_dekking,
+                    einddatum=einddatum,
+                ))
+        else:
+            # Flat structuur (fallback)
+            verzekerde = str(
+                item.get("verzekerde") or item.get("verzekerdeNaam") or ""
+            ).strip()
+            dekking = _to_float(
+                item.get("orvDekking") or item.get("aovDekking")
+                or item.get("dekking") or item.get("uitkering")
+            )
+            result.append(NormalizedVerzekering(
+                type=vtype,
+                aanbieder=aanbieder,
+                polisnummer=polisnummer,
+                verzekerde=verzekerde,
+                dekking=dekking,
+                soort_dekking=soort_dekking,
+                einddatum=einddatum,
+            ))
 
-    logger.info("Verzekeringen: %d gevonden", len(result))
+    logger.info("Verzekeringen: %d records (na split per persoon)", len(result))
     return result
 
 
@@ -823,10 +886,15 @@ def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBes
         ld_items = h.get("leningdelen") or []
         leningdelen = []
         for ld in ld_items:
+            looptijd_raw = _to_float(ld.get("looptijd") or ld.get("origineleLooptijd"))
+            rentevast_raw = _to_float(ld.get("renteVastPeriode") or ld.get("rentevastePeriode"))
             leningdelen.append({
                 "bedrag": _to_float(ld.get("bedrag") or ld.get("hoofdsom")),
                 "rente": _to_float(ld.get("rentePercentage") or ld.get("rente")),
                 "aflosvorm": str(ld.get("aflosvorm") or "").strip(),
+                "looptijd": int(looptijd_raw) if looptijd_raw else 0,
+                "rentevast": int(rentevast_raw) if rentevast_raw else 0,
+                "ingangsdatum": str(ld.get("ingangsdatum") or "").strip(),
             })
 
         result.append(NormalizedBestaandeHypotheek(

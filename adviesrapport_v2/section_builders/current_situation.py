@@ -1,7 +1,9 @@
 """Huidige situatie sectie — persoonsgegevens, inkomen, vermogen, woningen, etc."""
 
-from adviesrapport_v2.field_mapper import NormalizedDossierData
-from adviesrapport_v2.formatters import format_bedrag, format_datum, format_percentage
+from adviesrapport_v2.field_mapper import (
+    NormalizedDossierData, AFLOSVORM_DISPLAY, _map_aflosvorm,
+)
+from adviesrapport_v2.formatters import format_bedrag, format_datum, format_looptijd_jaren, format_percentage
 
 
 def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
@@ -192,8 +194,6 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             w_rows.append({"label": "Adres", "value": woning.adres})
         if woning.postcode_plaats:
             w_rows.append({"label": "Postcode en plaats", "value": woning.postcode_plaats})
-        if woning.type_woning:
-            w_rows.append({"label": "Type woning", "value": woning.type_woning})
         if woning.marktwaarde > 0:
             w_rows.append({"label": "Marktwaarde", "value": format_bedrag(woning.marktwaarde)})
         if woning.woz_waarde > 0:
@@ -202,7 +202,8 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             w_rows.append({"label": "Energielabel", "value": woning.energielabel})
         if woning.status:
             w_rows.append({"label": "Status", "value": woning.status.replace("_", " ").capitalize()})
-        w_rows.append({"label": "Erfpacht", "value": "Ja" if woning.erfpacht else "Nee"})
+        if woning.erfpacht:
+            w_rows.append({"label": "Erfpacht", "value": "Ja"})
         if w_rows:
             subsections.append({"subtitle": label, "rows": w_rows})
 
@@ -220,16 +221,45 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
 
         sub = {"subtitle": label, "rows": h_rows}
 
-        # Leningdelen tabel
+        # Leningdelen tabel (uitgebreid)
         if hyp.leningdelen:
+            # Bepaal welke kolommen relevant zijn (niet alles is altijd ingevuld)
+            has_looptijd = any(ld.get("looptijd") for ld in hyp.leningdelen)
+            has_rentevast = any(ld.get("rentevast") for ld in hyp.leningdelen)
+            has_ingangsdatum = any(ld.get("ingangsdatum") for ld in hyp.leningdelen)
+
+            headers = ["Leningdeel", "Bedrag", "Aflosvorm", "Rente"]
+            if has_looptijd:
+                headers.append("Looptijd")
+            if has_rentevast:
+                headers.append("Rentevast")
+            if has_ingangsdatum:
+                headers.append("Ingangsdatum")
+
             ld_rows = []
-            for ld in hyp.leningdelen:
+            for j, ld in enumerate(hyp.leningdelen, 1):
                 bedrag = format_bedrag(ld.get("bedrag", 0))
                 rente = f"{ld.get('rente', 0):.2f}%".replace(".", ",") if ld.get("rente") else "-"
                 aflosvorm = ld.get("aflosvorm", "-")
-                ld_rows.append([bedrag, rente, aflosvorm])
+                if aflosvorm:
+                    aflosvorm = AFLOSVORM_DISPLAY.get(
+                        _map_aflosvorm(aflosvorm), aflosvorm.capitalize()
+                    )
+
+                row = [str(j), bedrag, aflosvorm, rente]
+                if has_looptijd:
+                    looptijd = ld.get("looptijd", 0)
+                    row.append(format_looptijd_jaren(looptijd) if looptijd else "-")
+                if has_rentevast:
+                    rv = ld.get("rentevast", 0)
+                    row.append(f"{rv} jaar" if rv else "-")
+                if has_ingangsdatum:
+                    igd = ld.get("ingangsdatum", "")
+                    row.append(format_datum(igd) if igd else "-")
+
+                ld_rows.append(row)
             sub["tables"] = [{
-                "headers": ["Bedrag", "Rente", "Aflosvorm"],
+                "headers": headers,
                 "rows": ld_rows,
             }]
 
@@ -280,7 +310,18 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         for verz in data.verzekeringen:
             aanbieder = verz.aanbieder or "-"
             type_display = verz.type_display
-            verzekerde = verz.verzekerde.replace("_", " ").capitalize() if verz.verzekerde else "-"
+
+            # Resolve "aanvrager"/"partner" naar echte namen
+            vz = verz.verzekerde.lower().strip() if verz.verzekerde else ""
+            if vz == "aanvrager":
+                verzekerde = data.aanvrager.naam or "Aanvrager"
+            elif vz == "partner" and data.partner:
+                verzekerde = data.partner.naam or "Partner"
+            elif verz.verzekerde:
+                verzekerde = verz.verzekerde.replace("_", " ").capitalize()
+            else:
+                verzekerde = "-"
+
             dekking = format_bedrag(verz.dekking) if verz.dekking > 0 else "-"
             v_rows.append([aanbieder, type_display, verzekerde, dekking])
 
