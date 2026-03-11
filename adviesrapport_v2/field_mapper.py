@@ -690,7 +690,15 @@ def _extract_kinderen_from_aanvraag(aanvraag_data: dict) -> tuple[list[str], boo
         naam = f"{roepnaam} {achternaam}".strip()
 
         if naam or geb:
-            kinderen.append(f"{naam} ({geb})" if geb else naam)
+            # Format geboortedatum als DD-MM-YYYY
+            geb_display = geb
+            if geb:
+                try:
+                    from datetime import date as dt_date_fmt
+                    geb_display = dt_date_fmt.fromisoformat(geb).strftime("%d-%m-%Y")
+                except (ValueError, TypeError):
+                    pass
+            kinderen.append(f"{naam} ({geb_display})" if geb else naam)
             if geb:
                 try:
                     from datetime import date as dt_date
