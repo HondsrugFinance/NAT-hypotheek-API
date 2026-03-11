@@ -6,7 +6,7 @@ Gebruikt invoer JSONB snapshots gebaseerd op de G6 diagnostiek output.
 import pytest
 from adviesrapport_v2.field_mapper import (
     extract_dossier_data, _normalize_rente, _map_aflosvorm,
-    _is_overbrugging, _extract_leningdelen, _get, _map_woning_type,
+    _is_overbrugging, _extract_leningdelen_from_dossier, _get, _map_woning_type,
 )
 
 
@@ -138,33 +138,33 @@ class TestHelpers:
 
 class TestExtractLeningdelen:
     def test_extract_count(self):
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert len(result) == 3
 
     def test_aflosvorm_mapping(self):
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert result[0].aflos_type == "Aflosvrij"
         assert result[1].aflos_type == "Annuïteit"
 
     def test_rente_conversion(self):
         """rentepercentage 2.8 → werkelijke_rente 0.028."""
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert result[0].werkelijke_rente == pytest.approx(0.028)
         assert result[1].werkelijke_rente == pytest.approx(0.041)
 
     def test_overbrugging_marked(self):
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert result[2].is_overbrugging is True
         assert result[0].is_overbrugging is False
 
     def test_bedragen(self):
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert result[0].bedrag_box1 == 228000
         assert result[1].bedrag_box1 == 186300
         assert result[2].bedrag_box1 == 239000
 
     def test_looptijden(self):
-        result = _extract_leningdelen(INVOER_SNAPSHOT)
+        result = _extract_leningdelen_from_dossier(INVOER_SNAPSHOT)
         assert result[0].org_lpt == 360
         assert result[2].org_lpt == 24
 

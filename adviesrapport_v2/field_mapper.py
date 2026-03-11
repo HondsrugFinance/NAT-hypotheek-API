@@ -8,15 +8,26 @@ Supabase tabelstructuur (productie):
   dossiers tabel:
     invoer (JSONB):
       klantGegevens: { naamAanvrager, roepnaamAanvrager, achternaamAanvrager, ... }
-      haalbaarheidsBerekeningen: [{ naam, inkomenGegevens: {...}, leningDelen: [...] }]
+      haalbaarheidsBerekeningen: [{ naam, inkomenGegevens: {...}, onderpand: {...}, leningDelen: [...] }]
       berekeningen: [{ naam, aankoopsomWoning, eigenGeld, ... }]
       inkomenGegevens: { hoofdinkomenAanvrager, ... }
     scenario1 (JSON): { id, naam, leningDelen: [...] }  ← aparte kolom!
-    scenario2 (JSON): { id, naam, leningDelen: [...] }  ← aparte kolom!
     klant_contact_gegevens (JSONB): { aanvrager: { voornaam, achternaam, email, ... } }
 
   aanvragen tabel:
-    data (JSON): { hypotheekverstrekker, nhg, ... }  ← genest in data kolom!
+    data (JSON):  ← PRIMAIRE BRON voor alle data!
+      aanvrager: { persoon: {...}, adresContact: {...}, werkgever: {...} }
+      partner: { persoon: {...}, adresContact: {...}, werkgever: {...} }
+      inkomenAanvrager: [{ type, jaarbedrag, isAOW, soort, ... }]
+      inkomenPartner: [{ type, jaarbedrag, isAOW, soort, ... }]
+      onderpand: { straat, postcode, woonplaats, marktwaarde, energielabel, ... }
+      financieringsopzet: { aankoopsomWoning, eigenGeld, verbouwing, ... }
+      samenstellenHypotheek: { geldverstrekker, nhg, nieuweLeningdelen, meenemenLeningdelen }
+      verplichtingen: [{ type, maandbedrag, ... }]
+      kinderen: [{ roepnaam, achternaam, geboortedatum }]
+      burgerlijkeStaat, samenlevingsvorm, doelstelling, heeftPartner
+      voorzieningen: { verzekeringen: [...] }
+      vermogenSectie: { items: [...] }
 """
 
 import logging
@@ -200,6 +211,8 @@ class NormalizedDossierData:
         return self.partner.inkomen.totaal_aow if self.partner else 0
 
 
+# ─── Utility helpers ───
+
 def _get(d: dict, *keys, default=None):
     """Haal een waarde op uit een dict, probeer meerdere keys."""
     for key in keys:
@@ -249,6 +262,15 @@ WONING_TYPE_MAPPING = {
     "nieuw_bouw": "Nieuwbouw",
 }
 
+# Samenlevingsvorm mapping
+SAMENLEVINGSVORM_MAPPING = {
+    "beperkte_gemeenschap": "Beperkte gemeenschap van goederen",
+    "gemeenschap_van_goederen": "Gemeenschap van goederen",
+    "huwelijkse_voorwaarden": "Huwelijkse voorwaarden",
+    "geregistreerd_partnerschap": "Geregistreerd partnerschap",
+    "samenwonend": "Samenwonend",
+}
+
 
 def _map_woning_type(raw: str) -> str:
     """Map woning type naar display-naam. 'bestaande_bouw' → 'Bestaande bouw'."""
@@ -257,11 +279,334 @@ def _map_woning_type(raw: str) -> str:
     return WONING_TYPE_MAPPING.get(raw, "Bestaande bouw")
 
 
-def _extract_leningdelen(
+# ─── Aanvraag-based extraction (PRIMAIRE BRON) ───
+
+def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
+    """Extraheer inkomen uit aanvraag.data.inkomenAanvrager/inkomenPartner array.
+
+    Structuur per item: { type, soort, jaarbedrag, isAOW, loondienst: { dienstverband: {...} } }
+    Types: "loondienst", "uitkering" (met isAOW), "pensioen", "ander_inkomen"
+    """
+    loondienst = 0
+    onderneming = 0
+    roz = 0
+    aow = 0
+    pensioen = 0
+    overig = 0
+    dienstverband = "Loondienst"
+
+    for item in (items or []):
+        item_type = str(item.get("type", "")).lower()
+        jaarbedrag = _to_float(item.get("jaarbedrag"))
+
+        if item_type == "loondienst":
+            # Bepaal dienstverband type
+            ld_data = item.get("loondienst") or {}
+            dv_data = ld_data.get("dienstverband") or {}
+            soort_dv = str(dv_data.get("soortDienstverband", "")).lower()
+
+            if "onderneming" in soort_dv or "zelfstandig" in soort_dv:
+                onderneming += jaarbedrag
+                dienstverband = "Onderneming"
+            elif "roz" in soort_dv:
+                roz += jaarbedrag
+                dienstverband = "ROZ"
+            else:
+                loondienst += jaarbedrag
+                dienstverband = "Loondienst"
+
+        elif item_type == "uitkering":
+            if item.get("isAOW"):
+                aow += jaarbedrag
+            else:
+                overig += jaarbedrag
+
+        elif item_type == "pensioen":
+            pensioen += jaarbedrag
+
+        elif item_type == "ander_inkomen":
+            overig += _to_float(
+                item.get("jaarbedrag")
+                or _get(item.get("anderInkomenData") or {},
+                        "jaarlijksBrutoInkomen")
+            )
+
+    inkomen = NormalizedInkomen(
+        loondienst=loondienst,
+        onderneming=onderneming,
+        roz=roz,
+        aow_uitkering=aow,
+        pensioen=pensioen,
+        overig=overig,
+    )
+
+    logger.debug(
+        "Inkomen (aanvraag): loondienst=%.0f, onderneming=%.0f, aow=%.0f, "
+        "pensioen=%.0f, overig=%.0f, dienstverband=%s",
+        loondienst, onderneming, aow, pensioen, overig, dienstverband,
+    )
+    return inkomen
+
+
+def _extract_persoon_from_aanvraag(
+    aanvraag_data: dict,
+    role: str,
+    inkomen_items: list,
+) -> NormalizedPersoon:
+    """Extraheer persoonsgegevens uit aanvraag.data.
+
+    Args:
+        aanvraag_data: aanvraag.data dict
+        role: "aanvrager" of "partner"
+        inkomen_items: aanvraag.data.inkomenAanvrager of inkomenPartner array
+    """
+    persoon_data = (aanvraag_data.get(role) or {})
+    persoon = persoon_data.get("persoon") or {}
+    adres_contact = persoon_data.get("adresContact") or {}
+
+    # Naam
+    roepnaam = str(persoon.get("roepnaam") or "").strip()
+    tussenvoegsel = str(persoon.get("tussenvoegsel") or "").strip()
+    achternaam = str(persoon.get("achternaam") or "").strip()
+    parts = [p for p in [roepnaam, tussenvoegsel, achternaam] if p]
+    naam = " ".join(parts)
+
+    # Voorletters
+    voorletters = str(persoon.get("voorletters") or "").strip()
+    voorletters_achternaam = ""
+    if voorletters and achternaam:
+        tv = f" {tussenvoegsel}" if tussenvoegsel else ""
+        voorletters_achternaam = f"{voorletters}{tv} {achternaam}"
+    elif naam:
+        p = naam.split()
+        voorletters_achternaam = f"{p[0][0]}. {' '.join(p[1:])}" if len(p) >= 2 else naam
+
+    geboortedatum = str(persoon.get("geboortedatum") or "")
+
+    # Adres
+    straat = str(adres_contact.get("straat") or "")
+    huisnr = str(adres_contact.get("huisnummer") or "")
+    toev = str(adres_contact.get("toevoeging") or "").strip()
+    adres = f"{straat} {huisnr}".strip()
+    if toev:
+        adres = f"{adres}{toev}"
+
+    postcode = str(adres_contact.get("postcode") or "")
+    woonplaats = str(adres_contact.get("woonplaats") or "")
+    postcode_plaats = f"{postcode} {woonplaats}".strip()
+
+    telefoon = str(adres_contact.get("telefoonnummer") or "")
+    email = str(adres_contact.get("email") or "")
+
+    # Inkomen uit array
+    inkomen = _extract_inkomen_from_aanvraag(inkomen_items)
+
+    # Dienstverband uit loondienst items
+    dienstverband = "Loondienst"
+    for item in (inkomen_items or []):
+        if str(item.get("type", "")).lower() == "loondienst":
+            ld_data = item.get("loondienst") or {}
+            dv_data = ld_data.get("dienstverband") or {}
+            soort = str(dv_data.get("soortDienstverband", "")).lower()
+            if "onderneming" in soort:
+                dienstverband = "Onderneming"
+            elif "roz" in soort:
+                dienstverband = "ROZ"
+            break
+
+    return NormalizedPersoon(
+        naam=naam,
+        voorletters_achternaam=voorletters_achternaam,
+        geboortedatum=geboortedatum,
+        adres=adres,
+        postcode_plaats=postcode_plaats,
+        telefoon=telefoon,
+        email=email,
+        inkomen=inkomen,
+        dienstverband=dienstverband,
+    )
+
+
+def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanciering:
+    """Extraheer financiering uit aanvraag.data.financieringsopzet + onderpand."""
+    fin = aanvraag_data.get("financieringsopzet") or {}
+    onderpand = aanvraag_data.get("onderpand") or {}
+    samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
+
+    koopsom = _to_float(fin.get("aankoopsomWoning"))
+    eigen_geld = _to_float(fin.get("eigenGeld"))
+    verbouwing = _to_float(fin.get("verbouwing"))
+
+    # Kosten koper: som van individuele kostenposten
+    kosten_koper = (
+        _to_float(fin.get("overdrachtsbelasting"))
+        + _to_float(fin.get("bankgarantie"))
+        + _to_float(fin.get("hypotheekakte"))
+        + _to_float(fin.get("transportakte"))
+        + _to_float(fin.get("taxatiekosten"))
+        + _to_float(fin.get("adviesBemiddeling"))
+        + _to_float(fin.get("nhgKosten"))
+    )
+
+    # Woningwaarde uit onderpand (marktwaarde)
+    woningwaarde = _to_float(onderpand.get("marktwaarde")) or koopsom
+
+    # Energielabel uit onderpand
+    energielabel = str(onderpand.get("energielabel") or "Geen (geldig) Label")
+
+    # Type woning
+    woning_type_raw = str(fin.get("woningType") or "").lower().strip()
+    type_woning = _map_woning_type(woning_type_raw)
+
+    # Onderpand adres
+    straat = str(onderpand.get("straat") or "")
+    postcode = str(onderpand.get("postcode") or "")
+    woonplaats = str(onderpand.get("woonplaats") or "")
+    adres = f"{straat}, {postcode} {woonplaats}".strip(", ")
+
+    # Hypotheekverstrekker + NHG
+    hypotheekverstrekker = str(samenstellen.get("geldverstrekker") or "")
+    nhg = bool(samenstellen.get("nhg", True))
+
+    logger.debug(
+        "Financiering (aanvraag): koopsom=%.0f, woningwaarde=%.0f, eigen_geld=%.0f, "
+        "kosten_koper=%.0f, energielabel=%s, adres=%s, verstrekker=%s",
+        koopsom, woningwaarde, eigen_geld, kosten_koper, energielabel,
+        adres or "(leeg)", hypotheekverstrekker,
+    )
+
+    return NormalizedFinanciering(
+        koopsom=koopsom,
+        kosten_koper=kosten_koper,
+        eigen_middelen=eigen_geld,
+        woningwaarde=woningwaarde,
+        energielabel=energielabel,
+        type_woning=type_woning,
+        adres=adres,
+        nhg=nhg,
+        hypotheekverstrekker=hypotheekverstrekker,
+    )
+
+
+def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLeningdeel]:
+    """Extraheer leningdelen uit aanvraag.data.samenstellenHypotheek.
+
+    Combineert meenemenLeningdelen (bestaande) + nieuweLeningdelen.
+    Structuur per deel: { bedrag, aflosvorm, rentePercentage, looptijd, box, renteVastPeriode }
+    """
+    samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
+    meenemen = samenstellen.get("meenemenLeningdelen") or []
+    nieuw = samenstellen.get("nieuweLeningdelen") or []
+
+    alle_delen = meenemen + nieuw
+
+    if not alle_delen:
+        return []
+
+    logger.info("Leningdelen (aanvraag): %d meenemen + %d nieuw = %d",
+                len(meenemen), len(nieuw), len(alle_delen))
+
+    result = []
+    for deel in alle_delen:
+        raw_aflosvorm = str(deel.get("aflosvorm") or "annuiteit")
+        rente_raw = deel.get("rentePercentage") or deel.get("rentepercentage")
+        looptijd = int(_to_float(deel.get("looptijd"), 360))
+
+        # RVP: renteVastPeriode is in jaren in aanvraag
+        rvp_jaren = _to_float(deel.get("renteVastPeriode") or deel.get("rentevastePeriode"))
+        rvp_maanden = int(rvp_jaren * 12) if rvp_jaren else 120
+
+        # Box: "box1" of "box3"
+        box_raw = str(deel.get("box") or "box1").lower()
+        is_box3 = "3" in box_raw
+        bedrag = _to_float(deel.get("bedrag"))
+
+        ld = NormalizedLeningdeel(
+            aflos_type=_map_aflosvorm(raw_aflosvorm),
+            bedrag_box1=0 if is_box3 else bedrag,
+            bedrag_box3=bedrag if is_box3 else 0,
+            werkelijke_rente=_normalize_rente(rente_raw),
+            org_lpt=looptijd,
+            rest_lpt=looptijd,
+            rvp=rvp_maanden,
+            is_overbrugging=False,  # Aanvraag leningdelen zijn nooit overbrugging
+        )
+        result.append(ld)
+
+    return result
+
+
+def _extract_verplichtingen_from_aanvraag(aanvraag_data: dict) -> dict:
+    """Extraheer verplichtingen uit aanvraag.data.verplichtingen[].
+
+    Structuur per item: { type, maandbedrag, saldo, ... }
+    Types: "studieschuld", "doorlopend_krediet", "persoonlijke_lening", etc.
+    """
+    items = aanvraag_data.get("verplichtingen") or []
+    studielening = 0
+    overige_kredieten = 0
+    limieten = 0
+
+    for item in items:
+        vtype = str(item.get("type") or "").lower()
+        maandbedrag = _to_float(item.get("maandbedrag"))
+        saldo = _to_float(item.get("saldo"))
+
+        if "studie" in vtype:
+            studielening += maandbedrag
+        elif "doorlopend" in vtype or "krediet" in vtype:
+            limieten += saldo
+            overige_kredieten += maandbedrag
+        else:
+            overige_kredieten += maandbedrag
+
+    return {
+        "studielening": studielening,
+        "overige_kredieten": overige_kredieten,
+        "limieten": limieten,
+    }
+
+
+def _extract_kinderen_from_aanvraag(aanvraag_data: dict) -> tuple[list[str], bool, str]:
+    """Extraheer kinderen uit aanvraag.data.kinderen[].
+
+    Returns: (kinderen_list, heeft_kind_onder_18, geboortedatum_jongste_kind)
+    """
+    items = aanvraag_data.get("kinderen") or []
+    kinderen = []
+    heeft_kind_onder_18 = False
+    geboortedatum_jongste_kind = ""
+
+    for kind in items:
+        roepnaam = str(kind.get("roepnaam") or "").strip()
+        achternaam = str(kind.get("achternaam") or "").strip()
+        geb = str(kind.get("geboortedatum") or "").strip()
+        naam = f"{roepnaam} {achternaam}".strip()
+
+        if naam or geb:
+            kinderen.append(f"{naam} ({geb})" if geb else naam)
+            if geb:
+                try:
+                    from datetime import date as dt_date
+                    geb_date = dt_date.fromisoformat(geb)
+                    leeftijd = (dt_date.today() - geb_date).days / 365.25
+                    if leeftijd < 18:
+                        heeft_kind_onder_18 = True
+                    if not geboortedatum_jongste_kind or geb > geboortedatum_jongste_kind:
+                        geboortedatum_jongste_kind = geb
+                except (ValueError, TypeError):
+                    pass
+
+    return kinderen, heeft_kind_onder_18, geboortedatum_jongste_kind
+
+
+# ─── Dossier-based extraction (FALLBACK) ───
+
+def _extract_leningdelen_from_dossier(
     invoer: dict,
     scenario_kolom: dict | None = None,
 ) -> list[NormalizedLeningdeel]:
-    """Extraheer en normaliseer leningdelen.
+    """Extraheer en normaliseer leningdelen uit dossier (fallback).
 
     Zoekt in volgorde:
     1. scenario_kolom (dossier.scenario1 — aparte kolom in Supabase productie)
@@ -271,7 +616,7 @@ def _extract_leningdelen(
     """
     raw_delen = None
 
-    # 1. Scenario kolom (productie Supabase — aparte kolom op dossier tabel)
+    # 1. Scenario kolom
     if scenario_kolom and isinstance(scenario_kolom, dict):
         raw_delen = _get(scenario_kolom, "leningDelen", "leningdelen")
 
@@ -291,10 +636,10 @@ def _extract_leningdelen(
         raw_delen = _get(invoer, "leningdelen", "hypotheekDelen", "hypotheek_delen") or []
 
     if not raw_delen:
-        logger.warning("Geen leningdelen gevonden in invoer")
+        logger.warning("Geen leningdelen gevonden in dossier")
         return []
 
-    logger.info("Gevonden: %d leningdelen", len(raw_delen))
+    logger.info("Gevonden: %d leningdelen (dossier)", len(raw_delen))
 
     result = []
     for deel in raw_delen:
@@ -324,23 +669,15 @@ def _extract_leningdelen(
     return result
 
 
-def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkomen:
-    """Extraheer inkomen voor aanvrager of partner.
-
-    Zoekt in meerdere paden:
-    - invoer.haalbaarheidsBerekeningen[0].inkomenKeys → niet de waarden!
-    - invoer.klantGegevens.hoofdinkomenAanvrager
-    - invoer.inkomen.hoofd_inkomen_aanvrager
-    - invoer.hoofd_inkomen_aanvrager (direct op invoer)
-    """
+def _extract_inkomen_from_dossier(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkomen:
+    """Extraheer inkomen uit dossier.invoer (fallback)."""
     klant = _get(invoer, "klantGegevens", "klant") or {}
     haalb = (_get(invoer, "haalbaarheidsBerekeningen") or [{}])[0] if _get(invoer, "haalbaarheidsBerekeningen") else {}
     ink_obj = _get(haalb, "inkomenGegevens", "inkomen") or _get(invoer, "inkomenGegevens", "inkomen") or {}
 
     suffix_lower = suffix.lower()
-    suffix_camel = suffix  # "Aanvrager" of "Partner"
+    suffix_camel = suffix
 
-    # Hoofdinkomen (loondienst + onderneming + roz)
     hoofd = _to_float(
         _get(ink_obj, f"hoofdinkomen{suffix_camel}", f"hoofd_inkomen_{suffix_lower}")
         or _get(klant, f"hoofdinkomen{suffix_camel}", f"hoofd_inkomen_{suffix_lower}")
@@ -348,7 +685,6 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
         or _get(haalb, f"hoofd_inkomen_{suffix_lower}")
     )
 
-    # AOW inkomen
     aow = _to_float(
         _get(ink_obj, f"aowUitkering{suffix_camel}", f"aow_uitkering_{suffix_lower}")
         or _get(klant, f"aowUitkering{suffix_camel}")
@@ -361,7 +697,6 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
         or _get(invoer, f"pensioen_{suffix_lower}")
     )
 
-    # Lijfrente, huur, etc.
     lijfrente = _to_float(
         _get(ink_obj, f"inkomenUitLijfrente{suffix_camel}",
              f"inkomen_uit_lijfrente_{suffix_lower}")
@@ -386,7 +721,6 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
         or _get(invoer, f"te_betalen_partneralimentatie_{suffix_lower}")
     )
 
-    # Dienstverband (bepaalt loondienst vs onderneming vs roz)
     dienstverband = (
         _get(ink_obj, f"typeDienstverband{suffix_camel}",
              f"dienstverband_{suffix_lower}")
@@ -396,14 +730,11 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
     )
 
     logger.debug(
-        "Inkomen %s: hoofd=%.0f, aow=%.0f, pensioen=%.0f, "
-        "lijfrente=%.0f, huur=%.0f, dienstverband=%s | "
-        "ink_obj_keys=%s",
+        "Inkomen %s (dossier): hoofd=%.0f, aow=%.0f, pensioen=%.0f, "
+        "lijfrente=%.0f, huur=%.0f, dienstverband=%s",
         suffix, hoofd, aow, pensioen, lijfrente, huur, dienstverband,
-        list(ink_obj.keys()) if ink_obj else "leeg",
     )
 
-    # Verdeel hoofdinkomen over loondienst/onderneming/roz
     inkomen = NormalizedInkomen(
         aow_uitkering=aow,
         pensioen=pensioen,
@@ -423,35 +754,22 @@ def _extract_inkomen(invoer: dict, suffix: str = "Aanvrager") -> NormalizedInkom
     return inkomen
 
 
-def _extract_persoon(
+def _extract_persoon_from_dossier(
     invoer: dict,
     suffix: str = "Aanvrager",
     contact_gegevens: dict | None = None,
 ) -> NormalizedPersoon:
-    """Extraheer persoonsgegevens voor aanvrager of partner.
-
-    Args:
-        invoer: invoer JSONB uit dossier
-        suffix: "Aanvrager" of "Partner"
-        contact_gegevens: klant_contact_gegevens kolom van dossier (optioneel)
-    """
+    """Extraheer persoonsgegevens uit dossier (fallback)."""
     klant = _get(invoer, "klantGegevens", "klant") or {}
     suffix_camel = suffix
     suffix_lower = suffix.lower()
 
-    # Contact gegevens uit aparte dossier kolom
     contact = {}
     if contact_gegevens and isinstance(contact_gegevens, dict):
         contact = contact_gegevens.get(suffix_lower) or {}
 
-    # Naam: probeer naamAanvrager, fallback naar roepnaam + tussenvoegsel + achternaam
-    naam = str(
-        _get(klant, f"naam{suffix_camel}", f"naam_{suffix_lower}")
-        or ""
-    ).strip()
-
+    naam = str(_get(klant, f"naam{suffix_camel}", f"naam_{suffix_lower}") or "").strip()
     if not naam:
-        # Compose naam uit onderdelen (productie Supabase data)
         roepnaam = str(_get(klant, f"roepnaam{suffix_camel}") or
                        _get(contact, "voornaam") or "").strip()
         tussenvoegsel = str(_get(klant, f"tussenvoegsel{suffix_camel}") or
@@ -462,11 +780,9 @@ def _extract_persoon(
         naam = " ".join(parts)
 
     geboortedatum = str(
-        _get(klant, f"geboortedatum{suffix_camel}", f"geboortedatum_{suffix_lower}")
-        or ""
+        _get(klant, f"geboortedatum{suffix_camel}", f"geboortedatum_{suffix_lower}") or ""
     )
 
-    # Adres: uit klantGegevens of contact_gegevens
     adres = str(_get(klant, f"adres{suffix_camel}", "adres") or "")
     if not adres and contact:
         straat = str(_get(contact, "straat") or "")
@@ -481,7 +797,6 @@ def _extract_persoon(
         if postcode or woonplaats:
             postcode_plaats = f"{postcode} {woonplaats}".strip()
 
-    # Telefoon en email: klantGegevens of contact_gegevens
     telefoon = str(
         _get(klant, f"telefoon{suffix_camel}", "telefoon")
         or _get(contact, "telefoonnummer", "telefoon")
@@ -493,9 +808,8 @@ def _extract_persoon(
         or ""
     )
 
-    inkomen = _extract_inkomen(invoer, suffix)
+    inkomen = _extract_inkomen_from_dossier(invoer, suffix)
 
-    # Dienstverband
     ink_obj = {}
     haalb_list = _get(invoer, "haalbaarheidsBerekeningen")
     if haalb_list and isinstance(haalb_list, list) and len(haalb_list) > 0:
@@ -507,7 +821,6 @@ def _extract_persoon(
         or "Loondienst"
     )
 
-    # Voorletters + achternaam: probeer uit naam te halen
     voorletters = ""
     if naam:
         parts = naam.split()
@@ -529,14 +842,18 @@ def _extract_persoon(
     )
 
 
-def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
-    """Extraheer financieringsgegevens uit invoer JSONB."""
-    # berekeningen[0] = eerste scenario (bijv. "Bij tijdelijk twee woningen")
+def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
+    """Extraheer financieringsgegevens uit dossier.invoer (fallback)."""
     ber_list = _get(invoer, "berekeningen") or []
     ber = ber_list[0] if ber_list else {}
-
     klant = _get(invoer, "klantGegevens", "klant") or {}
     fin = _get(invoer, "financiering", "financieringInput") or {}
+
+    # Onderpand uit haalbaarheidsBerekeningen
+    haalb_list = _get(invoer, "haalbaarheidsBerekeningen") or []
+    haalb_onderpand = {}
+    if haalb_list:
+        haalb_onderpand = haalb_list[0].get("onderpand") or {}
 
     koopsom = _to_float(
         _get(ber, "aankoopsomWoning", "koopsom", "aankoopsom")
@@ -549,13 +866,15 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
         or _get(invoer, "eigenGeld", "eigenMiddelen")
     )
     woningwaarde = _to_float(
-        _get(ber, "woningwaarde", "marktwaarde")
+        _get(haalb_onderpand, "marktwaarde")
+        or _get(ber, "woningwaarde", "marktwaarde")
         or _get(fin, "woningwaarde", "marktwaarde")
         or _get(invoer, "woningwaarde")
-    ) or koopsom  # Fallback naar koopsom
+    ) or koopsom
 
     energielabel = str(
-        _get(ber, "energielabel")
+        _get(haalb_onderpand, "energielabel")
+        or _get(ber, "energielabel")
         or _get(invoer, "energielabel")
         or _get(klant, "energielabel")
         or "Geen (geldig) Label"
@@ -568,7 +887,6 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
         or ""
     )
 
-    # Fix 4: Type woning — lees uit berekeningen[0].woningType
     woning_type_raw = str(
         _get(ber, "woningType", "woning_type", "typeWoning")
         or _get(fin, "woningType", "typeWoning")
@@ -577,7 +895,6 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
     ).lower().strip()
     type_woning = _map_woning_type(woning_type_raw)
 
-    # Fix 5: Kosten koper — lees uit berekeningen of bereken
     kosten_koper = _to_float(
         _get(ber, "kostenKoper", "kosten_koper")
         or _get(fin, "kostenKoper", "kosten_koper")
@@ -585,13 +902,10 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
     )
 
     logger.debug(
-        "Financiering: koopsom=%.0f, woningwaarde=%.0f, eigen_geld=%.0f, "
-        "kosten_koper=%.0f, energielabel=%s, adres=%s, type_woning=%s | "
-        "ber_keys=%s, fin_keys=%s",
+        "Financiering (dossier): koopsom=%.0f, woningwaarde=%.0f, eigen_geld=%.0f, "
+        "kosten_koper=%.0f, energielabel=%s, adres=%s",
         koopsom, woningwaarde, eigen_geld, kosten_koper, energielabel,
-        adres or "(leeg)", type_woning,
-        list(ber.keys()) if ber else "leeg",
-        list(fin.keys()) if fin else "leeg",
+        adres or "(leeg)",
     )
 
     return NormalizedFinanciering(
@@ -605,11 +919,16 @@ def _extract_financiering(invoer: dict) -> NormalizedFinanciering:
     )
 
 
+# ─── Hoofdfunctie ───
+
 def extract_dossier_data(
     dossier: dict,
     aanvraag: dict,
 ) -> NormalizedDossierData:
     """Hoofdfunctie: Supabase dossier + aanvraag → NormalizedDossierData.
+
+    PRIMAIRE BRON: aanvraag.data (Inventarisatie + Samenstellen stappen)
+    FALLBACK: dossier.invoer (Haalbaarheid stap)
 
     Args:
         dossier: Volledige rij uit Supabase `dossiers` tabel
@@ -618,16 +937,23 @@ def extract_dossier_data(
     Returns:
         NormalizedDossierData met alle velden genormaliseerd.
     """
-    # De `invoer` JSONB zit op het dossier
     invoer = dossier.get("invoer") or dossier
-    logger.info("Invoer keys: %s", list(invoer.keys()) if isinstance(invoer, dict) else "niet-dict")
-    logger.info("Dossier top-level keys: %s", list(dossier.keys()) if isinstance(dossier, dict) else "niet-dict")
-    logger.info("Aanvraag keys: %s", list(aanvraag.keys()) if isinstance(aanvraag, dict) else "niet-dict")
+    aanvraag_data = {}
+    if aanvraag and isinstance(aanvraag.get("data"), dict):
+        aanvraag_data = aanvraag["data"]
+
+    # has_aanvraag = True alleen als aanvraag_data daadwerkelijk Inventarisatie/
+    # Samenstellen data bevat (aanvrager, inkomen, etc.)
+    has_aanvraag = bool(aanvraag_data and (
+        aanvraag_data.get("aanvrager")
+        or aanvraag_data.get("inkomenAanvrager")
+        or aanvraag_data.get("heeftPartner") is not None
+    ))
+    logger.info("Bron: %s", "aanvraag.data" if has_aanvraag else "dossier.invoer (fallback)")
+    logger.info("Dossier keys: %s", list(dossier.keys()) if isinstance(dossier, dict) else "niet-dict")
+    logger.info("Aanvraag data keys: %s", list(aanvraag_data.keys()) if aanvraag_data else "leeg")
 
     klant = _get(invoer, "klantGegevens", "klant") or {}
-    logger.debug("klantGegevens keys: %s", list(klant.keys()) if klant else "leeg")
-
-    # Contact gegevens uit aparte kolom (productie Supabase)
     contact_gegevens = dossier.get("klant_contact_gegevens")
     if isinstance(contact_gegevens, str):
         try:
@@ -636,108 +962,162 @@ def extract_dossier_data(
         except (json.JSONDecodeError, TypeError):
             contact_gegevens = None
 
-    # Alleenstaand?
-    alleenstaand_raw = _get(klant, "alleenstaand", "is_alleenstaand")
-    if isinstance(alleenstaand_raw, bool):
-        alleenstaand = alleenstaand_raw
-    elif isinstance(alleenstaand_raw, str):
-        alleenstaand = alleenstaand_raw.lower() in ("true", "ja", "yes", "1")
+    # ── Alleenstaand ──
+    if has_aanvraag:
+        alleenstaand = not bool(aanvraag_data.get("heeftPartner", False))
     else:
-        # Fallback: check of er partnergegevens zijn
-        has_partner_naam = bool(_get(klant, "naamPartner", "naam_partner"))
-        has_partner_parts = bool(
-            _get(klant, "achternaamPartner") or _get(klant, "roepnaamPartner")
+        alleenstaand_raw = _get(klant, "alleenstaand", "is_alleenstaand")
+        if isinstance(alleenstaand_raw, bool):
+            alleenstaand = alleenstaand_raw
+        elif isinstance(alleenstaand_raw, str):
+            alleenstaand = alleenstaand_raw.lower() in ("true", "ja", "yes", "1")
+        else:
+            has_partner_naam = bool(_get(klant, "naamPartner", "naam_partner"))
+            has_partner_parts = bool(
+                _get(klant, "achternaamPartner") or _get(klant, "roepnaamPartner")
+            )
+            alleenstaand = not (has_partner_naam or has_partner_parts)
+
+    # ── Personen ──
+    if has_aanvraag:
+        inkomen_aanvrager_items = aanvraag_data.get("inkomenAanvrager") or []
+        aanvrager = _extract_persoon_from_aanvraag(aanvraag_data, "aanvrager", inkomen_aanvrager_items)
+        partner = None
+        if not alleenstaand:
+            inkomen_partner_items = aanvraag_data.get("inkomenPartner") or []
+            partner = _extract_persoon_from_aanvraag(aanvraag_data, "partner", inkomen_partner_items)
+    else:
+        aanvrager = _extract_persoon_from_dossier(invoer, "Aanvrager", contact_gegevens)
+        partner = None
+        if not alleenstaand:
+            partner = _extract_persoon_from_dossier(invoer, "Partner", contact_gegevens)
+
+    # ── Leningdelen ──
+    if has_aanvraag:
+        leningdelen = _extract_leningdelen_from_aanvraag(aanvraag_data)
+    if not has_aanvraag or not leningdelen:
+        # Fallback naar dossier scenario1
+        scenario_kolom = dossier.get("scenario1")
+        if isinstance(scenario_kolom, str):
+            try:
+                import json
+                scenario_kolom = json.loads(scenario_kolom)
+            except (json.JSONDecodeError, TypeError):
+                scenario_kolom = None
+        leningdelen = _extract_leningdelen_from_dossier(invoer, scenario_kolom=scenario_kolom)
+
+    # ── Financiering ──
+    if has_aanvraag and aanvraag_data.get("financieringsopzet"):
+        financiering = _extract_financiering_from_aanvraag(aanvraag_data)
+    else:
+        financiering = _extract_financiering_from_dossier(invoer)
+
+    # Hypotheekverstrekker + NHG: check meerdere bronnen
+    if not financiering.hypotheekverstrekker:
+        # 1. aanvraag.data.samenstellenHypotheek (productie Lovable)
+        samenstellen = (aanvraag_data.get("samenstellenHypotheek") or {}) if aanvraag_data else {}
+        verstrekker = str(samenstellen.get("geldverstrekker") or "")
+        # 2. aanvraag.data.hypotheekverstrekker (ouder formaat)
+        if not verstrekker:
+            verstrekker = str(aanvraag_data.get("hypotheekverstrekker") or "") if aanvraag_data else ""
+        # 3. aanvraag.hypotheekverstrekker (top-level, backward compat)
+        if not verstrekker and aanvraag:
+            verstrekker = str(aanvraag.get("hypotheekverstrekker") or "")
+        if verstrekker:
+            financiering.hypotheekverstrekker = verstrekker
+
+        nhg_raw = (
+            samenstellen.get("nhg")
+            if samenstellen.get("nhg") is not None
+            else aanvraag_data.get("nhg") if aanvraag_data
+            else None
         )
-        alleenstaand = not (has_partner_naam or has_partner_parts)
-
-    # Personen
-    aanvrager = _extract_persoon(invoer, "Aanvrager", contact_gegevens)
-    partner = None
-    if not alleenstaand:
-        partner = _extract_persoon(invoer, "Partner", contact_gegevens)
-
-    # Leningdelen — scenario1 is aparte kolom op dossier tabel in productie
-    scenario_kolom = dossier.get("scenario1")
-    if isinstance(scenario_kolom, str):
-        try:
-            import json
-            scenario_kolom = json.loads(scenario_kolom)
-        except (json.JSONDecodeError, TypeError):
-            scenario_kolom = None
-    leningdelen = _extract_leningdelen(invoer, scenario_kolom=scenario_kolom)
-
-    # Financiering
-    financiering = _extract_financiering(invoer)
-
-    # Aanvraag-data: productie Supabase heeft geneste `data` JSON kolom
-    if aanvraag:
-        aanvraag_data = aanvraag.get("data") if isinstance(aanvraag.get("data"), dict) else aanvraag
-        financiering.hypotheekverstrekker = str(
-            _get(aanvraag_data, "hypotheekverstrekker", "geldverstrekker") or ""
-        )
-        nhg_raw = _get(aanvraag_data, "nhg", "met_nhg")
+        if nhg_raw is None and aanvraag:
+            nhg_raw = aanvraag.get("nhg")
         if nhg_raw is not None:
             financiering.nhg = bool(nhg_raw)
 
-    # Verplichtingen
-    verplichtingen = _get(invoer, "verplichtingen", "financieleVerplichtingen") or {}
-    limieten_bkr = _to_float(
-        _get(verplichtingen, "limietenBkr", "limieten_bkr_geregistreerd", "limieten")
-        or _get(invoer, "limieten_bkr_geregistreerd", "limietenBkr")
-    )
-    studielening = _to_float(
-        _get(verplichtingen, "studielening", "studievoorschot_studielening")
-        or _get(invoer, "studievoorschot_studielening", "studielening")
-    )
-    erfpacht = _to_float(
-        _get(verplichtingen, "erfpachtcanon", "erfpachtcanon_per_jaar", "erfpacht")
-        or _get(invoer, "erfpachtcanon_per_jaar", "erfpachtcanon")
-    )
-    overig_krediet = _to_float(
-        _get(verplichtingen, "overigeKredieten", "jaarlast_overige_kredieten")
-        or _get(invoer, "jaarlast_overige_kredieten", "overigeKredieten")
-    )
+    # ── Verplichtingen ──
+    if has_aanvraag and aanvraag_data.get("verplichtingen"):
+        verpl = _extract_verplichtingen_from_aanvraag(aanvraag_data)
+        studielening = verpl["studielening"]
+        overig_krediet = verpl["overige_kredieten"]
+        limieten_bkr = verpl["limieten"]
+        erfpacht = 0
+    else:
+        # Fallback: uit dossier haalbaarheidsBerekeningen inkomenGegevens
+        haalb_list = _get(invoer, "haalbaarheidsBerekeningen") or []
+        haalb_ink = (haalb_list[0].get("inkomenGegevens") or {}) if haalb_list else {}
+        verplichtingen = _get(invoer, "verplichtingen", "financieleVerplichtingen") or {}
 
-    # Fix 1: Burgerlijke staat — afleiden uit alleenstaand flag
-    burgerlijke_staat = "Alleenstaand" if alleenstaand else "Gehuwd"
-    # Override met expliciete waarde als beschikbaar
-    bs_raw = _get(klant, "burgerlijkeStaat", "burgerlijke_staat", "burgelijkeStaat")
-    if bs_raw and isinstance(bs_raw, str) and bs_raw.strip():
-        burgerlijke_staat = bs_raw.strip()
+        limieten_bkr = _to_float(
+            _get(haalb_ink, "limieten", "bkrLimieten")
+            or _get(verplichtingen, "limietenBkr", "limieten_bkr_geregistreerd", "limieten")
+            or _get(invoer, "limieten_bkr_geregistreerd", "limietenBkr")
+        )
+        studielening = _to_float(
+            _get(haalb_ink, "studielening")
+            or _get(verplichtingen, "studielening", "studievoorschot_studielening")
+            or _get(invoer, "studievoorschot_studielening", "studielening")
+        )
+        erfpacht = _to_float(
+            _get(verplichtingen, "erfpachtcanon", "erfpachtcanon_per_jaar", "erfpacht")
+            or _get(invoer, "erfpachtcanon_per_jaar", "erfpachtcanon")
+        )
+        overig_krediet = _to_float(
+            _get(haalb_ink, "maandlastLeningen", "overigeKredieten")
+            or _get(verplichtingen, "overigeKredieten", "jaarlast_overige_kredieten")
+            or _get(invoer, "jaarlast_overige_kredieten", "overigeKredieten")
+        )
 
-    # Fix 2: Huwelijkse voorwaarden
-    huwelijkse_voorwaarden = str(
-        _get(klant, "huwelijkseVoorwaarden", "huwelijkse_voorwaarden",
-             "huwelijksVoorwaarden")
-        or ""
-    ).strip()
+    # ── Burgerlijke staat ──
+    if has_aanvraag:
+        bs_raw = aanvraag_data.get("burgerlijkeStaat") or ""
+        burgerlijke_staat = bs_raw.capitalize() if bs_raw else ("Alleenstaand" if alleenstaand else "Gehuwd")
 
-    # Fix 3: Kinderen
-    kinderen_raw = _get(klant, "kinderen") or []
-    kinderen = []
-    heeft_kind_onder_18 = False
-    geboortedatum_jongste_kind = ""
+        sv_raw = aanvraag_data.get("samenlevingsvorm") or ""
+        huwelijkse_voorwaarden = SAMENLEVINGSVORM_MAPPING.get(sv_raw, sv_raw)
+    else:
+        burgerlijke_staat = "Alleenstaand" if alleenstaand else "Gehuwd"
+        bs_raw = _get(klant, "burgerlijkeStaat", "burgerlijke_staat", "burgelijkeStaat")
+        if bs_raw and isinstance(bs_raw, str) and bs_raw.strip():
+            burgerlijke_staat = bs_raw.strip()
 
-    if isinstance(kinderen_raw, list):
-        for kind in kinderen_raw:
-            if isinstance(kind, dict):
-                naam = str(_get(kind, "naam", "voornaam") or "").strip()
-                geb = str(_get(kind, "geboortedatum") or "").strip()
-                if naam or geb:
-                    kinderen.append(f"{naam} ({geb})" if geb else naam)
-                    if geb:
-                        try:
-                            from datetime import date as dt_date
-                            geb_date = dt_date.fromisoformat(geb)
-                            leeftijd = (dt_date.today() - geb_date).days / 365.25
-                            if leeftijd < 18:
-                                heeft_kind_onder_18 = True
-                            if not geboortedatum_jongste_kind or geb > geboortedatum_jongste_kind:
-                                geboortedatum_jongste_kind = geb
-                        except (ValueError, TypeError):
-                            pass
-            elif isinstance(kind, str) and kind.strip():
-                kinderen.append(kind.strip())
+        huwelijkse_voorwaarden = str(
+            _get(klant, "huwelijkseVoorwaarden", "huwelijkse_voorwaarden",
+                 "huwelijksVoorwaarden")
+            or ""
+        ).strip()
+
+    # ── Kinderen ──
+    if has_aanvraag and aanvraag_data.get("kinderen"):
+        kinderen, heeft_kind_onder_18, geboortedatum_jongste_kind = \
+            _extract_kinderen_from_aanvraag(aanvraag_data)
+    else:
+        kinderen_raw = _get(klant, "kinderen") or []
+        kinderen = []
+        heeft_kind_onder_18 = False
+        geboortedatum_jongste_kind = ""
+        if isinstance(kinderen_raw, list):
+            for kind in kinderen_raw:
+                if isinstance(kind, dict):
+                    naam = str(_get(kind, "naam", "voornaam") or "").strip()
+                    geb = str(_get(kind, "geboortedatum") or "").strip()
+                    if naam or geb:
+                        kinderen.append(f"{naam} ({geb})" if geb else naam)
+                        if geb:
+                            try:
+                                from datetime import date as dt_date
+                                geb_date = dt_date.fromisoformat(geb)
+                                leeftijd = (dt_date.today() - geb_date).days / 365.25
+                                if leeftijd < 18:
+                                    heeft_kind_onder_18 = True
+                                if not geboortedatum_jongste_kind or geb > geboortedatum_jongste_kind:
+                                    geboortedatum_jongste_kind = geb
+                            except (ValueError, TypeError):
+                                pass
+                elif isinstance(kind, str) and kind.strip():
+                    kinderen.append(kind.strip())
 
     data = NormalizedDossierData(
         aanvrager=aanvrager,
@@ -757,8 +1137,10 @@ def extract_dossier_data(
     )
 
     logger.info(
-        "Dossier genormaliseerd: alleenstaand=%s, leningdelen=%d, hypotheek=%.0f",
+        "Dossier genormaliseerd: alleenstaand=%s, leningdelen=%d, hypotheek=%.0f, "
+        "bron=%s",
         alleenstaand, len(leningdelen), data.hypotheek_bedrag,
+        "aanvraag" if has_aanvraag else "dossier",
     )
 
     return data
