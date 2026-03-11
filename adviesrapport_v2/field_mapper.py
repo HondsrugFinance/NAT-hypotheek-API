@@ -746,6 +746,9 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
         soort_dekking = str(item.get("soortDekking") or "").strip()
         einddatum = str(item.get("einddatum") or "").strip()
 
+        # Log alle keys van dit verzekering item
+        logger.info("Verzekering item keys: %s", sorted(item.keys()))
+
         # Geneste verzekerdePersonen array (Lovable structuur)
         personen = (
             item.get("verzekerdePersonen")
@@ -758,10 +761,14 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
             # Split: één record per verzekerde persoon
             for vp in personen:
                 if not isinstance(vp, dict):
+                    logger.info("VP is niet een dict: %s (type=%s)", vp, type(vp).__name__)
                     continue
+                # Log alle keys van deze verzekerde persoon
+                logger.info("VezekerdePersonen item keys: %s, values: %s",
+                            sorted(vp.keys()), {k: str(v)[:50] for k, v in vp.items()})
                 verzekerde = str(
                     vp.get("verzekerde") or vp.get("type")
-                    or vp.get("naam") or ""
+                    or vp.get("naam") or vp.get("persoon") or ""
                 ).strip()
                 dekking = _to_float(
                     vp.get("orvDekking") or vp.get("aovDekking")
@@ -877,6 +884,7 @@ def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBes
 
     result = []
     for h in items:
+        logger.info("Hypotheek item keys: %s", sorted(h.keys()))
         verstrekker = str(h.get("geldverstrekker") or h.get("verstrekker") or "").strip()
         nhg = bool(h.get("nhg"))
         hoofdsom = _to_float(h.get("hoofdsom") or h.get("oorspronkelijkeHoofdsom"))
