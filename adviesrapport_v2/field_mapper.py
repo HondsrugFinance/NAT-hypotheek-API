@@ -104,6 +104,7 @@ class NormalizedInkomen:
     overig: float = 0  # Lijfrente, huur, etc. (niet beïnvloed door AO)
     aow_uitkering: float = 0
     pensioen: float = 0
+    nabestaandenpensioen: float = 0  # Uitkering bij overlijden partner
     partneralimentatie_ontvangen: float = 0
     partneralimentatie_betalen: float = 0
 
@@ -143,7 +144,10 @@ class NormalizedVerzekering:
     aanbieder: str = ""
     polisnummer: str = ""
     verzekerde: str = ""     # "aanvrager", "partner", "beiden"
-    dekking: float = 0       # Jaarlijks of eenmalig uitkeringsbedrag
+    dekking: float = 0       # Jaarlijks of eenmalig uitkeringsbedrag (ORV)
+    dekking_aov: float = 0   # AOV dekking bedrag (jaarbasis)
+    dekking_ao: float = 0    # Woonlastenverzekering AO component (jaarbasis)
+    dekking_ww: float = 0    # Woonlastenverzekering WW component (jaarbasis)
     soort_dekking: str = ""  # "gelijkblijvend", "annuïtair", etc.
     einddatum: str = ""      # YYYY-MM-DD
 
@@ -299,6 +303,34 @@ class NormalizedDossierData:
     def inkomen_partner_aow(self) -> float:
         return self.partner.inkomen.totaal_aow if self.partner else 0
 
+    @property
+    def aov_dekking_aanvrager(self) -> float:
+        """AOV bruto jaardekking voor aanvrager (uit verzekeringen)."""
+        return sum(
+            v.dekking_aov for v in self.verzekeringen
+            if v.verzekerde.lower() in ("aanvrager",)
+            or (self.aanvrager.naam and v.verzekerde == self.aanvrager.naam)
+        )
+
+    @property
+    def aov_dekking_partner(self) -> float:
+        """AOV bruto jaardekking voor partner (uit verzekeringen)."""
+        return sum(
+            v.dekking_aov for v in self.verzekeringen
+            if v.verzekerde.lower() in ("partner",)
+            or (self.partner and self.partner.naam and v.verzekerde == self.partner.naam)
+        )
+
+    @property
+    def woonlastenverzekering_ao(self) -> float:
+        """Woonlastenverzekering AO bruto jaardekking (alle personen)."""
+        return sum(v.dekking_ao for v in self.verzekeringen)
+
+    @property
+    def woonlastenverzekering_ww(self) -> float:
+        """Woonlastenverzekering WW bruto jaardekking (alle personen)."""
+        return sum(v.dekking_ww for v in self.verzekeringen)
+
 
 # ─── Utility helpers ───
 
@@ -381,6 +413,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
     roz = 0
     aow = 0
     pensioen = 0
+    nabestaandenpensioen = 0
     overig = 0
     dienstverband = "Loondienst"
 
@@ -411,7 +444,19 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
                 overig += jaarbedrag
 
         elif item_type == "pensioen":
-            pensioen += jaarbedrag
+            # Diagnostiek: dump alle pensioen velden
+            logger.info("Pensioen item: keys=%s, soort=%s, type=%s, jaarbedrag=%.0f, all=%s",
+                        sorted(item.keys()),
+                        item.get("soort", "?"),
+                        item.get("type", "?"),
+                        jaarbedrag,
+                        {k: str(v)[:80] for k, v in item.items()})
+
+            soort = str(item.get("soort") or "").lower()
+            if "nabestaanden" in soort or "partner" in soort:
+                nabestaandenpensioen += jaarbedrag
+            else:
+                pensioen += jaarbedrag
 
         elif item_type == "ander_inkomen":
             overig += _to_float(
@@ -426,13 +471,15 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
         roz=roz,
         aow_uitkering=aow,
         pensioen=pensioen,
+        nabestaandenpensioen=nabestaandenpensioen,
         overig=overig,
     )
 
     logger.debug(
         "Inkomen (aanvraag): loondienst=%.0f, onderneming=%.0f, aow=%.0f, "
-        "pensioen=%.0f, overig=%.0f, dienstverband=%s",
-        loondienst, onderneming, aow, pensioen, overig, dienstverband,
+        "pensioen=%.0f, nabestaandenpensioen=%.0f, overig=%.0f, dienstverband=%s",
+        loondienst, onderneming, aow, pensioen, nabestaandenpensioen,
+        overig, dienstverband,
     )
     return inkomen
 
@@ -779,15 +826,20 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
                     or vp.get("naam") or vp.get("persoon") or ""
                 ).strip()
                 dekking = _to_float(
-                    vp.get("orvDekking") or vp.get("aovDekking")
-                    or vp.get("dekking") or vp.get("uitkering")
+                    vp.get("orvDekking") or vp.get("dekking") or vp.get("uitkering")
                 )
+                dekking_aov = _to_float(vp.get("dekkingAOV"))
+                dekking_ao = _to_float(vp.get("dekkingAO"))
+                dekking_ww = _to_float(vp.get("dekkingWW"))
                 result.append(NormalizedVerzekering(
                     type=vtype,
                     aanbieder=aanbieder,
                     polisnummer=polisnummer,
                     verzekerde=verzekerde,
                     dekking=dekking,
+                    dekking_aov=dekking_aov,
+                    dekking_ao=dekking_ao,
+                    dekking_ww=dekking_ww,
                     soort_dekking=soort_dekking,
                     einddatum=einddatum,
                 ))
@@ -797,8 +849,7 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
                 item.get("verzekerde") or item.get("verzekerdeNaam") or ""
             ).strip()
             dekking = _to_float(
-                item.get("orvDekking") or item.get("aovDekking")
-                or item.get("dekking") or item.get("uitkering")
+                item.get("orvDekking") or item.get("dekking") or item.get("uitkering")
             )
             result.append(NormalizedVerzekering(
                 type=vtype,
@@ -806,6 +857,9 @@ def _extract_verzekeringen_from_aanvraag(aanvraag_data: dict) -> list[Normalized
                 polisnummer=polisnummer,
                 verzekerde=verzekerde,
                 dekking=dekking,
+                dekking_aov=_to_float(item.get("dekkingAOV")),
+                dekking_ao=_to_float(item.get("dekkingAO")),
+                dekking_ww=_to_float(item.get("dekkingWW")),
                 soort_dekking=soort_dekking,
                 einddatum=einddatum,
             ))

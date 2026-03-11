@@ -83,10 +83,7 @@ def generate_report(
     logger.info("Data genormaliseerd: hypotheek=%.0f, leningdelen=%d",
                 data.hypotheek_bedrag, len(data.leningdelen))
 
-    # Override opties uit dialog
-    if options.hypotheekverstrekker:
-        data.financiering.hypotheekverstrekker = options.hypotheekverstrekker
-    data.financiering.nhg = options.nhg
+    # NHG en hypotheekverstrekker komen nu uit de database (niet meer uit options)
 
     # --- Stap 3: Max hypotheek ---
     max_hypotheek = _bereken_max_hypotheek(data)
@@ -153,10 +150,10 @@ def generate_report(
             inkomen_aanvrager_huidig=data.inkomen_aanvrager_huidig,
             geboortedatum_partner=data.partner.geboortedatum,
             inkomen_partner_huidig=data.inkomen_partner_huidig,
-            nabestaandenpensioen_bij_overlijden_aanvrager=options.nabestaandenpensioen_bij_overlijden_aanvrager,
-            nabestaandenpensioen_bij_overlijden_partner=options.nabestaandenpensioen_bij_overlijden_partner,
-            heeft_kind_onder_18=options.heeft_kind_onder_18,
-            geboortedatum_jongste_kind=options.geboortedatum_jongste_kind,
+            nabestaandenpensioen_bij_overlijden_aanvrager=data.aanvrager.inkomen.nabestaandenpensioen,
+            nabestaandenpensioen_bij_overlijden_partner=data.partner.inkomen.nabestaandenpensioen if data.partner else 0,
+            heeft_kind_onder_18=data.heeft_kind_onder_18,
+            geboortedatum_jongste_kind=data.geboortedatum_jongste_kind or None,
             **common_risk_params,
         )
         overlijden_scenarios = (overl_result or {}).get("scenarios", [])
@@ -184,9 +181,9 @@ def generate_report(
         loondoorbetaling_pct_jaar2_aanvrager=options.loondoorbetaling_pct_jaar2_aanvrager,
         loondoorbetaling_pct_jaar1_partner=options.loondoorbetaling_pct_jaar1_partner,
         loondoorbetaling_pct_jaar2_partner=options.loondoorbetaling_pct_jaar2_partner,
-        aov_dekking_bruto_jaar_aanvrager=options.aov_dekking_bruto_jaar_aanvrager,
-        aov_dekking_bruto_jaar_partner=options.aov_dekking_bruto_jaar_partner,
-        woonlastenverzekering_ao_bruto_jaar=options.woonlastenverzekering_ao_bruto_jaar,
+        aov_dekking_bruto_jaar_aanvrager=data.aov_dekking_aanvrager,
+        aov_dekking_bruto_jaar_partner=data.aov_dekking_partner,
+        woonlastenverzekering_ao_bruto_jaar=data.woonlastenverzekering_ao,
         arbeidsverleden_jaren_tm_2015=options.arbeidsverleden_jaren_tm_2015,
         arbeidsverleden_jaren_vanaf_2016=options.arbeidsverleden_jaren_vanaf_2016,
         **common_risk_params,
@@ -216,7 +213,7 @@ def generate_report(
         arbeidsverleden_jaren_totaal_partner=options.arbeidsverleden_jaren_totaal_partner,
         arbeidsverleden_pre2016_boven10_partner=options.arbeidsverleden_pre2016_boven10_partner,
         arbeidsverleden_vanaf2016_boven10_partner=options.arbeidsverleden_vanaf2016_boven10_partner,
-        woonlastenverzekering_ww_bruto_jaar=options.woonlastenverzekering_ww_bruto_jaar,
+        woonlastenverzekering_ww_bruto_jaar=data.woonlastenverzekering_ww,
         **common_risk_params,
     )
     ww_scenarios = (ww_result or {}).get("scenarios", [])

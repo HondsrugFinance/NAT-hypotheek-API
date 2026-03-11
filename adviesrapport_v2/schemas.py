@@ -47,22 +47,6 @@ class AdviesrapportOptions(BaseModel):
     arbeidsverleden_pre2016_boven10_partner: int = Field(default=0, ge=0, le=40)
     arbeidsverleden_vanaf2016_boven10_partner: int = Field(default=0, ge=0, le=20)
 
-    # Nabestaanden
-    nabestaandenpensioen_bij_overlijden_aanvrager: float = Field(default=0, ge=0)
-    nabestaandenpensioen_bij_overlijden_partner: float = Field(default=0, ge=0)
-    heeft_kind_onder_18: bool = False
-    geboortedatum_jongste_kind: Optional[str] = None
-
-    # Verzekeringen (bruto jaarbedragen)
-    aov_dekking_bruto_jaar_aanvrager: float = Field(default=0, ge=0)
-    aov_dekking_bruto_jaar_partner: float = Field(default=0, ge=0)
-    woonlastenverzekering_ao_bruto_jaar: float = Field(default=0, ge=0)
-    woonlastenverzekering_ww_bruto_jaar: float = Field(default=0, ge=0)
-
-    # Hypotheekverstrekker
-    hypotheekverstrekker: str = "ING"
-    nhg: bool = True
-
     # Prioriteit
     prioriteit: str = "stabiele maandlast"
 
