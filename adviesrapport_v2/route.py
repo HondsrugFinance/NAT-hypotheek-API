@@ -131,7 +131,9 @@ async def debug_dossier_data(
             "raw_berekeningen_0": ber,
             "raw_scenario1_keys": list(scenario1.keys()) if isinstance(scenario1, dict) else str(type(scenario1)),
             "raw_scenario1": scenario1,
-            "raw_aanvraag": aanvraag,
+            "raw_aanvraag_keys": list((aanvraag.get("data") or {}).keys()) if isinstance(aanvraag, dict) else [],
+            "raw_voorzieningen": (aanvraag.get("data") or {}).get("voorzieningen"),
+            "raw_hypotheken": (aanvraag.get("data") or {}).get("hypotheken"),
             "normalized": {
                 "aanvrager": {
                     "naam": data.aanvrager.naam,
@@ -159,6 +161,16 @@ async def debug_dossier_data(
                     "type_woning": data.financiering.type_woning,
                     "adres": data.financiering.adres,
                 },
+                "verzekeringen": [
+                    {"type": v.type, "aanbieder": v.aanbieder,
+                     "verzekerde": v.verzekerde, "dekking": v.dekking}
+                    for v in data.verzekeringen
+                ],
+                "bestaande_hypotheken": [
+                    {"verstrekker": h.verstrekker, "nhg": h.nhg,
+                     "hoofdsom": h.hoofdsom, "leningdelen": h.leningdelen}
+                    for h in data.bestaande_hypotheken
+                ],
                 "hypotheek_bedrag": data.hypotheek_bedrag,
                 "leningdelen_count": len(data.leningdelen),
                 "leningdelen": [
