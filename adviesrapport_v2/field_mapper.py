@@ -876,17 +876,49 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
 
 
 def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBestaandeHypotheek]:
-    """Extraheer bestaande hypotheken uit aanvraag.data.hypotheken[]."""
+    """Extraheer bestaande hypotheken uit aanvraag.data.hypotheken[].
+
+    Verstrekker komt uit hypotheekInschrijvingen[] (apart top-level veld).
+    Hypotheek.inschrijvingId linkt naar hypotheekInschrijvingen[].id.
+    """
     items = aanvraag_data.get("hypotheken") or []
 
     if not items:
         return []
 
+    # Bouw inschrijving lookup: id → inschrijving dict
+    inschrijvingen = aanvraag_data.get("hypotheekInschrijvingen") or []
+    inschrijving_map = {}
+    for insc in inschrijvingen:
+        if isinstance(insc, dict):
+            insc_id = insc.get("id")
+            if insc_id:
+                inschrijving_map[insc_id] = insc
+    if inschrijvingen:
+        logger.info("HypotheekInschrijvingen: %d gevonden, keys: %s",
+                     len(inschrijvingen),
+                     sorted(inschrijvingen[0].keys()) if inschrijvingen else [])
+
     result = []
     for h in items:
         logger.info("Hypotheek item keys: %s", sorted(h.keys()))
+
+        # Verstrekker: eerst in hypotheek zelf, dan via inschrijving
         verstrekker = str(h.get("geldverstrekker") or h.get("verstrekker") or "").strip()
         nhg = bool(h.get("nhg"))
+
+        if not verstrekker:
+            insc_id = h.get("inschrijvingId")
+            insc = inschrijving_map.get(insc_id) or {}
+            verstrekker = str(
+                insc.get("geldverstrekker") or insc.get("verstrekker")
+                or insc.get("maatschappij") or insc.get("naamGeldverstrekker") or ""
+            ).strip()
+            if not nhg:
+                nhg = bool(insc.get("nhg"))
+            logger.info("Verstrekker uit inschrijving %s: '%s' (keys: %s)",
+                        insc_id, verstrekker, sorted(insc.keys()) if insc else [])
+
         hoofdsom = _to_float(h.get("hoofdsom") or h.get("oorspronkelijkeHoofdsom"))
         restschuld = _to_float(h.get("restschuld") or h.get("huidigeSaldo"))
 
