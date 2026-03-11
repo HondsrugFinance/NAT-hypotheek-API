@@ -21,6 +21,7 @@ from datetime import date, timedelta
 import calculator_final
 import risk_scenarios
 import pdf_generator
+from loan_projection import projecteer_hypotheekdelen
 
 from monthly_costs.domain.calculator import MortgageCalculator
 from monthly_costs.schemas.input import (
@@ -86,8 +87,8 @@ def generate_report(
     # NHG en hypotheekverstrekker komen nu uit de database (niet meer uit options)
 
     # --- Stap 3: Max hypotheek ---
-    max_hypotheek = _bereken_max_hypotheek(data)
-    logger.info("Max hypotheek: %.0f", max_hypotheek)
+    max_hypotheek, toetsrente_start = _bereken_max_hypotheek(data)
+    logger.info("Max hypotheek: %.0f, toetsrente: %.3f%%", max_hypotheek, toetsrente_start * 100)
 
     # --- Stap 4: Maandlasten ---
     bruto_maandlast, netto_maandlast = _bereken_maandlasten(data)
@@ -99,7 +100,7 @@ def generate_report(
 
     # Gemeenschappelijke parameters voor alle risk_scenarios calls
     common_risk_params = dict(
-        toetsrente=0.05,
+        toetsrente=toetsrente_start,
         energielabel=data.financiering.energielabel,
         verduurzamings_maatregelen=0,
         limieten_bkr_geregistreerd=data.limieten_bkr,
@@ -236,7 +237,15 @@ def generate_report(
     )
 
     # --- Stap 8: Pensioen chart data ---
-    pensioen_chart_data = _build_pensioen_chart_data(data, aow_scenarios, max_hypotheek)
+    pensioen_chart_data = _build_pensioen_chart_data(
+        data=data,
+        aow_scenarios=aow_scenarios,
+        max_hypotheek_huidig=max_hypotheek,
+        hypotheek_delen_api=hypotheek_delen_api,
+        toetsrente=toetsrente_start,
+        inkomen_aanvrager_aow=inkomen_aanvrager_aow,
+        inkomen_partner_aow=inkomen_partner_aow,
+    )
 
     # --- Stap 9: Bouw secties ---
     sections = []
@@ -382,8 +391,13 @@ def _schat_aow_inkomen(alleenstaand: bool) -> float:
         return 20929 if alleenstaand else 14379
 
 
-def _bereken_max_hypotheek(data: NormalizedDossierData) -> float:
-    """Bereken maximale hypotheek via calculator_final."""
+def _bereken_max_hypotheek(data: NormalizedDossierData) -> tuple[float, float]:
+    """Bereken maximale hypotheek via calculator_final.
+
+    Returns:
+        (max_hypotheek, toetsrente) — toetsrente is de gewogen rente
+        die de calculator gebruikt (nodig voor pensioengrafiek).
+    """
     hypotheek_delen = [ld.to_api_dict() for ld in data.leningdelen_voor_api]
 
     # Fallback als er geen leningdelen zijn
@@ -415,16 +429,20 @@ def _bereken_max_hypotheek(data: NormalizedDossierData) -> float:
 
     result = _safe_call("Max hypotheek", calculator_final.calculate, inputs=inputs)
     if not result:
-        return 0
+        return 0, 0.05
 
     scenario1 = result.get("scenario1")
     if not scenario1:
-        return 0
+        return 0, 0.05
 
-    return max(
+    debug = result.get("debug", {})
+    toetsrente = debug.get("toets_rente", 0.05)
+
+    max_hyp = max(
         scenario1["annuitair"]["max_box1"],
         scenario1["niet_annuitair"]["max_box1"],
     )
+    return max_hyp, toetsrente
 
 
 def _bereken_max_hypotheek_alleenstaand(inkomen: float, energielabel: str) -> float:
@@ -586,44 +604,69 @@ def _build_pensioen_chart_data(
     data: NormalizedDossierData,
     aow_scenarios: list,
     max_hypotheek_huidig: float,
+    hypotheek_delen_api: list[dict] = None,
+    toetsrente: float = 0.05,
+    inkomen_aanvrager_aow: float = 0,
+    inkomen_partner_aow: float = 0,
 ) -> dict | None:
     """Bouw pensioen chart data voor SVG grafiek.
 
-    Gebruikt trapfunctie (step-function) i.p.v. lineaire interpolatie:
-    - Vóór eerste AOW: max_hypotheek_huidig (constant)
-    - Tussen AOW 1 en 2: max uit scenario 1
-    - Na AOW 2: max uit scenario 2
+    Per jaar wordt de maximale hypotheek berekend op basis van:
+    - Geprojecteerde leningdelen (rest_lpt daalt, aflossing loopt)
+    - Vaste toetsrente (RVP daalt niet voor deze berekening)
+    - Inkomen: huidig vóór AOW, AOW-inkomen erna
     """
     if not aow_scenarios:
         return None
 
     hypotheek = data.hypotheek_bedrag
     start_jaar = date.today().year
+    alleenstaande = "NEE" if not data.alleenstaand else "JA"
 
-    # Bouw AOW stappen: [(jaar, max_hyp, label)] gesorteerd op jaar
-    aow_steps = []
+    # Parse AOW-momenten met datum, inkomen en label
+    aow_events = []  # [(jaar, peildatum_str, label)]
     for sc in aow_scenarios:
         peildatum = sc.get("peildatum", "")
         try:
             aow_jaar = int(peildatum[:4])
         except (ValueError, IndexError):
             continue
-        max_hyp = max(
-            sc.get("max_hypotheek_annuitair", 0),
-            sc.get("max_hypotheek_niet_annuitair", 0),
-        )
         wie = sc.get("van_toepassing_op", "")
         label = "AOW partner" if wie == "partner" else "AOW aanvr."
-        aow_steps.append((aow_jaar, max_hyp, label))
+        aow_events.append((aow_jaar, wie, label))
 
-    aow_steps.sort(key=lambda x: x[0])
+    aow_events.sort(key=lambda x: x[0])
+
+    # Bepaal AOW-jaren per persoon
+    aow_jaar_aanvrager = None
+    aow_jaar_partner = None
+    for aj, wie, _lbl in aow_events:
+        if wie == "partner":
+            aow_jaar_partner = aj
+        else:
+            aow_jaar_aanvrager = aj
 
     # Tijdspan: tot 5 jaar na laatste AOW, minimaal 25 jaar
-    laatste_aow_jaar = aow_steps[-1][0] if aow_steps else start_jaar + 25
+    laatste_aow_jaar = aow_events[-1][0] if aow_events else start_jaar + 25
     n_jaren = max(laatste_aow_jaar - start_jaar + 5, 25)
 
-    # Bouw jaren array met restschuld + max hypotheek (trapfunctie)
+    # Gemeenschappelijke calculator-input (ongewijzigd per jaar)
+    base_inputs = {
+        "alleenstaande": alleenstaande,
+        "energielabel": data.financiering.energielabel,
+        "verduurzamings_maatregelen": 0,
+        "limieten_bkr_geregistreerd": data.limieten_bkr,
+        "studievoorschot_studielening": data.studielening_maandlast,
+        "erfpachtcanon_per_jaar": data.erfpachtcanon_per_maand,
+        "jaarlast_overige_kredieten": data.overige_kredieten_maandlast,
+        "c_toets_rente": toetsrente,
+        "c_actuele_10jr_rente": toetsrente,
+    }
+
+    # Bouw jaren array
     jaren = []
+    delen_api = hypotheek_delen_api or [ld.to_api_dict() for ld in data.leningdelen_voor_api]
+
     for y in range(n_jaren):
         jaar = start_jaar + y
         elapsed_mnd = y * 12
@@ -634,11 +677,54 @@ def _build_pensioen_chart_data(
             for ld in data.leningdelen_voor_api
         )
 
-        # Max hypotheek: step-function op AOW-jaren
-        max_hyp = max_hypotheek_huidig
-        for aow_jaar, aow_max, _label in aow_steps:
-            if jaar >= aow_jaar:
-                max_hyp = aow_max
+        # Max hypotheek: projecteer leningen + bereken met juist inkomen
+        if y == 0:
+            max_hyp = max_hypotheek_huidig
+        else:
+            peildatum = date(jaar, 1, 1)
+            projected = projecteer_hypotheekdelen(delen_api, elapsed_mnd, peildatum)
+
+            # Inkomen: switch naar AOW op individueel AOW-moment
+            ink_a = data.inkomen_aanvrager_huidig
+            ink_p = data.inkomen_partner_huidig
+            aanvrager_is_aow = aow_jaar_aanvrager and jaar >= aow_jaar_aanvrager
+            partner_is_aow = aow_jaar_partner and jaar >= aow_jaar_partner
+
+            if aanvrager_is_aow:
+                ink_a = inkomen_aanvrager_aow
+            if partner_is_aow:
+                ink_p = inkomen_partner_aow
+
+            # ontvangt_aow: JA als hoogste verdiener AOW is
+            ontvangt_aow = "NEE"
+            if alleenstaande == "JA":
+                ontvangt_aow = "JA" if aanvrager_is_aow else "NEE"
+            elif aanvrager_is_aow or partner_is_aow:
+                if ink_a >= ink_p and aanvrager_is_aow:
+                    ontvangt_aow = "JA"
+                elif ink_p > ink_a and partner_is_aow:
+                    ontvangt_aow = "JA"
+
+            inputs = {
+                **base_inputs,
+                "hoofd_inkomen_aanvrager": ink_a,
+                "hoofd_inkomen_partner": ink_p,
+                "ontvangt_aow": ontvangt_aow,
+                "hypotheek_delen": projected,
+            }
+
+            try:
+                result = calculator_final.calculate(inputs)
+                s1 = result.get("scenario1")
+                if s1:
+                    max_hyp = max(
+                        s1["annuitair"]["max_box1"],
+                        s1["niet_annuitair"]["max_box1"],
+                    )
+                else:
+                    max_hyp = 0
+            except Exception:
+                max_hyp = 0
 
         jaren.append({
             "jaar": jaar,
@@ -647,7 +733,7 @@ def _build_pensioen_chart_data(
         })
 
     # AOW markers voor verticale lijnen in de grafiek
-    aow_markers = [{"jaar": aj, "label": lbl} for aj, _mh, lbl in aow_steps]
+    aow_markers = [{"jaar": aj, "label": lbl} for aj, _wie, lbl in aow_events]
 
     return {
         "geadviseerd_hypotheekbedrag": hypotheek,

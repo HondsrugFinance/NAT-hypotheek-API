@@ -76,9 +76,10 @@ class TestMaxHypotheek:
         # Stel inkomen handmatig in (niet in mock invoer)
         data.aanvrager.inkomen.loondienst = 80000
 
-        max_hyp = _bereken_max_hypotheek(data)
+        max_hyp, toetsrente = _bereken_max_hypotheek(data)
         assert max_hyp > 0
         assert max_hyp > 200000  # Met 80k inkomen moet dit ruim > 200k zijn
+        assert 0.01 < toetsrente < 0.10
 
     def test_zonder_leningdelen(self):
         """Zonder leningdelen moet er een fallback zijn."""
@@ -86,7 +87,7 @@ class TestMaxHypotheek:
         data.aanvrager.inkomen.loondienst = 80000
         data.leningdelen.clear()  # Verwijder alle leningdelen
 
-        max_hyp = _bereken_max_hypotheek(data)
+        max_hyp, toetsrente = _bereken_max_hypotheek(data)
         assert max_hyp > 0
 
 
@@ -196,8 +197,8 @@ class TestPensioenChartData:
         assert len(chart["aow_markers"]) == 1
         assert chart["aow_markers"][0]["jaar"] == 2057
 
-    def test_chart_step_function(self):
-        """Max hypotheek moet constant zijn vóór AOW, dan dalen."""
+    def test_chart_max_hypotheek_decreasing(self):
+        """Max hypotheek moet dalen over tijd (rest_lpt neemt af)."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
         aow = [{
             "max_hypotheek_annuitair": 280000,
@@ -206,13 +207,10 @@ class TestPensioenChartData:
             "peildatum": "2057-09-15",
         }]
         chart = _build_pensioen_chart_data(data, aow, 400000)
-        # Vóór AOW: max moet gelijk zijn aan huidig (400000)
         eerste = chart["jaren"][0]["max_hypotheek"]
-        assert eerste == 400000
-        # Na AOW: max moet gelijk zijn aan max(280000, 300000) = 300000
-        aow_idx = 2057 - chart["jaren"][0]["jaar"]
-        if aow_idx < len(chart["jaren"]):
-            assert chart["jaren"][aow_idx]["max_hypotheek"] == 300000
+        # Na 10 jaar moet max_hypotheek lager zijn (kortere rest_lpt)
+        tiende = chart["jaren"][10]["max_hypotheek"]
+        assert tiende < eerste
 
     def test_chart_restschuld_decreasing(self):
         """Restschuld moet afnemen over tijd (annuïteit)."""
