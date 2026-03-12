@@ -32,7 +32,10 @@ Supabase tabelstructuur (productie):
 
 import logging
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
+
+from aow_calculator import bereken_aow_datum
 
 logger = logging.getLogger("nat-api.adviesrapport_v2.field_mapper")
 
@@ -445,26 +448,66 @@ def _map_woning_type(raw: str) -> str:
 # ─── Aanvraag-based extraction (PRIMAIRE BRON) ───
 
 
-def _heeft_einddatum(item: dict) -> bool:
-    """Check of een inkomen-item een einddatum heeft (= tijdelijk inkomen).
+def _parse_datum(val) -> date | None:
+    """Parse een datum string (YYYY-MM-DD of DD-MM-YYYY) naar date object."""
+    if isinstance(val, date):
+        return val
+    if not val or not isinstance(val, str):
+        return None
+    val = val.strip()
+    try:
+        return date.fromisoformat(val)
+    except ValueError:
+        pass
+    # DD-MM-YYYY fallback
+    try:
+        parts = val.split("-")
+        if len(parts) == 3 and len(parts[0]) <= 2:
+            return date(int(parts[2]), int(parts[1]), int(parts[0]))
+    except (ValueError, IndexError):
+        pass
+    return None
 
-    Lovable slaat einddatum op als top-level veld én in type-specifieke data
-    (anderInkomenData.einddatum, vermogenData.einddatum, etc.).
-    """
-    if item.get("einddatum"):
-        return True
+
+def _get_einddatum(item: dict) -> date | None:
+    """Haal einddatum op uit een inkomen-item (top-level of in type-specifieke data)."""
+    d = _parse_datum(item.get("einddatum"))
+    if d:
+        return d
     for sub_key in ("anderInkomenData", "vermogenData"):
         sub = item.get(sub_key)
-        if isinstance(sub, dict) and sub.get("einddatum"):
-            return True
-    return False
+        if isinstance(sub, dict):
+            d = _parse_datum(sub.get("einddatum"))
+            if d:
+                return d
+    return None
 
 
-def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
+def _eindigt_voor_aow(item: dict, aow_datum: date | None) -> bool:
+    """Check of een inkomen-item eindigt vóór de AOW-datum.
+
+    Regels:
+    - Geen einddatum → doorlopend → False (telt mee na AOW)
+    - Einddatum na of op AOW-datum → loopt nog door bij AOW → False
+    - Einddatum vóór AOW-datum → stopt vóór AOW → True (tijdelijk)
+    - Geen AOW-datum beschikbaar → fallback: einddatum aanwezig = tijdelijk
+    """
+    einddatum = _get_einddatum(item)
+    if not einddatum:
+        return False
+    if not aow_datum:
+        return True  # Geen AOW-datum → voorzichtig: als er einddatum is, beschouw als tijdelijk
+    return einddatum < aow_datum
+
+
+def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -> NormalizedInkomen:
     """Extraheer inkomen uit aanvraag.data.inkomenAanvrager/inkomenPartner array.
 
     Structuur per item: { type, soort, jaarbedrag, isAOW, loondienst: { dienstverband: {...} } }
     Types: "loondienst", "uitkering" (met isAOW), "pensioen", "ander_inkomen"
+
+    aow_datum: AOW-ingangsdatum van deze persoon. Wordt gebruikt om te bepalen
+    of overig inkomen met einddatum nog doorloopt na AOW.
     """
     loondienst = 0
     onderneming = 0
@@ -547,7 +590,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             if not bedrag:
                 vd = item.get("vermogenData") or {}
                 bedrag = _to_float(vd.get("bedrag") or vd.get("jaarlijksBrutoInkomen"))
-            if _heeft_einddatum(item):
+            if _eindigt_voor_aow(item, aow_datum):
                 overig_tijdelijk += bedrag
             else:
                 overig += bedrag
@@ -557,7 +600,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             bedrag = jaarbedrag
             if not bedrag:
                 bedrag = _to_float(ai.get("jaarlijksBrutoInkomen"))
-            if _heeft_einddatum(item):
+            if _eindigt_voor_aow(item, aow_datum):
                 overig_tijdelijk += bedrag
             else:
                 overig += bedrag
@@ -639,8 +682,14 @@ def _extract_persoon_from_aanvraag(
     telefoon = str(adres_contact.get("telefoonnummer") or "")
     email = str(adres_contact.get("email") or "")
 
+    # AOW-datum berekenen voor einddatum-vergelijking in inkomen
+    aow_datum = None
+    geb_date = _parse_datum(geboortedatum)
+    if geb_date:
+        aow_datum = bereken_aow_datum(geb_date)
+
     # Inkomen uit array
-    inkomen = _extract_inkomen_from_aanvraag(inkomen_items)
+    inkomen = _extract_inkomen_from_aanvraag(inkomen_items, aow_datum=aow_datum)
 
     # Dienstverband uit loondienst items
     dienstverband = "Loondienst"
