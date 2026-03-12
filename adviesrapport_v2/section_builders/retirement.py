@@ -1,5 +1,7 @@
 """Pensioen sectie — AOW-scenario's met chart data."""
 
+import re
+
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
 from adviesrapport_v2.scenario_status import derive_retirement_status
@@ -61,13 +63,14 @@ def build_retirement_section(
     aow_partner = data.partner.inkomen.aow_uitkering if data.partner else 0
     pensioen_partner = data.partner.inkomen.pensioen if data.partner else 0
 
-    voornaam_a = data.aanvrager.voornaam or data.aanvrager.naam
-    voornaam_p = (data.partner.voornaam or data.partner.naam) if data.partner else "Partner"
+    voornaam_a = data.aanvrager.korte_naam
+    voornaam_p = data.partner.korte_naam if data.partner else "Partner"
 
     if data.alleenstaand:
         rows = []
         for sc in aow_scenarios:
             naam = sc.get("naam", "AOW")
+            naam = re.sub(r'\baanvrager\b', data.aanvrager.titel_naam, naam, flags=re.IGNORECASE)
             ink_totaal = sc.get("inkomen_aanvrager", 0) + sc.get("inkomen_partner", 0)
             rows.append({
                 "label": f"Totaal inkomen na {naam}",
@@ -101,16 +104,20 @@ def build_retirement_section(
     else:
         columns = []
         for sc in aow_scenarios:
-            naam = sc.get("naam", "AOW")
-            naam_lower = naam.lower()
+            raw_naam = sc.get("naam", "AOW")
+            raw_lower = raw_naam.lower()
+            # Display-naam: vervang "aanvrager"/"partner" door echte namen
+            naam = re.sub(r'\baanvrager\b', data.aanvrager.titel_naam, raw_naam, flags=re.IGNORECASE)
+            if data.partner:
+                naam = re.sub(r'\bpartner\b', data.partner.titel_naam, naam, flags=re.IGNORECASE)
             col_rows = []
 
             ink_aanvrager = sc.get("inkomen_aanvrager", 0)
             ink_partner = sc.get("inkomen_partner", 0)
             totaal = ink_aanvrager + ink_partner
 
-            aanvrager_op_aow = "aanvrager" in naam_lower or "partner" in naam_lower
-            partner_op_aow = "partner" in naam_lower
+            aanvrager_op_aow = "aanvrager" in raw_lower or "partner" in raw_lower
+            partner_op_aow = "partner" in raw_lower
 
             if aanvrager_op_aow:
                 if aow_aanvrager > 0:

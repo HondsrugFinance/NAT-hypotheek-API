@@ -1,5 +1,7 @@
 """Overlijden sectie — alleen bij stel."""
 
+import re
+
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
 from adviesrapport_v2.scenario_status import derive_death_status
@@ -42,11 +44,11 @@ def build_risk_death_section(
         max_hyp = sc.get("max_hypotheek_annuitair", 0)
         vta = sc.get("van_toepassing_op", "")
         if vta == "aanvrager":
-            naam_overledene = data.aanvrager.naam
-            naam_nabestaande = data.partner.naam if data.partner else "Partner"
+            naam_overledene = data.aanvrager.korte_naam
+            naam_nabestaande = data.partner.korte_naam if data.partner else "Partner"
         else:
-            naam_overledene = data.partner.naam if data.partner else "Partner"
-            naam_nabestaande = data.aanvrager.naam
+            naam_overledene = data.partner.korte_naam if data.partner else "Partner"
+            naam_nabestaande = data.aanvrager.korte_naam
         partner_results.append((naam_overledene, naam_nabestaande, max_hyp < hypotheek))
 
     per_partner_shortfall = [r[2] for r in partner_results]
@@ -100,6 +102,9 @@ def build_risk_death_section(
     columns = []
     for sc in overlijden_scenarios:
         naam = sc.get("naam", "Overlijden")
+        naam = re.sub(r'\baanvrager\b', data.aanvrager.titel_naam, naam, flags=re.IGNORECASE)
+        if data.partner:
+            naam = re.sub(r'\bpartner\b', data.partner.titel_naam, naam, flags=re.IGNORECASE)
         van_toepassing_op = sc.get("van_toepassing_op", "")
         anw_details = sc.get("anw_details") or {}
 
@@ -107,9 +112,9 @@ def build_risk_death_section(
         max_hyp = sc.get("max_hypotheek_annuitair", 0)
 
         if van_toepassing_op == "aanvrager":
-            nabestaande_naam = data.partner.naam if data.partner else "Partner"
+            nabestaande_naam = data.partner.korte_naam if data.partner else "Partner"
         else:
-            nabestaande_naam = data.aanvrager.naam
+            nabestaande_naam = data.aanvrager.korte_naam
 
         col_rows = [
             {"label": f"Totaal inkomen {nabestaande_naam}", "value": format_bedrag(nabestaande_inkomen), "bold": True},
@@ -128,9 +133,9 @@ def build_risk_death_section(
 
         if not anw_details:
             if sc.get("inkomen_aanvrager", 0) > 0 and van_toepassing_op != "aanvrager":
-                col_rows.append({"label": f"Inkomen {data.aanvrager.naam}", "value": format_bedrag(sc["inkomen_aanvrager"]), "sub": True})
+                col_rows.append({"label": f"Inkomen {data.aanvrager.korte_naam}", "value": format_bedrag(sc["inkomen_aanvrager"]), "sub": True})
             if sc.get("inkomen_partner", 0) > 0 and van_toepassing_op != "partner":
-                col_rows.append({"label": f"Inkomen {data.partner.naam}", "value": format_bedrag(sc["inkomen_partner"]), "sub": True})
+                col_rows.append({"label": f"Inkomen {data.partner.korte_naam}", "value": format_bedrag(sc["inkomen_partner"]), "sub": True})
 
         col_rows.append({"label": "", "value": ""})
         col_rows.append({"label": "Maximale hypotheek", "value": format_bedrag(max_hyp), "sub": True})

@@ -37,21 +37,21 @@ def build_risk_relationship_section(
         # Beiden zelfde uitkomst → één gedeelde zin
         if aanvrager_ok:
             analysis.append(
-                f"Bij relatiebeëindiging kan zowel {data.aanvrager.naam} als "
-                f"{data.partner.naam} de hypotheek op basis van deze berekening "
+                f"Bij relatiebeëindiging kan zowel {data.aanvrager.korte_naam} als "
+                f"{data.partner.korte_naam} de hypotheek op basis van deze berekening "
                 f"blijven betalen."
             )
         else:
             analysis.append(
-                f"Bij relatiebeëindiging kan zowel {data.aanvrager.naam} als "
-                f"{data.partner.naam} de hypotheek op basis van deze berekening "
+                f"Bij relatiebeëindiging kan zowel {data.aanvrager.korte_naam} als "
+                f"{data.partner.korte_naam} de hypotheek op basis van deze berekening "
                 f"niet zelfstandig betalen."
             )
     else:
         # Ongelijke uitkomst → per-partner zinnen
         for naam, can_afford in [
-            (data.aanvrager.naam, aanvrager_ok),
-            (data.partner.naam, partner_ok),
+            (data.aanvrager.korte_naam, aanvrager_ok),
+            (data.partner.korte_naam, partner_ok),
         ]:
             if can_afford:
                 analysis.append(
@@ -76,10 +76,10 @@ def build_risk_relationship_section(
     # --- Columns ---
     columns = [
         {
-            "title": f"{data.aanvrager.naam} alleen",
+            "title": f"{data.aanvrager.titel_naam} alleen",
             "rows": [
                 {"label": "Resterend inkomen", "value": format_bedrag(data.inkomen_aanvrager_huidig), "bold": True},
-                {"label": f"Inkomen {data.aanvrager.naam}", "value": format_bedrag(data.inkomen_aanvrager_huidig), "sub": True},
+                {"label": f"Inkomen {data.aanvrager.korte_naam}", "value": format_bedrag(data.inkomen_aanvrager_huidig), "sub": True},
                 {"label": "Maximale hypotheek", "value": format_bedrag(max_hyp_aanvrager_alleen), "sub": True},
             ],
             "chart_data": {
@@ -92,10 +92,10 @@ def build_risk_relationship_section(
             },
         },
         {
-            "title": f"{data.partner.naam} alleen",
+            "title": f"{data.partner.titel_naam} alleen",
             "rows": [
                 {"label": "Resterend inkomen", "value": format_bedrag(data.inkomen_partner_huidig), "bold": True},
-                {"label": f"Inkomen {data.partner.naam}", "value": format_bedrag(data.inkomen_partner_huidig), "sub": True},
+                {"label": f"Inkomen {data.partner.korte_naam}", "value": format_bedrag(data.inkomen_partner_huidig), "sub": True},
                 {"label": "Maximale hypotheek", "value": format_bedrag(max_hyp_partner_alleen), "sub": True},
             ],
             "chart_data": {

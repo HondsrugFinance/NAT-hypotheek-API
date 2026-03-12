@@ -39,7 +39,7 @@ def build_risk_disability_section(
     per_partner_shortfall = []
     partner_names = []
     for persoon_key, scenarios in personen.items():
-        naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
+        naam = data.aanvrager.korte_naam if persoon_key == "aanvrager" else (data.partner.korte_naam if data.partner else "Partner")
         partner_names.append(naam)
         # Slechtste fase (laagste max_hypotheek, skip loondoorbetaling)
         worst_max_hyp = min(
@@ -143,9 +143,9 @@ def build_risk_disability_section(
     columns = []
     for persoon_key, scenarios in personen.items():
         if persoon_key == "aanvrager":
-            titel = f"Arbeidsongeschiktheid - {data.aanvrager.naam}" if not data.alleenstaand else data.aanvrager.naam
+            titel = f"Arbeidsongeschiktheid - {data.aanvrager.titel_naam}" if not data.alleenstaand else data.aanvrager.titel_naam
         else:
-            titel = f"Arbeidsongeschiktheid - {data.partner.naam}" if data.partner else "Partner"
+            titel = f"Arbeidsongeschiktheid - {data.partner.titel_naam}" if data.partner else "Partner"
 
         col_rows = []
         fasen = [{"label": "Huidig", "max_hypotheek": max_hypotheek_huidig}]
@@ -166,13 +166,13 @@ def build_risk_disability_section(
 
             if sc.get("inkomen_aanvrager", 0) > 0:
                 col_rows.append({
-                    "label": f"Inkomen {data.aanvrager.naam}",
+                    "label": f"Inkomen {data.aanvrager.korte_naam}",
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
                     "sub": True,
                 })
             if data.partner and sc.get("inkomen_partner", 0) > 0:
                 col_rows.append({
-                    "label": f"Inkomen {data.partner.naam}",
+                    "label": f"Inkomen {data.partner.korte_naam}",
                     "value": format_bedrag(sc["inkomen_partner"]),
                     "sub": True,
                 })

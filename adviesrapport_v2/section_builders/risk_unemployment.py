@@ -48,7 +48,7 @@ def build_risk_unemployment_section(
     partner_names = []
     per_partner_is_ondernemer = []
     for persoon_key, scenarios in personen.items():
-        naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
+        naam = data.aanvrager.korte_naam if persoon_key == "aanvrager" else (data.partner.korte_naam if data.partner else "Partner")
         partner_names.append(naam)
         is_ond = aanvrager_is_ondernemer if persoon_key == "aanvrager" else partner_is_ondernemer
         per_partner_is_ondernemer.append(is_ond)
@@ -136,9 +136,9 @@ def build_risk_unemployment_section(
     columns = []
     for persoon_key, scenarios in personen.items():
         if persoon_key == "aanvrager":
-            titel = f"Werkloosheid - {data.aanvrager.naam}" if not data.alleenstaand else data.aanvrager.naam
+            titel = f"Werkloosheid - {data.aanvrager.titel_naam}" if not data.alleenstaand else data.aanvrager.titel_naam
         else:
-            titel = f"Werkloosheid - {data.partner.naam}" if data.partner else "Partner"
+            titel = f"Werkloosheid - {data.partner.titel_naam}" if data.partner else "Partner"
 
         col_rows = []
         fasen = [{"label": "Huidig", "max_hypotheek": max_hypotheek_huidig}]
@@ -154,13 +154,13 @@ def build_risk_unemployment_section(
 
             if sc.get("inkomen_aanvrager", 0) > 0:
                 col_rows.append({
-                    "label": f"Inkomen {data.aanvrager.naam}",
+                    "label": f"Inkomen {data.aanvrager.korte_naam}",
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
                     "sub": True,
                 })
             if data.partner and sc.get("inkomen_partner", 0) > 0:
                 col_rows.append({
-                    "label": f"Inkomen {data.partner.naam}",
+                    "label": f"Inkomen {data.partner.korte_naam}",
                     "value": format_bedrag(sc["inkomen_partner"]),
                     "sub": True,
                 })
