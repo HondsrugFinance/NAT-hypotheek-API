@@ -456,6 +456,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
     nabestaandenpensioen = 0
     overig = 0
     uitkering = 0
+    partneralimentatie_ontvangen = 0
     dienstverband = "Loondienst"
 
     for item in (items or []):
@@ -531,11 +532,15 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             overig += bedrag
 
         elif item_type in ("ander_inkomen", "ander inkomen"):
+            ai = item.get("anderInkomenData") or {}
+            soort = str(ai.get("soortAnderInkomen", "")).lower()
             bedrag = jaarbedrag
             if not bedrag:
-                ai = item.get("anderInkomenData") or {}
                 bedrag = _to_float(ai.get("jaarlijksBrutoInkomen"))
-            overig += bedrag
+            if "partneralimentatie" in soort:
+                partneralimentatie_ontvangen += bedrag
+            else:
+                overig += bedrag
 
         else:
             # Onbekend type — tel mee als overig, log waarschuwing
@@ -552,6 +557,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
         nabestaandenpensioen=nabestaandenpensioen,
         overig=overig,
         uitkering=uitkering,
+        partneralimentatie_ontvangen=partneralimentatie_ontvangen,
     )
 
     logger.debug(
