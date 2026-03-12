@@ -36,10 +36,26 @@ def build_risk_death_section(
         "leven" in v.type.lower() for v in (data.verzekeringen or [])
     )
 
-    # --- Status derivatie ---
+    # --- Per-partner vergelijking ---
+    partner_results = []  # (naam_overledene, nabestaande_naam, has_shortfall)
+    for sc in overlijden_scenarios:
+        max_hyp = sc.get("max_hypotheek_annuitair", 0)
+        vta = sc.get("van_toepassing_op", "")
+        if vta == "aanvrager":
+            naam_overledene = data.aanvrager.naam
+            naam_nabestaande = data.partner.naam if data.partner else "Partner"
+        else:
+            naam_overledene = data.partner.naam if data.partner else "Partner"
+            naam_nabestaande = data.aanvrager.naam
+        partner_results.append((naam_overledene, naam_nabestaande, max_hyp < hypotheek))
+
+    per_partner_shortfall = [r[2] for r in partner_results]
+
+    # --- Status derivatie (datagedreven) ---
     status_result = derive_death_status(
         has_partner=True,
         has_orv=has_orv,
+        per_partner_shortfall=per_partner_shortfall,
     )
 
     # --- Nuance keys ---
@@ -49,12 +65,29 @@ def build_risk_death_section(
         ("employer_provisions_unknown", True),
     )
 
+    # --- Analysis sentences (alleen bij ongelijke uitkomst) ---
+    analysis_sentences = None
+    if len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]:
+        analysis_sentences = []
+        for naam_overledene, naam_nabestaande, has_shortfall in partner_results:
+            if has_shortfall:
+                analysis_sentences.append(
+                    f"Bij overlijden van {naam_overledene} ontstaat er op basis van deze berekening "
+                    f"een financieel tekort voor {naam_nabestaande}."
+                )
+            else:
+                analysis_sentences.append(
+                    f"Bij overlijden van {naam_overledene} blijft de hypotheek "
+                    f"op basis van deze berekening betaalbaar."
+                )
+
     # --- Render teksten ---
     all_paragraphs = render_standard_scenario(
         text=DEATH_TEXT,
         status=status_result["status"],
         advice_type=status_result["advice_type"],
         nuance_keys=nuance_keys,
+        analysis_sentences=analysis_sentences,
     )
     narratives = all_paragraphs[:1]
     conclusion = all_paragraphs[1:]

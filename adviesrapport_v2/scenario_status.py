@@ -15,9 +15,14 @@ def derive_death_status(
     has_partner: bool,
     has_orv: bool = False,
     customer_rejected_orv: bool = False,
+    per_partner_shortfall: list[bool] | None = None,
 ) -> dict:
     """Overlijden status-derivatie."""
     if not has_partner:
+        return {"status": "affordable", "advice_type": "no_action"}
+
+    # Datagedreven: als geen enkel scenario een tekort oplevert
+    if per_partner_shortfall is not None and not any(per_partner_shortfall):
         return {"status": "affordable", "advice_type": "no_action"}
 
     if has_orv:
@@ -64,20 +69,36 @@ def derive_retirement_status(
     return {"status": "shortfall", "advice_type": "advise_extra_repayment"}
 
 
-def derive_disability_status(*, has_aov: bool = False) -> dict:
+def derive_disability_status(
+    *,
+    has_aov: bool = False,
+    per_partner_shortfall: list[bool] | None = None,
+) -> dict:
     """Arbeidsongeschiktheid status-derivatie."""
+    # Datagedreven: als geen enkel scenario een tekort oplevert
+    if per_partner_shortfall is not None and not any(per_partner_shortfall):
+        return {"status": "affordable", "advice_type": "no_action"}
+
     if has_aov:
         return {"status": "resolved", "advice_type": "no_action"}
 
     return {"status": "attention", "advice_type": "refer_to_specialist"}
 
 
-def derive_unemployment_status(*, buffer_months: float | None = None) -> dict:
+def derive_unemployment_status(
+    *,
+    buffer_months: float | None = None,
+    per_partner_shortfall: list[bool] | None = None,
+) -> dict:
     """Werkloosheid status-derivatie op basis van financiële buffer.
 
     Buffer = spaargeld / netto maandlast.
     ≥ 6 maanden = affordable, ≥ 3 = attention, < 3 of onbekend = attention.
     """
+    # Datagedreven: als geen enkel scenario een tekort oplevert
+    if per_partner_shortfall is not None and not any(per_partner_shortfall):
+        return {"status": "affordable", "advice_type": "no_action"}
+
     if buffer_months is not None and buffer_months >= 6:
         return {"status": "affordable", "advice_type": "no_action"}
 

@@ -27,24 +27,6 @@ def build_risk_unemployment_section(
         and data.inkomen_partner_huidig > 0
     )
 
-    # --- Status derivatie ---
-    status_result = derive_unemployment_status(buffer_months=buffer_months)
-
-    # --- Nuance keys ---
-    nuance_keys = compact_keys(
-        ("partner_income_used", has_partner_income),
-    )
-
-    # --- Render teksten ---
-    all_paragraphs = render_standard_scenario(
-        text=UNEMPLOYMENT_TEXT,
-        status=status_result["status"],
-        advice_type=status_result["advice_type"],
-        nuance_keys=nuance_keys,
-    )
-    narratives = all_paragraphs[:1]
-    conclusion = all_paragraphs[1:]
-
     # --- Groepeer per persoon ---
     personen = {}
     for sc in ww_scenarios:
@@ -52,6 +34,57 @@ def build_risk_unemployment_section(
         if vta not in personen:
             personen[vta] = []
         personen[vta].append(sc)
+
+    # --- Per-partner vergelijking ---
+    per_partner_shortfall = []
+    partner_names = []
+    for persoon_key, scenarios in personen.items():
+        naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
+        partner_names.append(naam)
+        # Slechtste fase (laagste max_hypotheek)
+        worst_max_hyp = min(
+            (sc.get("max_hypotheek_annuitair", 0) for sc in scenarios),
+            default=0,
+        )
+        per_partner_shortfall.append(worst_max_hyp < hypotheek)
+
+    # --- Status derivatie (datagedreven) ---
+    status_result = derive_unemployment_status(
+        buffer_months=buffer_months,
+        per_partner_shortfall=per_partner_shortfall,
+    )
+
+    # --- Nuance keys ---
+    nuance_keys = compact_keys(
+        ("partner_income_used", has_partner_income),
+    )
+
+    # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
+    analysis_sentences = None
+    if not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]:
+        analysis_sentences = []
+        for naam, has_shortfall in zip(partner_names, per_partner_shortfall):
+            if has_shortfall:
+                analysis_sentences.append(
+                    f"Bij werkloosheid van {naam} ontstaat er op basis van deze berekening "
+                    f"een financieel tekort."
+                )
+            else:
+                analysis_sentences.append(
+                    f"Bij werkloosheid van {naam} blijft de hypotheek "
+                    f"op basis van deze berekening betaalbaar."
+                )
+
+    # --- Render teksten ---
+    all_paragraphs = render_standard_scenario(
+        text=UNEMPLOYMENT_TEXT,
+        status=status_result["status"],
+        advice_type=status_result["advice_type"],
+        nuance_keys=nuance_keys,
+        analysis_sentences=analysis_sentences,
+    )
+    narratives = all_paragraphs[:1]
+    conclusion = all_paragraphs[1:]
 
     columns = []
     for persoon_key, scenarios in personen.items():

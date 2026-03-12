@@ -603,17 +603,42 @@ def _bepaal_scenario_checks(
 
     # Overlijden (alleen stel)
     if has_partner and overlijden_scenarios:
-        death_status = derive_death_status(has_partner=True, has_orv=len(orv_list) > 0)
+        death_shortfalls = [sc.get("max_hypotheek_annuitair", 0) < hypotheek for sc in overlijden_scenarios]
+        death_status = derive_death_status(
+            has_partner=True, has_orv=len(orv_list) > 0,
+            per_partner_shortfall=death_shortfalls,
+        )
         checks.append(_check("Overlijden", death_status["status"]))
 
     # AO
     if ao_scenarios:
-        ao_status = derive_disability_status(has_aov=len(aov_list) > 0)
+        personen_ao: dict[str, list] = {}
+        for sc in ao_scenarios:
+            personen_ao.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        ao_shortfalls = [
+            min((sc.get("max_hypotheek_annuitair", 0) for sc in scs
+                 if "loondoorbetaling" not in sc.get("naam", "").lower()), default=0) < hypotheek
+            for scs in personen_ao.values()
+        ]
+        ao_status = derive_disability_status(
+            has_aov=len(aov_list) > 0,
+            per_partner_shortfall=ao_shortfalls,
+        )
         checks.append(_check("Arbeidsongeschiktheid", ao_status["status"]))
 
     # WW
     if ww_scenarios:
-        ww_status = derive_unemployment_status(buffer_months=None)
+        personen_ww: dict[str, list] = {}
+        for sc in ww_scenarios:
+            personen_ww.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        ww_shortfalls = [
+            min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0) < hypotheek
+            for scs in personen_ww.values()
+        ]
+        ww_status = derive_unemployment_status(
+            buffer_months=None,
+            per_partner_shortfall=ww_shortfalls,
+        )
         checks.append(_check("Werkloosheid", ww_status["status"]))
 
     # Relatiebeëindiging
