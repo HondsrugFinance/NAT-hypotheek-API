@@ -590,88 +590,81 @@ def _bepaal_scenario_checks(
     aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]
     checks = []
 
-    def _check(label: str, status_key: str, full_width: bool = False):
-        item = {
+    def _check(label: str, status_class: str, status_label: str):
+        return {
             "label": label,
-            "status": ADVICE_RISK_LABELS[status_key],
-            "status_class": _STATUS_CSS_CLASS.get(status_key, "warning"),
+            "status": status_label,
+            "status_class": status_class,
         }
-        if full_width:
-            item["full_width"] = True
-        return item
 
-    # Helper: voornaam per persoon_key
-    def _voornaam(persoon_key: str) -> str:
-        if persoon_key == "aanvrager":
-            return data.aanvrager.voornaam or data.aanvrager.naam
-        return (data.partner.voornaam or data.partner.naam) if data.partner else "Partner"
+    def _pair_check(label: str, shortfalls: list[bool]):
+        """Bepaal kleur op basis van per-partner shortfalls.
 
-    naam_aanvrager = data.aanvrager.voornaam or data.aanvrager.naam
-    naam_partner = (data.partner.voornaam or data.partner.naam) if data.partner else "Partner"
+        Groen: beiden afgedekt, Oranje: één aandachtspunt, Rood: beiden tekort.
+        """
+        n_shortfall = sum(shortfalls)
+        if n_shortfall == 0:
+            return _check(label, "ok", "afgedekt")
+        if has_partner and n_shortfall < len(shortfalls):
+            return _check(label, "partial", "aandachtspunt")
+        return _check(label, "warning", "aandachtspunt")
 
-    # Pensioen (altijd één regel, full-width)
+    # Pensioen
     ret_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek)
-    checks.append(_check("Pensionering", ret_status["status"], full_width=True))
+    ret_key = ret_status["status"]
+    checks.append(_check("Pensionering", _STATUS_CSS_CLASS.get(ret_key, "warning"), ADVICE_RISK_LABELS[ret_key]))
 
-    # Overlijden (alleen stel, per partner — aanvrager links, partner rechts)
+    # Overlijden (alleen stel)
     if has_partner and overlijden_scenarios:
         personen_ov: dict[str, list] = {}
         for sc in overlijden_scenarios:
             personen_ov.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        shortfalls = []
         for persoon_key in ("aanvrager", "partner"):
             scs = personen_ov.get(persoon_key, [])
-            if not scs:
-                continue
-            worst_max_hyp = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0)
-            status = "affordable" if worst_max_hyp >= hypotheek else "attention"
-            checks.append(_check(f"Overlijden {_voornaam(persoon_key)}", status))
+            worst = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0) if scs else 0
+            shortfalls.append(worst < hypotheek)
+        checks.append(_pair_check("Overlijden", shortfalls))
 
-    # AO (per partner bij stel — aanvrager links, partner rechts)
+    # AO
     if ao_scenarios:
         personen_ao: dict[str, list] = {}
         for sc in ao_scenarios:
             personen_ao.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        shortfalls = []
         for persoon_key in ("aanvrager", "partner") if has_partner else ("aanvrager",):
             scs = personen_ao.get(persoon_key, [])
-            if not scs:
-                continue
-            worst_max_hyp = min(
+            worst = min(
                 (sc.get("max_hypotheek_annuitair", 0) for sc in scs
                  if "loondoorbetaling" not in sc.get("naam", "").lower()), default=0,
-            )
-            status = "affordable" if worst_max_hyp >= hypotheek else "attention"
-            label = f"Arbeidsongeschiktheid {_voornaam(persoon_key)}" if has_partner else "Arbeidsongeschiktheid"
-            checks.append(_check(label, status))
+            ) if scs else 0
+            shortfalls.append(worst < hypotheek)
+        checks.append(_pair_check("Arbeidsongeschiktheid", shortfalls))
 
-    # WW (per partner bij stel — aanvrager links, partner rechts)
+    # WW
     if ww_scenarios:
         personen_ww: dict[str, list] = {}
         for sc in ww_scenarios:
             personen_ww.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        shortfalls = []
         for persoon_key in ("aanvrager", "partner") if has_partner else ("aanvrager",):
             scs = personen_ww.get(persoon_key, [])
-            if not scs:
-                continue
-            worst_max_hyp = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0)
-            status = "affordable" if worst_max_hyp >= hypotheek else "attention"
-            label = f"Werkloosheid {_voornaam(persoon_key)}" if has_partner else "Werkloosheid"
-            checks.append(_check(label, status))
+            worst = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0) if scs else 0
+            shortfalls.append(worst < hypotheek)
+        checks.append(_pair_check("Werkloosheid", shortfalls))
 
-    # Relatiebeëindiging (per partner)
+    # Relatiebeëindiging
     if has_partner:
         rel_status = derive_relationship_status(
             max_hyp_aanvrager=max_hyp_aanvrager_alleen,
             max_hyp_partner=max_hyp_partner_alleen,
             hypotheek=hypotheek,
         )
-        checks.append(_check(
-            f"Relatiebeëindiging {naam_aanvrager}",
-            rel_status["applicant_status"],
-        ))
-        checks.append(_check(
-            f"Relatiebeëindiging {naam_partner}",
-            rel_status["partner_status"],
-        ))
+        shortfalls = [
+            rel_status["applicant_status"] != "affordable",
+            rel_status["partner_status"] != "affordable",
+        ]
+        checks.append(_pair_check("Relatiebeëindiging", shortfalls))
 
     return checks
 
