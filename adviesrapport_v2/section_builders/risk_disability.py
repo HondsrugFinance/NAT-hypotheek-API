@@ -90,7 +90,23 @@ def build_risk_disability_section(
         include_advice=not has_mixed_outcomes,
     )
     narratives = all_paragraphs[:1]
+
+    # Uitgangspunten toevoegen aan intro
+    uitgangspunten = (
+        f"Voor de berekening zijn wij uitgegaan van een {int(ao_percentage)}% "
+        f"arbeidsongeschiktheid en {int(benutting_rvc)}% benutten van de "
+        f"restverdiencapaciteit."
+    )
+    narratives[0] = narratives[0] + " " + uitgangspunten
+
     conclusion = all_paragraphs[1:]
+
+    # Specialist-disclaimer bij advies tot onderzoek
+    if status_result["status"] != "affordable":
+        conclusion.append(
+            "Wij bemiddelen niet in voorzieningen voor arbeidsongeschiktheid. "
+            "Raadpleeg hiervoor een externe specialist."
+        )
 
     columns = []
     for persoon_key, scenarios in personen.items():

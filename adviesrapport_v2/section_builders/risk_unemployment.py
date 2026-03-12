@@ -82,6 +82,13 @@ def build_risk_unemployment_section(
     narratives = all_paragraphs[:1]
     conclusion = all_paragraphs[1:]
 
+    # Specialist-disclaimer bij advies tot onderzoek
+    if status_result["status"] != "affordable":
+        conclusion.append(
+            "Wij bemiddelen niet in voorzieningen voor werkloosheid. "
+            "Raadpleeg hiervoor een externe specialist."
+        )
+
     columns = []
     for persoon_key, scenarios in personen.items():
         if persoon_key == "aanvrager":
