@@ -65,6 +65,8 @@ def build_retirement_section(
 
     voornaam_a = data.aanvrager.korte_naam
     voornaam_p = data.partner.korte_naam if data.partner else "Partner"
+    overig_a = data.aanvrager.inkomen.overig
+    overig_p = data.partner.inkomen.overig if data.partner else 0
 
     if data.alleenstaand:
         rows = []
@@ -81,7 +83,9 @@ def build_retirement_section(
                 rows.append({"label": "AOW-uitkering", "value": format_bedrag(aow_aanvrager), "sub": True})
             if pensioen_aanvrager > 0:
                 rows.append({"label": "Pensioen", "value": format_bedrag(pensioen_aanvrager), "sub": True})
-            if aow_aanvrager == 0 and pensioen_aanvrager == 0 and sc.get("inkomen_aanvrager", 0) > 0:
+            if overig_a > 0:
+                rows.append({"label": f"Inkomen {voornaam_a}", "value": format_bedrag(overig_a), "sub": True})
+            if aow_aanvrager == 0 and pensioen_aanvrager == 0 and overig_a == 0 and sc.get("inkomen_aanvrager", 0) > 0:
                 rows.append({
                     "label": f"Inkomen {voornaam_a}",
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
@@ -128,6 +132,8 @@ def build_retirement_section(
                     col_rows.append({"label": f"AOW-uitkering {voornaam_a}", "value": format_bedrag(aow_aanvrager), "sub": True})
                 if pensioen_aanvrager > 0:
                     col_rows.append({"label": f"Pensioen {voornaam_a}", "value": format_bedrag(pensioen_aanvrager), "sub": True})
+                if overig_a > 0:
+                    col_rows.append({"label": f"Inkomen {voornaam_a}", "value": format_bedrag(overig_a), "sub": True})
             elif ink_aanvrager > 0:
                 col_rows.append({
                     "label": f"Inkomen {voornaam_a}",
@@ -140,6 +146,8 @@ def build_retirement_section(
                         col_rows.append({"label": f"AOW-uitkering {voornaam_p}", "value": format_bedrag(aow_partner), "sub": True})
                     if pensioen_partner > 0:
                         col_rows.append({"label": f"Pensioen {voornaam_p}", "value": format_bedrag(pensioen_partner), "sub": True})
+                    if overig_p > 0:
+                        col_rows.append({"label": f"Inkomen {voornaam_p}", "value": format_bedrag(overig_p), "sub": True})
                 elif ink_partner > 0:
                     col_rows.append({
                         "label": f"Inkomen {voornaam_p}",
