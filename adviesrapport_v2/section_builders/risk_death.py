@@ -125,7 +125,7 @@ def build_risk_death_section(
         anw_bruto = anw_details.get("anw_bruto_jaar", 0)
 
         if eigen_inkomen > 0:
-            col_rows.append({"label": "Inkomen uit loondienst", "value": format_bedrag(eigen_inkomen), "sub": True})
+            col_rows.append({"label": f"Inkomen {nabestaande_naam}", "value": format_bedrag(eigen_inkomen), "sub": True})
         if nabestaandenpensioen > 0:
             col_rows.append({"label": "Nabestaandenpensioen", "value": format_bedrag(nabestaandenpensioen), "sub": True})
         if anw_bruto > 0:
