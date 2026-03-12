@@ -480,12 +480,25 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
                                         _to_float(pp.get("verzekerdVoor")),
                                         _to_float(pp.get("verzekerdVanaf")))
 
-        elif item_type == "ander_inkomen":
+        elif item_type == "onderneming":
+            onderneming += jaarbedrag
+            dienstverband = "Onderneming"
+
+        elif item_type == "vermogen":
+            overig += jaarbedrag
+
+        elif item_type in ("ander_inkomen", "ander inkomen"):
             overig += _to_float(
                 item.get("jaarbedrag")
                 or _get(item.get("anderInkomenData") or {},
                         "jaarlijksBrutoInkomen")
             )
+
+        else:
+            # Onbekend type — tel mee als overig, log waarschuwing
+            if jaarbedrag > 0:
+                logger.warning("Onbekend inkomentype '%s' met bedrag %.0f → overig", item_type, jaarbedrag)
+                overig += jaarbedrag
 
     inkomen = NormalizedInkomen(
         loondienst=loondienst,
