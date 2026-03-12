@@ -101,7 +101,8 @@ class NormalizedInkomen:
     loondienst: float = 0
     onderneming: float = 0
     roz: float = 0
-    overig: float = 0  # Lijfrente, huur, etc. (niet beïnvloed door AO)
+    overig: float = 0  # Doorlopend overig inkomen (geen einddatum → telt mee na AOW)
+    overig_tijdelijk: float = 0  # Overig inkomen MET einddatum (stopt vóór AOW)
     uitkering: float = 0  # Niet-AOW uitkeringen (stopt bij AOW-leeftijd)
     aow_uitkering: float = 0
     pensioen: float = 0
@@ -111,7 +112,8 @@ class NormalizedInkomen:
 
     @property
     def totaal_huidig(self) -> float:
-        return (self.loondienst + self.onderneming + self.roz + self.overig
+        return (self.loondienst + self.onderneming + self.roz
+                + self.overig + self.overig_tijdelijk
                 + self.uitkering
                 + self.partneralimentatie_ontvangen - self.partneralimentatie_betalen)
 
@@ -310,14 +312,14 @@ class NormalizedDossierData:
     @property
     def inkomen_aanvrager_huidig(self) -> float:
         ink = self.aanvrager.inkomen
-        return ink.hoofd_inkomen + ink.overig + ink.uitkering
+        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
 
     @property
     def inkomen_partner_huidig(self) -> float:
         if not self.partner:
             return 0
         ink = self.partner.inkomen
-        return ink.hoofd_inkomen + ink.overig + ink.uitkering
+        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
 
     @property
     def inkomen_aanvrager_aow(self) -> float:
@@ -442,6 +444,22 @@ def _map_woning_type(raw: str) -> str:
 
 # ─── Aanvraag-based extraction (PRIMAIRE BRON) ───
 
+
+def _heeft_einddatum(item: dict) -> bool:
+    """Check of een inkomen-item een einddatum heeft (= tijdelijk inkomen).
+
+    Lovable slaat einddatum op als top-level veld én in type-specifieke data
+    (anderInkomenData.einddatum, vermogenData.einddatum, etc.).
+    """
+    if item.get("einddatum"):
+        return True
+    for sub_key in ("anderInkomenData", "vermogenData"):
+        sub = item.get(sub_key)
+        if isinstance(sub, dict) and sub.get("einddatum"):
+            return True
+    return False
+
+
 def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
     """Extraheer inkomen uit aanvraag.data.inkomenAanvrager/inkomenPartner array.
 
@@ -455,8 +473,8 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
     pensioen = 0
     nabestaandenpensioen = 0
     overig = 0
+    overig_tijdelijk = 0  # Inkomen met einddatum → telt NIET mee na AOW
     uitkering = 0
-    partneralimentatie_ontvangen = 0
     dienstverband = "Loondienst"
 
     for item in (items or []):
@@ -529,16 +547,18 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             if not bedrag:
                 vd = item.get("vermogenData") or {}
                 bedrag = _to_float(vd.get("bedrag") or vd.get("jaarlijksBrutoInkomen"))
-            overig += bedrag
+            if _heeft_einddatum(item):
+                overig_tijdelijk += bedrag
+            else:
+                overig += bedrag
 
         elif item_type in ("ander_inkomen", "ander inkomen"):
             ai = item.get("anderInkomenData") or {}
-            soort = str(ai.get("soortAnderInkomen", "")).lower()
             bedrag = jaarbedrag
             if not bedrag:
                 bedrag = _to_float(ai.get("jaarlijksBrutoInkomen"))
-            if "partneralimentatie" in soort:
-                partneralimentatie_ontvangen += bedrag
+            if _heeft_einddatum(item):
+                overig_tijdelijk += bedrag
             else:
                 overig += bedrag
 
@@ -556,8 +576,8 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
         pensioen=pensioen,
         nabestaandenpensioen=nabestaandenpensioen,
         overig=overig,
+        overig_tijdelijk=overig_tijdelijk,
         uitkering=uitkering,
-        partneralimentatie_ontvangen=partneralimentatie_ontvangen,
     )
 
     logger.debug(

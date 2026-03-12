@@ -24,9 +24,10 @@ def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
     if ink.uitkering > 0:
         rows.append(["Uitkering", format_bedrag(ink.uitkering)])
         totaal += ink.uitkering
-    if ink.overig > 0:
-        rows.append(["Overig inkomen", format_bedrag(ink.overig)])
-        totaal += ink.overig
+    overig_totaal = ink.overig + ink.overig_tijdelijk
+    if overig_totaal > 0:
+        rows.append(["Overig inkomen", format_bedrag(overig_totaal)])
+        totaal += overig_totaal
     if ink.partneralimentatie_ontvangen > 0:
         rows.append(["Partneralimentatie ontvangen", format_bedrag(ink.partneralimentatie_ontvangen)])
         totaal += ink.partneralimentatie_ontvangen
