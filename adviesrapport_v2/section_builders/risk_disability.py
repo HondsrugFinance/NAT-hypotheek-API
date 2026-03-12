@@ -91,12 +91,44 @@ def build_risk_disability_section(
     )
     narratives = all_paragraphs[:1]
 
-    # Uitgangspunten toevoegen aan intro
-    uitgangspunten = (
-        f"Voor de berekening zijn wij uitgegaan van een {int(ao_percentage)}% "
-        f"arbeidsongeschiktheid en {int(benutting_rvc)}% benutten van de "
-        f"restverdiencapaciteit."
+    # Uitgangspunten per inkomenstype
+    aanvrager_is_ondernemer = (
+        data.aanvrager.inkomen.onderneming > 0
+        and data.aanvrager.inkomen.loondienst == 0
     )
+    partner_is_ondernemer = (
+        data.partner is not None
+        and data.partner.inkomen.onderneming > 0
+        and data.partner.inkomen.loondienst == 0
+    )
+
+    if data.alleenstaand or data.partner is None:
+        # Alleenstaand → één zin
+        rvc = 100 if aanvrager_is_ondernemer else int(benutting_rvc)
+        uitgangspunten = (
+            f"Voor de berekening zijn wij uitgegaan van een {int(ao_percentage)}% "
+            f"arbeidsongeschiktheid en {rvc}% benutten van de "
+            f"restverdiencapaciteit."
+        )
+    elif aanvrager_is_ondernemer == partner_is_ondernemer:
+        # Beiden zelfde type → één gedeelde zin
+        rvc = 100 if aanvrager_is_ondernemer else int(benutting_rvc)
+        uitgangspunten = (
+            f"Voor de berekening zijn wij uitgegaan van een {int(ao_percentage)}% "
+            f"arbeidsongeschiktheid en {rvc}% benutten van de "
+            f"restverdiencapaciteit."
+        )
+    else:
+        # Mixed: per-persoon zinnen
+        rvc_a = 100 if aanvrager_is_ondernemer else int(benutting_rvc)
+        rvc_p = 100 if partner_is_ondernemer else int(benutting_rvc)
+        uitgangspunten = (
+            f"Voor {data.aanvrager.voornaam} zijn wij uitgegaan van een {int(ao_percentage)}% "
+            f"arbeidsongeschiktheid en {rvc_a}% benutten van de restverdiencapaciteit. "
+            f"Voor {data.partner.voornaam} zijn wij uitgegaan van een {int(ao_percentage)}% "
+            f"arbeidsongeschiktheid en {rvc_p}% benutten van de restverdiencapaciteit."
+        )
+
     narratives[0] = narratives[0] + " " + uitgangspunten
 
     conclusion = all_paragraphs[1:]

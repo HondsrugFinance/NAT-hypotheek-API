@@ -727,7 +727,7 @@ def bereken_ao_scenarios(
                 wie, totaal, p["ander_totaal"]
             )
             result = _bereken_scenario(
-                naam=f"AO {wie} — zonder loondienst",
+                naam=f"AO {wie} — arbeidsongeschikt",
                 categorie="ao",
                 van_toepassing_op=wie,
                 hypotheek_delen=projected,
@@ -964,7 +964,7 @@ def bereken_werkloosheid_scenarios(
             ink_a, ink_p = _verdeel_inkomen(wie, totaal, p["ander_totaal"])
 
             result = _bereken_scenario(
-                naam=f"Werkloosheid {wie} — zonder loondienst",
+                naam=f"Werkloosheid {wie} — werkloos",
                 categorie="werkloosheid",
                 van_toepassing_op=wie,
                 hypotheek_delen=hypotheek_delen,

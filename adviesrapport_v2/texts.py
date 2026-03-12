@@ -354,6 +354,10 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
             "Wij adviseren u om te onderzoeken of aanvullende "
             "voorzieningen wenselijk zijn."
         ),
+        "no_provisions_entrepreneur": (
+            "Voor een ondernemer zijn er geen voorzieningen om dit risico te beperken. "
+            "Bij langdurige werkloosheid kan dit betekenen dat de woning verkocht moet worden."
+        ),
     },
     "nuance": {
         "woonlastenverzekering_used": (

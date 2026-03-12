@@ -21,6 +21,20 @@ def build_risk_unemployment_section(
     """Bouw de werkloosheid sectie."""
     hypotheek = data.hypotheek_bedrag
 
+    # --- Ondernemer-detectie per persoon ---
+    aanvrager_is_ondernemer = (
+        data.aanvrager.inkomen.onderneming > 0
+        and data.aanvrager.inkomen.loondienst == 0
+    )
+    partner_is_ondernemer = (
+        data.partner is not None
+        and data.partner.inkomen.onderneming > 0
+        and data.partner.inkomen.loondienst == 0
+    )
+    alle_ondernemers = aanvrager_is_ondernemer and (
+        data.alleenstaand or data.partner is None or partner_is_ondernemer
+    )
+
     # --- Groepeer per persoon ---
     personen = {}
     for sc in ww_scenarios:
@@ -32,9 +46,12 @@ def build_risk_unemployment_section(
     # --- Per-partner vergelijking ---
     per_partner_shortfall = []
     partner_names = []
+    per_partner_is_ondernemer = []
     for persoon_key, scenarios in personen.items():
         naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
         partner_names.append(naam)
+        is_ond = aanvrager_is_ondernemer if persoon_key == "aanvrager" else partner_is_ondernemer
+        per_partner_is_ondernemer.append(is_ond)
         # Slechtste fase (laagste max_hypotheek)
         worst_max_hyp = min(
             (sc.get("max_hypotheek_annuitair", 0) for sc in scenarios),
@@ -51,18 +68,35 @@ def build_risk_unemployment_section(
     # --- Nuance keys ---
     nuance_keys: list[str] = []
 
-    # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
+    # --- Analysis sentences ---
+    # Bij mixed inkomenstype (ondernemer + loondienst) altijd per-persoon zinnen
+    has_mixed_income_type = (
+        not data.alleenstaand
+        and len(per_partner_is_ondernemer) == 2
+        and per_partner_is_ondernemer[0] != per_partner_is_ondernemer[1]
+    )
+    has_mixed_outcomes = (
+        not data.alleenstaand
+        and len(per_partner_shortfall) == 2
+        and per_partner_shortfall[0] != per_partner_shortfall[1]
+    )
+    force_per_person = has_mixed_outcomes or has_mixed_income_type
+
     analysis_sentences = None
-    has_mixed_outcomes = not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
-    if has_mixed_outcomes:
+    if force_per_person:
         analysis_sentences = []
-        for naam, has_shortfall in zip(partner_names, per_partner_shortfall):
+        for naam, has_shortfall, is_ond in zip(
+            partner_names, per_partner_shortfall, per_partner_is_ondernemer
+        ):
             if has_shortfall:
                 analysis_sentences.append(
                     f"Bij werkloosheid van {naam} ontstaat er op basis van deze berekening "
                     f"een financieel tekort."
                 )
-                analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["consider_solution"])
+                if is_ond:
+                    analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["no_provisions_entrepreneur"])
+                else:
+                    analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["consider_solution"])
             else:
                 analysis_sentences.append(
                     f"Bij werkloosheid van {naam} blijft de hypotheek "
@@ -71,19 +105,29 @@ def build_risk_unemployment_section(
                 analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["no_action"])
 
     # --- Render teksten ---
+    # Bij alle ondernemers met tekort: gebruik ondernemer-advies i.p.v. standaard
+    advice_type = status_result["advice_type"]
+    if alle_ondernemers and any(per_partner_shortfall) and not force_per_person:
+        advice_type = "no_provisions_entrepreneur"
+
     all_paragraphs = render_standard_scenario(
         text=UNEMPLOYMENT_TEXT,
         status=status_result["status"],
-        advice_type=status_result["advice_type"],
+        advice_type=advice_type,
         nuance_keys=nuance_keys,
         analysis_sentences=analysis_sentences,
-        include_advice=not has_mixed_outcomes,
+        include_advice=not force_per_person,
     )
     narratives = all_paragraphs[:1]
     conclusion = all_paragraphs[1:]
 
-    # Specialist-disclaimer bij advies tot onderzoek
-    if status_result["status"] != "affordable":
+    # Bij alleen ondernemers: verwijder de indicatief-disclaimer
+    if alle_ondernemers:
+        disclaimer = UNEMPLOYMENT_TEXT.get("disclaimer", "")
+        conclusion = [p for p in conclusion if p != disclaimer]
+
+    # Specialist-zin: niet tonen bij alleen ondernemers
+    if not alle_ondernemers and status_result["status"] != "affordable":
         conclusion.append(
             "Wij bemiddelen niet in voorzieningen voor werkloosheid. "
             "Raadpleeg hiervoor een externe specialist."
@@ -163,6 +207,9 @@ def _extract_ww_fase_label(scenario_naam: str) -> str:
     lower = scenario_naam.lower()
     if "na ww" in lower:
         return "Na WW"
+    # Ondernemer-scenario: "Werkloosheid {wie} — werkloos"
+    if "— werkloos" in lower:
+        return "Werkloos"
     if "werkloosheid" in lower or "ww" in lower:
         return "Tijdens WW"
     return scenario_naam
