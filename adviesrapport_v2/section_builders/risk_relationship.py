@@ -3,10 +3,7 @@
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
 from adviesrapport_v2.scenario_status import derive_relationship_status
-from adviesrapport_v2.texts import (
-    RELATIONSHIP_TEXT,
-    render_relationship_scenario,
-)
+from adviesrapport_v2.texts import RELATIONSHIP_TEXT
 
 
 def build_risk_relationship_section(
@@ -28,15 +25,53 @@ def build_risk_relationship_section(
         hypotheek=hypotheek,
     )
 
-    # --- Render teksten ---
-    all_paragraphs = render_relationship_scenario(
-        text=RELATIONSHIP_TEXT,
-        overall_status=status_result["overall_status"],
-        applicant_status=status_result["applicant_status"],
-        partner_status=status_result["partner_status"],
-    )
-    narratives = all_paragraphs[:1]
-    conclusion = all_paragraphs[1:]
+    # --- Narratives (intro) ---
+    narratives = [RELATIONSHIP_TEXT["intro"]]
+
+    # --- Conclusion: per-partner observaties + awareness + disclaimer ---
+    aanvrager_ok = status_result["applicant_status"] == "affordable"
+    partner_ok = status_result["partner_status"] == "affordable"
+
+    analysis: list[str] = []
+    if aanvrager_ok == partner_ok:
+        # Beiden zelfde uitkomst → één gedeelde zin
+        if aanvrager_ok:
+            analysis.append(
+                f"Bij relatiebeëindiging kan zowel {data.aanvrager.naam} als "
+                f"{data.partner.naam} de hypotheek op basis van deze berekening "
+                f"blijven betalen."
+            )
+        else:
+            analysis.append(
+                f"Bij relatiebeëindiging kan zowel {data.aanvrager.naam} als "
+                f"{data.partner.naam} de hypotheek op basis van deze berekening "
+                f"niet zelfstandig betalen."
+            )
+    else:
+        # Ongelijke uitkomst → per-partner zinnen
+        for naam, can_afford in [
+            (data.aanvrager.naam, aanvrager_ok),
+            (data.partner.naam, partner_ok),
+        ]:
+            if can_afford:
+                analysis.append(
+                    f"Bij relatiebeëindiging kan {naam} de hypotheek op basis "
+                    f"van deze berekening blijven betalen."
+                )
+            else:
+                analysis.append(
+                    f"Bij relatiebeëindiging kan {naam} de hypotheek op basis "
+                    f"van deze berekening niet zelfstandig betalen."
+                )
+
+    # Awareness toevoegen
+    analysis.append(RELATIONSHIP_TEXT["advice"]["awareness_only"])
+
+    conclusion = [" ".join(analysis)]
+
+    # Disclaimer
+    if RELATIONSHIP_TEXT.get("disclaimer"):
+        conclusion.append(RELATIONSHIP_TEXT["disclaimer"])
 
     # --- Columns ---
     columns = [
