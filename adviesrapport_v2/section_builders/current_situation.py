@@ -122,11 +122,13 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         {"label": "Burgerlijke staat", "value": data.burgerlijke_staat},
     ]
     if data.huwelijkse_voorwaarden:
-        label_hw = (
-            "Samenlevingsvorm"
-            if data.burgerlijke_staat.lower() == "samenwonend"
-            else "Huwelijkse voorwaarden"
-        )
+        bs_lower = data.burgerlijke_staat.lower()
+        if bs_lower == "samenwonend":
+            label_hw = "Samenlevingsvorm"
+        elif bs_lower == "geregistreerd partnerschap":
+            label_hw = "Voorwaarden"
+        else:
+            label_hw = "Huwelijkse voorwaarden"
         gezin_rows.append({"label": label_hw, "value": data.huwelijkse_voorwaarden})
 
     gezin_sub = {"subtitle": "Gezinssituatie", "rows": gezin_rows}

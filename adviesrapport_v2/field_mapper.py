@@ -423,10 +423,13 @@ SAMENLEVINGSVORM_MAPPING = {
     "beperkte_gemeenschap": "Beperkte gemeenschap van goederen",
     "gemeenschap_van_goederen": "Gemeenschap van goederen",
     "huwelijkse_voorwaarden": "Huwelijkse voorwaarden",
+    "partnerschap_voorwaarden": "Partnerschapsvoorwaarden",
+    "partnerschapsvoorwaarden": "Partnerschapsvoorwaarden",
     "geregistreerd_partnerschap": "Geregistreerd partnerschap",
     "samenwonend": "Samenwonend",
     "met_samenlevingscontract": "Met samenlevingscontract",
     "zonder_samenlevingscontract": "Zonder samenlevingscontract",
+    "buitenlands_recht": "Buitenlands recht",
 }
 
 
