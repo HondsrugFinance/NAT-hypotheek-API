@@ -213,6 +213,24 @@
     padding: 4px 0;
   }
 
+  /* Hypotheek-samenvatting accent-balk */
+  .mortgage-summary {
+    border-left: 3pt solid #2E5644;
+    background: #E3F0E9;
+    padding: 6px 12px;
+    margin: 12px 0;
+  }
+  .mortgage-summary .row .label {
+    color: #2B1E39;
+    font-weight: 600;
+    font-size: 9pt;
+  }
+  .mortgage-summary .row .value {
+    color: #2E5644;
+    font-weight: 700;
+    font-size: 9pt;
+  }
+
   /* Rijen buiten cards: sta wrapping toe voor lange waarden */
   .rows-plain .row .value {
     white-space: normal;
@@ -936,7 +954,7 @@
 
     {# Hypotheek-samenvatting (hypotheekvorm + rentevastperiode) #}
     {% if section.mortgage_summary %}
-    <div class="rows-plain" style="margin-top: 12px; margin-bottom: 12px;">
+    <div class="mortgage-summary">
       {% for row in section.mortgage_summary %}
       <div class="row">
         <span class="label">{{ row.label }}</span>
