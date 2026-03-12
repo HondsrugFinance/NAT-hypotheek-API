@@ -21,6 +21,9 @@ def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
     if ink.roz > 0:
         rows.append(["ROZ", format_bedrag(ink.roz)])
         totaal += ink.roz
+    if ink.uitkering > 0:
+        rows.append(["Uitkering", format_bedrag(ink.uitkering)])
+        totaal += ink.uitkering
     if ink.overig > 0:
         rows.append(["Overig inkomen", format_bedrag(ink.overig)])
         totaal += ink.overig
@@ -116,11 +119,15 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
 
     # --- Gezinssituatie ---
     gezin_rows = [
-        {"label": "Burgerlijke staat",
-         "value": "Alleenstaand" if data.alleenstaand else "Gehuwd"},
+        {"label": "Burgerlijke staat", "value": data.burgerlijke_staat},
     ]
     if data.huwelijkse_voorwaarden:
-        gezin_rows.append({"label": "Huwelijkse voorwaarden", "value": data.huwelijkse_voorwaarden})
+        label_hw = (
+            "Samenlevingsvorm"
+            if data.burgerlijke_staat.lower() == "samenwonend"
+            else "Huwelijkse voorwaarden"
+        )
+        gezin_rows.append({"label": label_hw, "value": data.huwelijkse_voorwaarden})
 
     gezin_sub = {"subtitle": "Gezinssituatie", "rows": gezin_rows}
     if data.kinderen:
@@ -203,7 +210,10 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         if woning.status:
             w_rows.append({"label": "Status", "value": woning.status.replace("_", " ").capitalize()})
         if woning.erfpacht:
-            w_rows.append({"label": "Erfpacht", "value": "Ja"})
+            if woning.erfpachtcanon > 0:
+                w_rows.append({"label": "Erfpacht", "value": f"Ja (canon {format_bedrag(woning.erfpachtcanon)} p/j)"})
+            else:
+                w_rows.append({"label": "Erfpacht", "value": "Ja"})
         if w_rows:
             subsections.append({"subtitle": label, "rows": w_rows})
 
@@ -322,7 +332,23 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             else:
                 verzekerde = "-"
 
-            dekking = format_bedrag(verz.dekking) if verz.dekking > 0 else "-"
+            # Bepaal het juiste dekkingsbedrag per type
+            type_lower = verz.type.lower()
+            if "lijfrente" in type_lower:
+                bedrag = verz.dekking
+                dekking = format_bedrag(bedrag) + " p/j" if bedrag > 0 else "-"
+            elif "arbeidsongeschiktheid" in type_lower:
+                bedrag = verz.dekking_aov or verz.dekking
+                dekking = format_bedrag(bedrag) + " p/j" if bedrag > 0 else "-"
+            elif "woonlasten" in type_lower:
+                parts = []
+                if verz.dekking_ao > 0:
+                    parts.append(f"AO: {format_bedrag(verz.dekking_ao)} p/j")
+                if verz.dekking_ww > 0:
+                    parts.append(f"WW: {format_bedrag(verz.dekking_ww)} p/j")
+                dekking = ", ".join(parts) if parts else "-"
+            else:
+                dekking = format_bedrag(verz.dekking) if verz.dekking > 0 else "-"
             v_rows.append([aanbieder, type_display, verzekerde, dekking])
 
         subsections.append({

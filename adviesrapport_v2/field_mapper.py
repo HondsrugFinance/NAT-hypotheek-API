@@ -102,6 +102,7 @@ class NormalizedInkomen:
     onderneming: float = 0
     roz: float = 0
     overig: float = 0  # Lijfrente, huur, etc. (niet beïnvloed door AO)
+    uitkering: float = 0  # Niet-AOW uitkeringen (stopt bij AOW-leeftijd)
     aow_uitkering: float = 0
     pensioen: float = 0
     nabestaandenpensioen: float = 0  # Uitkering bij overlijden partner
@@ -111,6 +112,7 @@ class NormalizedInkomen:
     @property
     def totaal_huidig(self) -> float:
         return (self.loondienst + self.onderneming + self.roz + self.overig
+                + self.uitkering
                 + self.partneralimentatie_ontvangen - self.partneralimentatie_betalen)
 
     @property
@@ -170,6 +172,8 @@ class NormalizedVerzekering:
             "arbeidsongeschiktheidsverzekering": "AOV",
             "arbeidsongeschiktheid": "AOV",
             "woonlastenverzekering": "Woonlastenverzekering",
+            "lijfrenteverzekering": "Lijfrente",
+            "lijfrente": "Lijfrente",
         }
         return mapping.get(self.type.lower(), self.type.capitalize())
 
@@ -197,6 +201,7 @@ class NormalizedBestaandeWoning:
     woz_waarde: float = 0
     status: str = ""         # "verkopen", "verhuren", "aanhouden", etc.
     erfpacht: bool = False
+    erfpachtcanon: float = 0     # Canon per jaar
     energielabel: str = ""
 
 
@@ -402,6 +407,7 @@ SAMENLEVINGSVORM_MAPPING = {
     "huwelijkse_voorwaarden": "Huwelijkse voorwaarden",
     "geregistreerd_partnerschap": "Geregistreerd partnerschap",
     "samenwonend": "Samenwonend",
+    "zonder_samenlevingscontract": "Zonder samenlevingscontract",
 }
 
 
@@ -427,6 +433,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
     pensioen = 0
     nabestaandenpensioen = 0
     overig = 0
+    uitkering = 0
     dienstverband = "Loondienst"
 
     for item in (items or []):
@@ -453,7 +460,7 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             if item.get("isAOW"):
                 aow += jaarbedrag
             else:
-                overig += jaarbedrag
+                uitkering += jaarbedrag
 
         elif item_type == "pensioen":
             # Diagnostiek: dump pensioenData volledig
@@ -518,13 +525,14 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
         pensioen=pensioen,
         nabestaandenpensioen=nabestaandenpensioen,
         overig=overig,
+        uitkering=uitkering,
     )
 
     logger.debug(
         "Inkomen (aanvraag): loondienst=%.0f, onderneming=%.0f, aow=%.0f, "
-        "pensioen=%.0f, nabestaandenpensioen=%.0f, overig=%.0f, dienstverband=%s",
+        "pensioen=%.0f, nabestaandenpensioen=%.0f, overig=%.0f, uitkering=%.0f, dienstverband=%s",
         loondienst, onderneming, aow, pensioen, nabestaandenpensioen,
-        overig, dienstverband,
+        overig, uitkering, dienstverband,
     )
     return inkomen
 
@@ -970,6 +978,10 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
         woz_waarde = _to_float(w.get("wozWaarde"))
         status = str(w.get("woningstatus") or w.get("status") or "").strip()
         erfpacht = bool(w.get("erfpacht"))
+        erfpachtcanon = _to_float(
+            w.get("erfpachtcanon") or w.get("canonPerJaar")
+            or w.get("canonBedrag") or w.get("canon")
+        )
         energielabel = str(w.get("energielabel") or "").strip()
 
         result.append(NormalizedBestaandeWoning(
@@ -980,6 +992,7 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
             woz_waarde=woz_waarde,
             status=status,
             erfpacht=erfpacht,
+            erfpachtcanon=erfpachtcanon,
             energielabel=energielabel,
         ))
 
@@ -1069,6 +1082,7 @@ def _extract_verplichtingen_details_from_aanvraag(aanvraag_data: dict) -> list[d
     TYPE_DISPLAY = {
         "studieschuld": "Studielening",
         "doorlopend_krediet": "Doorlopend krediet",
+        "aflopend_krediet": "Aflopend krediet",
         "persoonlijke_lening": "Persoonlijke lening",
         "huurkoop": "Huurkoop/Private lease",
         "creditcard": "Creditcard",
@@ -1077,7 +1091,10 @@ def _extract_verplichtingen_details_from_aanvraag(aanvraag_data: dict) -> list[d
     for item in items:
         vtype = str(item.get("type") or "").strip()
         maandbedrag = _to_float(item.get("maandbedrag"))
-        saldo = _to_float(item.get("saldo"))
+        saldo = _to_float(
+            item.get("saldo") or item.get("restantBedrag")
+            or item.get("restschuld") or item.get("restantSaldo")
+        )
         omschrijving = str(item.get("omschrijving") or item.get("naam") or "").strip()
 
         result.append({
