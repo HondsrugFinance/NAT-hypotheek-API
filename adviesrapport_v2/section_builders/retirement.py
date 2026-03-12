@@ -88,9 +88,13 @@ def build_retirement_section(
                     "sub": True,
                 })
             rows.append({"label": "", "value": ""})
+            max_hyp = max(
+                sc.get("max_hypotheek_annuitair", 0),
+                sc.get("max_hypotheek_niet_annuitair", 0),
+            )
             rows.append({
                 "label": "Maximale hypotheek na AOW",
-                "value": format_bedrag(sc.get("max_hypotheek_annuitair", 0)),
+                "value": format_bedrag(max_hyp),
             })
 
         section = {
@@ -149,9 +153,13 @@ def build_retirement_section(
                 "bold": True,
             })
             col_rows.append({"label": "", "value": ""})
+            max_hyp = max(
+                sc.get("max_hypotheek_annuitair", 0),
+                sc.get("max_hypotheek_niet_annuitair", 0),
+            )
             col_rows.append({
                 "label": "Maximale hypotheek",
-                "value": format_bedrag(sc.get("max_hypotheek_annuitair", 0)),
+                "value": format_bedrag(max_hyp),
                 "sub": True,
             })
 

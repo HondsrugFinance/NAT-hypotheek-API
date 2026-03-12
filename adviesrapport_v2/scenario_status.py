@@ -52,7 +52,10 @@ def derive_retirement_status(
 
     shortfalls = []
     for sc in aow_scenarios:
-        max_hyp = sc.get("max_hypotheek_annuitair", 0)
+        max_hyp = max(
+            sc.get("max_hypotheek_annuitair", 0),
+            sc.get("max_hypotheek_niet_annuitair", 0),
+        )
         if hypotheek > max_hyp > 0:
             tekort = hypotheek - max_hyp
             tekort_pct = (tekort / hypotheek * 100) if hypotheek > 0 else 0
