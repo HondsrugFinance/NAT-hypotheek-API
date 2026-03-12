@@ -99,16 +99,18 @@ def render_standard_scenario(
     advice_type: str | None = None,
     nuance_keys: list[str] | None = None,
     analysis_sentences: list[str] | None = None,
+    include_advice: bool = True,
 ) -> list[str]:
     """Assembleer 3 paragrafen: intro | analyse (outcome+advice+nuance) | disclaimer."""
     # Analyse — outcome + advice + nuance(s) in één alinea
     analysis: list[str] = list(analysis_sentences) if analysis_sentences else [text["outcome"][status]]
 
-    advice = text.get("advice", {}).get(advice_type or "")
-    if advice:
-        analysis.append(advice)
-    elif status == "attention":
-        analysis.append(_ADVISEREN_BEOORDELEN)
+    if include_advice:
+        advice = text.get("advice", {}).get(advice_type or "")
+        if advice:
+            analysis.append(advice)
+        elif status == "attention":
+            analysis.append(_ADVISEREN_BEOORDELEN)
 
     nuances = text.get("nuance", {})
     for key in nuance_keys or []:

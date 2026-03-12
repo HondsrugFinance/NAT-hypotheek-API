@@ -61,7 +61,8 @@ def build_risk_unemployment_section(
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
     analysis_sentences = None
-    if not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]:
+    has_mixed_outcomes = not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
+    if has_mixed_outcomes:
         analysis_sentences = []
         for naam, has_shortfall in zip(partner_names, per_partner_shortfall):
             if has_shortfall:
@@ -69,11 +70,13 @@ def build_risk_unemployment_section(
                     f"Bij werkloosheid van {naam} ontstaat er op basis van deze berekening "
                     f"een financieel tekort."
                 )
+                analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["consider_solution"])
             else:
                 analysis_sentences.append(
                     f"Bij werkloosheid van {naam} blijft de hypotheek "
                     f"op basis van deze berekening betaalbaar."
                 )
+                analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["no_action"])
 
     # --- Render teksten ---
     all_paragraphs = render_standard_scenario(
@@ -82,6 +85,7 @@ def build_risk_unemployment_section(
         advice_type=status_result["advice_type"],
         nuance_keys=nuance_keys,
         analysis_sentences=analysis_sentences,
+        include_advice=not has_mixed_outcomes,
     )
     narratives = all_paragraphs[:1]
     conclusion = all_paragraphs[1:]
