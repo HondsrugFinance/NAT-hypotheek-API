@@ -26,6 +26,9 @@ def derive_death_status(
         return {"status": "affordable", "advice_type": "no_action"}
 
     if has_orv:
+        if per_partner_shortfall is not None:
+            # ORV niet toereikend — adviseer aanvullende
+            return {"status": "attention", "advice_type": "consider_solution_existing"}
         return {"status": "resolved", "advice_type": "no_action"}
 
     if customer_rejected_orv:
@@ -80,6 +83,9 @@ def derive_disability_status(
         return {"status": "affordable", "advice_type": "no_action"}
 
     if has_aov:
+        if per_partner_shortfall is not None:
+            # AOV niet toereikend — adviseer aanvullende
+            return {"status": "attention", "advice_type": "refer_to_specialist_existing"}
         return {"status": "resolved", "advice_type": "no_action"}
 
     return {"status": "attention", "advice_type": "refer_to_specialist"}

@@ -62,13 +62,13 @@ def build_risk_death_section(
     nuance_keys = compact_keys(
         ("existing_orv", has_orv),
         ("existing_life_insurance", has_life_insurance),
-        ("employer_provisions_unknown", True),
     )
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst) ---
     analysis_sentences = None
     has_mixed_outcomes = len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
     if has_mixed_outcomes:
+        advice_key = "consider_solution_existing" if has_orv else "consider_solution"
         analysis_sentences = []
         for naam_overledene, naam_nabestaande, has_shortfall in partner_results:
             if has_shortfall:
@@ -76,7 +76,7 @@ def build_risk_death_section(
                     f"Bij overlijden van {naam_overledene} ontstaat er op basis van deze berekening "
                     f"een financieel tekort voor {naam_nabestaande}."
                 )
-                analysis_sentences.append(DEATH_TEXT["advice"]["consider_solution"])
+                analysis_sentences.append(DEATH_TEXT["advice"][advice_key])
             else:
                 analysis_sentences.append(
                     f"Bij overlijden van {naam_overledene} blijft de hypotheek "

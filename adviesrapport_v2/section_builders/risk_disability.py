@@ -26,10 +26,6 @@ def build_risk_disability_section(
     # --- Verzekeringen ---
     aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]
     has_aov = len(aov_list) > 0
-    has_partner_income = (
-        data.partner is not None
-        and data.inkomen_partner_huidig > 0
-    )
 
     # --- Groepeer scenarios per persoon ---
     personen = {}
@@ -62,13 +58,13 @@ def build_risk_disability_section(
     # --- Nuance keys ---
     nuance_keys = compact_keys(
         ("aov_used", has_aov),
-        ("partner_income_used", has_partner_income),
     )
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
     analysis_sentences = None
     has_mixed_outcomes = not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
     if has_mixed_outcomes:
+        advice_key = "refer_to_specialist_existing" if has_aov else "refer_to_specialist"
         analysis_sentences = []
         for naam, has_shortfall in zip(partner_names, per_partner_shortfall):
             if has_shortfall:
@@ -76,7 +72,7 @@ def build_risk_disability_section(
                     f"Bij arbeidsongeschiktheid van {naam} ontstaat er op basis van deze berekening "
                     f"een financieel tekort."
                 )
-                analysis_sentences.append(DISABILITY_TEXT["advice"]["refer_to_specialist"])
+                analysis_sentences.append(DISABILITY_TEXT["advice"][advice_key])
             else:
                 analysis_sentences.append(
                     f"Bij arbeidsongeschiktheid van {naam} blijft de hypotheek "

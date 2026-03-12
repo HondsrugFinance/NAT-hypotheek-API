@@ -71,10 +71,6 @@ _VOORZIENINGEN_VOLDOENDE = (
     "De bestaande voorzieningen zijn echter voldoende om dit tekort op te vangen."
 )
 
-_NUANCE_PARTNER_INKOMEN = (
-    "Bij deze berekening hebben wij rekening gehouden met het inkomen van de partner."
-)
-
 
 # ============================================================================
 # Helpers
@@ -172,8 +168,12 @@ DEATH_TEXT: StandardScenarioText = {
         "no_action": _GEEN_MAATREGELEN,
         "awareness_only": _RISICO_ACCEPTEREN,
         "consider_solution": (
-            "Om dit risico te beperken kan een "
-            "overlijdensrisicoverzekering passend zijn."
+            "Om dit risico te beperken adviseren wij u "
+            "een overlijdensrisicoverzekering."
+        ),
+        "consider_solution_existing": (
+            "Om dit risico te beperken adviseren wij u "
+            "een aanvullende overlijdensrisicoverzekering."
         ),
         "advise_solution": (
             "Wij adviseren u om maatregelen te treffen om dit risico te beperken, "
@@ -193,10 +193,6 @@ DEATH_TEXT: StandardScenarioText = {
         "savings_used": (
             "Bij deze berekening hebben wij rekening gehouden met een deel "
             "van het beschikbare spaargeld."
-        ),
-        "employer_provisions_unknown": (
-            "Bij deze berekening hebben wij geen rekening gehouden met "
-            "mogelijke voorzieningen via een werkgever."
         ),
     },
     "disclaimer": (
@@ -234,7 +230,7 @@ RETIREMENT_TEXT: StandardScenarioText = {
         "no_action": _GEEN_MAATREGELEN,
         "awareness_only": _RISICO_ACCEPTEREN,
         "consider_solution": (
-            "Om dit risico te beperken kan het passend zijn om extra "
+            "Om dit risico te beperken adviseren wij u om extra "
             "af te lossen op de hypotheek."
         ),
         "advise_extra_repayment": (
@@ -298,12 +294,16 @@ DISABILITY_TEXT: StandardScenarioText = {
         "no_action": _GEEN_MAATREGELEN,
         "awareness_only": _RISICO_ACCEPTEREN,
         "consider_solution": (
-            "Om dit risico te beperken kan het passend zijn om "
+            "Om dit risico te beperken adviseren wij u om "
             "aanvullende maatregelen te treffen."
         ),
         "refer_to_specialist": (
-            "Wij adviseren u om te onderzoeken of aanvullende "
-            "voorzieningen wenselijk zijn."
+            "Om dit risico te beperken adviseren wij u "
+            "een arbeidsongeschiktheidsverzekering."
+        ),
+        "refer_to_specialist_existing": (
+            "Om dit risico te beperken adviseren wij u "
+            "een aanvullende arbeidsongeschiktheidsverzekering."
         ),
     },
     "nuance": {
@@ -311,7 +311,6 @@ DISABILITY_TEXT: StandardScenarioText = {
             "Bij deze berekening hebben wij rekening gehouden met de bestaande "
             "arbeidsongeschiktheidsverzekering."
         ),
-        "partner_income_used": _NUANCE_PARTNER_INKOMEN,
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op een indicatief scenario "
@@ -348,7 +347,7 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
         "no_action": _GEEN_MAATREGELEN,
         "awareness_only": _RISICO_ACCEPTEREN,
         "consider_solution": (
-            "Om dit risico te beperken kan het passend zijn om "
+            "Om dit risico te beperken adviseren wij u om "
             "aanvullende maatregelen te treffen."
         ),
         "refer_to_specialist": (
@@ -361,7 +360,6 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
             "Bij deze berekening hebben wij rekening gehouden met de bestaande "
             "woonlastenverzekering."
         ),
-        "partner_income_used": _NUANCE_PARTNER_INKOMEN,
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op een indicatief scenario "

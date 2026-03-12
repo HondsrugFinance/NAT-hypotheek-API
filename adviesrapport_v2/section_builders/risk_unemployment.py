@@ -8,7 +8,6 @@ from adviesrapport_v2.scenario_status import derive_unemployment_status
 from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 from adviesrapport_v2.texts import (
     UNEMPLOYMENT_TEXT,
-    compact_keys,
     render_standard_scenario,
 )
 
@@ -21,11 +20,6 @@ def build_risk_unemployment_section(
 ) -> dict:
     """Bouw de werkloosheid sectie."""
     hypotheek = data.hypotheek_bedrag
-
-    has_partner_income = (
-        data.partner is not None
-        and data.inkomen_partner_huidig > 0
-    )
 
     # --- Groepeer per persoon ---
     personen = {}
@@ -55,9 +49,7 @@ def build_risk_unemployment_section(
     )
 
     # --- Nuance keys ---
-    nuance_keys = compact_keys(
-        ("partner_income_used", has_partner_income),
-    )
+    nuance_keys: list[str] = []
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
     analysis_sentences = None
