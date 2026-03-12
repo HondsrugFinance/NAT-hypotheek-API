@@ -2,7 +2,13 @@
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.scenario_status import derive_retirement_status
 from adviesrapport_v2.section_builders._align import align_columns_at_totaal
+from adviesrapport_v2.texts import (
+    RETIREMENT_TEXT,
+    compact_keys,
+    render_standard_scenario,
+)
 
 
 def build_retirement_section(
@@ -11,44 +17,51 @@ def build_retirement_section(
     pensioen_chart_data: dict | None,
     max_hypotheek_huidig: float,
 ) -> dict:
-    """Bouw de pensioen sectie.
-
-    Args:
-        data: Genormaliseerde dossier data
-        aow_scenarios: Resultaat van bereken_aow_scenarios()["scenarios"]
-        pensioen_chart_data: Chart data met jaren + max hypotheek + restschuld
-        max_hypotheek_huidig: Huidige max hypotheek (voor vergelijking)
-    """
+    """Bouw de pensioen sectie."""
     hypotheek = data.hypotheek_bedrag
 
-    # Narratives
-    narratives = [
-        "Wij hebben gekeken naar uw verwachte inkomenssituatie na "
-        "pensionering op basis van de bij ons bekende pensioeninformatie.",
-    ]
+    # --- Status derivatie ---
+    status_result = derive_retirement_status(
+        aow_scenarios=aow_scenarios,
+        hypotheek=hypotheek,
+    )
 
-    # Bepaal of hypotheek onder water komt
-    scenario_tekorten = []
-    for sc in aow_scenarios:
-        max_hyp = sc.get("max_hypotheek_annuitair", 0)
-        if hypotheek > max_hyp:
-            scenario_tekorten.append(sc)
+    # --- Nuance keys ---
+    has_partner = not data.alleenstaand and data.partner is not None
+    has_annuity_income = (
+        (data.aanvrager.inkomen.overig > 0)
+        or (has_partner and data.partner.inkomen.overig > 0)
+    )
+    gross_income_total = data.inkomen_aanvrager_huidig + data.inkomen_partner_huidig
+    pension_income_total = (
+        data.aanvrager.inkomen.aow_uitkering + data.aanvrager.inkomen.pensioen
+        + (data.partner.inkomen.aow_uitkering if data.partner else 0)
+        + (data.partner.inkomen.pensioen if data.partner else 0)
+    )
 
-    if scenario_tekorten:
-        narratives.append(
-            "Na pensionering daalt de maximale hypotheek onder het geadviseerde "
-            "hypotheekbedrag. Wij adviseren om de gevolgen hiervan bewust mee "
-            "te nemen in uw financiële planning."
-        )
+    nuance_keys = compact_keys(
+        ("couple_two_aow", has_partner),
+        ("income_decrease", pension_income_total < gross_income_total),
+        ("annuity_income_used", has_annuity_income),
+    )
 
-    # AOW/pensioen uitsplitsing uit NormalizedInkomen
+    # --- Render teksten ---
+    all_paragraphs = render_standard_scenario(
+        text=RETIREMENT_TEXT,
+        status=status_result["status"],
+        advice_type=status_result["advice_type"],
+        nuance_keys=nuance_keys,
+    )
+    narratives = all_paragraphs[:1]  # Intro boven data
+    conclusion = all_paragraphs[1:]  # Rest onder data
+
+    # --- AOW/pensioen uitsplitsing ---
     aow_aanvrager = data.aanvrager.inkomen.aow_uitkering
     pensioen_aanvrager = data.aanvrager.inkomen.pensioen
     aow_partner = data.partner.inkomen.aow_uitkering if data.partner else 0
     pensioen_partner = data.partner.inkomen.pensioen if data.partner else 0
 
     if data.alleenstaand:
-        # Alleenstaand: rows met inkomen na AOW
         rows = []
         for sc in aow_scenarios:
             naam = sc.get("naam", "AOW")
@@ -68,7 +81,7 @@ def build_retirement_section(
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
                     "sub": True,
                 })
-            rows.append({"label": "", "value": ""})  # Spacer
+            rows.append({"label": "", "value": ""})
             rows.append({
                 "label": "Maximale hypotheek na AOW",
                 "value": format_bedrag(sc.get("max_hypotheek_annuitair", 0)),
@@ -80,9 +93,9 @@ def build_retirement_section(
             "visible": True,
             "narratives": narratives,
             "rows": rows,
+            "conclusion": conclusion,
         }
     else:
-        # Stel: columns per AOW-moment
         columns = []
         for sc in aow_scenarios:
             naam = sc.get("naam", "AOW")
@@ -93,13 +106,9 @@ def build_retirement_section(
             ink_partner = sc.get("inkomen_partner", 0)
             totaal = ink_aanvrager + ink_partner
 
-            # Bepaal wie op AOW is in DIT scenario
-            # "AOW aanvrager" → aanvrager op AOW, partner werkt nog (tenzij eerder AOW)
-            # "AOW partner" → partner op AOW, aanvrager was al eerder op AOW
             aanvrager_op_aow = "aanvrager" in naam_lower or "partner" in naam_lower
             partner_op_aow = "partner" in naam_lower
 
-            # Per-persoon breakdown
             if ink_aanvrager > 0:
                 col_rows.append({
                     "label": f"Inkomen {data.aanvrager.naam}",
@@ -126,7 +135,7 @@ def build_retirement_section(
                 "value": format_bedrag(totaal),
                 "bold": True,
             })
-            col_rows.append({"label": "", "value": ""})  # Spacer
+            col_rows.append({"label": "", "value": ""})
             col_rows.append({
                 "label": "Maximale hypotheek",
                 "value": format_bedrag(sc.get("max_hypotheek_annuitair", 0)),
@@ -143,18 +152,10 @@ def build_retirement_section(
             "visible": True,
             "narratives": narratives,
             "columns": columns,
+            "conclusion": conclusion,
         }
 
-    # Chart data
     if pensioen_chart_data:
         section["chart_data"] = pensioen_chart_data
-
-    # Advisor note
-    if scenario_tekorten:
-        section["advisor_note"] = (
-            "Na pensionering daalt de maximale hypotheek onder het geadviseerde "
-            "bedrag. Wij adviseren om extra aflossingen of aanvullende "
-            "pensioenopbouw te overwegen."
-        )
 
     return section

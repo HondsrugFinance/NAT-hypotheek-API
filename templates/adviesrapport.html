@@ -606,7 +606,7 @@
 {% if section.visible %}
 
   {# --- Paginawissel + header --- #}
-  {% if section.id in page_break_before or section.id in risk_sections or section.id == 'closing' %}
+  {% if section.id in page_break_before or section.id in risk_sections or section.id in ('closing', 'attention-points') %}
   </div>{# sluit vorige a4-page #}
   <div class="page-break"></div>
   <div class="a4-page">
@@ -615,15 +615,15 @@
     <span class="right">{{ meta.date }}</span>
   </div>
   {# Hoofdstuktitel #}
-  {% if section.id in page_break_before or section.id == 'closing' %}
+  {% if section.id in page_break_before or section.id in ('closing', 'attention-points') %}
   <h2 class="chapter-title">{{ section.title }}</h2>
   {% elif section.id == 'retirement' %}
   <h2 class="chapter-title">Risico's</h2>
   {% endif %}
   {% endif %}
 
-  {# --- Afsluiting: tekst + ondertekening --- #}
-  {% if section.id == 'closing' %}
+  {# --- Afsluiting/Disclaimer: tekst + ondertekening --- #}
+  {% if section.id in ('closing', 'disclaimer') %}
   <div class="section">
     <div class="text-block">
       {% for text in section.narratives %}
@@ -754,7 +754,7 @@
     {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
     <div class="text-block">
       <ul>
-        {% for text in section.narratives %}
+        {% for text in section.bullets|default(section.narratives|default([])) %}
         <li>{{ text }}</li>
         {% endfor %}
       </ul>
@@ -806,8 +806,15 @@
     </div>
     {% endif %}
 
-    {# Toelichting #}
-    {% if section.advisor_note %}
+    {# Conclusie (V2: list) of Toelichting (V1: string) #}
+    {% if section.conclusion %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Conclusie</div>
+      {% for text in section.conclusion %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% elif section.advisor_note %}
     <div class="advisor-note">
       <div class="advisor-note-label">Toelichting</div>
       <div>{{ section.advisor_note }}</div>
@@ -875,7 +882,15 @@
     </div>
     {% endif %}
 
-    {% if section.advisor_note %}
+    {# Conclusie (V2: list) of Toelichting (V1: string) #}
+    {% if section.conclusion %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Conclusie</div>
+      {% for text in section.conclusion %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% elif section.advisor_note %}
     <div class="advisor-note">
       <div class="advisor-note-label">Toelichting</div>
       <div>{{ section.advisor_note }}</div>
@@ -939,9 +954,9 @@
     <div class="scenario-heading">Verantwoord blijven wonen?</div>
     <div class="scenario-grid">
       {% for check in section.scenario_checks %}
-      <div class="scenario-item scenario-{{ check.status }}">
+      <div class="scenario-item scenario-{{ check.status_class|default(check.status) }}">
         <span class="scenario-dot"></span>
-        {{ check.label }}
+        {{ check.label }}: {{ check.status }}
       </div>
       {% endfor %}
     </div>
@@ -1016,8 +1031,15 @@
     </div>
     {% endif %}
 
-    {# Toelichting (op elke generieke sectie) #}
-    {% if section.advisor_note %}
+    {# Conclusie (V2: list) of Toelichting (V1: string) #}
+    {% if section.conclusion %}
+    <div class="advisor-note">
+      <div class="advisor-note-label">Conclusie</div>
+      {% for text in section.conclusion %}
+      <div>{{ text }}</div>
+      {% endfor %}
+    </div>
+    {% elif section.advisor_note %}
     <div class="advisor-note">
       <div class="advisor-note-label">Toelichting</div>
       <div>{{ section.advisor_note }}</div>

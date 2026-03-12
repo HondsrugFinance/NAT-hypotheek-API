@@ -122,12 +122,13 @@ class TestScenarioChecks:
         assert any(c["label"] == "Pensionering" for c in checks)
 
     def test_aow_warning(self):
-        """Als max hypotheek < geadviseerd → warning."""
+        """Als max hypotheek < geadviseerd → tekort aanwezig."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
         aow = [{"max_hypotheek_annuitair": 200000}]  # Onder de 325k
         checks = _bepaal_scenario_checks(data, 400000, aow, [], [], [], 0, 0)
         pensioen = [c for c in checks if c["label"] == "Pensionering"][0]
-        assert pensioen["status"] == "warning"
+        assert pensioen["status"] == "tekort aanwezig"
+        assert pensioen["status_class"] == "warning"
 
 
 class TestSectionBuilders:
@@ -172,9 +173,9 @@ class TestSectionBuilders:
         assert "Hypotheekconstructie" in subtitles
 
     def test_closing_section(self):
-        """Afsluiting sectie moet narratives hebben."""
+        """Afsluiting/disclaimer sectie moet narratives hebben."""
         section = build_closing_section()
-        assert section["id"] == "closing"
+        assert section["id"] == "disclaimer"
         assert len(section["narratives"]) >= 2
 
 

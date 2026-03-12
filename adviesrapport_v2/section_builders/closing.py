@@ -1,23 +1,33 @@
-"""Afsluiting sectie — disclaimer tekst."""
+"""Afsluiting sectie — aandachtspunten + disclaimer tekst."""
+
+from adviesrapport_v2.texts import build_attention_points, build_disclaimer_narratives
+
+
+def build_attention_points_section(
+    *,
+    has_rvp: bool = True,
+    has_box3: bool = False,
+    customer_rejected_orv: bool = False,
+) -> dict:
+    """Bouw de aandachtspunten sectie."""
+    items = build_attention_points(
+        has_rvp=has_rvp,
+        has_box3=has_box3,
+        customer_rejected_orv=customer_rejected_orv,
+    )
+    return {
+        "id": "attention-points",
+        "title": "Aandachtspunten",
+        "visible": True,
+        "bullets": items,
+    }
 
 
 def build_closing_section() -> dict:
-    """Bouw de afsluiting/disclaimer sectie."""
+    """Bouw de disclaimer/afsluiting sectie."""
     return {
-        "id": "closing",
-        "title": "Afsluiting",
+        "id": "disclaimer",
+        "title": "Disclaimer",
         "visible": True,
-        "narratives": [
-            "Dit Persoonlijk Hypotheekadvies en de bijbehorende berekeningen "
-            "zijn uitsluitend bedoeld als advies. Dit advies is geen aanbod "
-            "voor het aangaan van een overeenkomst, u kunt hieraan geen rechten "
-            "ontlenen. De berekeningen zijn gebaseerd op de persoonlijke en "
-            "financiële gegevens die u ons heeft gegeven.",
-            "Dit hypotheekadvies is gebaseerd op de gegevens die wij van u "
-            "hebben ontvangen en op de relevante (fiscale) wet- en regelgeving "
-            "die nu geldt. Van een totaal fiscaal advies is geen sprake. "
-            "Daarvoor verwijzen wij u naar een fiscaal adviseur. Hondsrug "
-            "Finance aanvaardt geen aansprakelijkheid voor eventuele toekomstige "
-            "wijzigingen in de fiscale wet- en regelgeving.",
-        ],
+        "narratives": build_disclaimer_narratives(),
     }

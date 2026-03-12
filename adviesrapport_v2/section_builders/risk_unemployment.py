@@ -4,24 +4,48 @@ import re
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.scenario_status import derive_unemployment_status
 from adviesrapport_v2.section_builders._align import align_columns_at_totaal
+from adviesrapport_v2.texts import (
+    UNEMPLOYMENT_TEXT,
+    compact_keys,
+    render_standard_scenario,
+)
 
 
 def build_risk_unemployment_section(
     data: NormalizedDossierData,
     ww_scenarios: list[dict],
     max_hypotheek_huidig: float,
+    buffer_months: float | None = None,
 ) -> dict:
-    """Bouw de werkloosheid sectie.
-
-    Args:
-        data: Genormaliseerde dossier data
-        ww_scenarios: WW-scenario's uit risk_scenarios (categorie "ww")
-        max_hypotheek_huidig: Huidige max hypotheek
-    """
+    """Bouw de werkloosheid sectie."""
     hypotheek = data.hypotheek_bedrag
 
-    # Groepeer per persoon
+    has_partner_income = (
+        data.partner is not None
+        and data.inkomen_partner_huidig > 0
+    )
+
+    # --- Status derivatie ---
+    status_result = derive_unemployment_status(buffer_months=buffer_months)
+
+    # --- Nuance keys ---
+    nuance_keys = compact_keys(
+        ("partner_income_used", has_partner_income),
+    )
+
+    # --- Render teksten ---
+    all_paragraphs = render_standard_scenario(
+        text=UNEMPLOYMENT_TEXT,
+        status=status_result["status"],
+        advice_type=status_result["advice_type"],
+        nuance_keys=nuance_keys,
+    )
+    narratives = all_paragraphs[:1]
+    conclusion = all_paragraphs[1:]
+
+    # --- Groepeer per persoon ---
     personen = {}
     for sc in ww_scenarios:
         vta = sc.get("van_toepassing_op", "aanvrager")
@@ -29,25 +53,7 @@ def build_risk_unemployment_section(
             personen[vta] = []
         personen[vta].append(sc)
 
-    # Narratives: WW-duur per persoon
-    narrative_parts = []
-    for persoon_key, scenarios in personen.items():
-        naam = data.aanvrager.naam if persoon_key == "aanvrager" else (data.partner.naam if data.partner else "Partner")
-        ww_duur_sc = [sc for sc in scenarios if "ww" in sc.get("naam", "").lower() and "na ww" not in sc.get("naam", "").lower()]
-        if ww_duur_sc:
-            duur = _extract_ww_duur(ww_duur_sc[0])
-            if duur:
-                narrative_parts.append(f"{naam} heeft recht op {duur} WW-uitkering.")
-            else:
-                narrative_parts.append(f"{naam} heeft recht op WW-uitkering.")
-
-    narratives = [" ".join(narrative_parts)] if narrative_parts else [
-        "Wij hebben beoordeeld wat de gevolgen zijn bij werkloosheid."
-    ]
-
     columns = []
-    min_max_hyp_na_ww = max_hypotheek_huidig
-
     for persoon_key, scenarios in personen.items():
         if persoon_key == "aanvrager":
             titel = f"Werkloosheid - {data.aanvrager.naam}" if not data.alleenstaand else data.aanvrager.naam
@@ -66,7 +72,6 @@ def build_risk_unemployment_section(
 
             col_rows.append({"label": fase_label, "value": format_bedrag(inkomen), "bold": True})
 
-            # Breakdown
             if sc.get("inkomen_aanvrager", 0) > 0:
                 col_rows.append({
                     "label": f"Inkomen {data.aanvrager.naam}",
@@ -79,12 +84,9 @@ def build_risk_unemployment_section(
                     "value": format_bedrag(sc["inkomen_partner"]),
                     "sub": True,
                 })
-            col_rows.append({"label": "", "value": ""})  # Spacer
+            col_rows.append({"label": "", "value": ""})
 
             fasen.append({"label": fase_label, "max_hypotheek": max_hyp})
-
-            if "na ww" in naam.lower():
-                min_max_hyp_na_ww = min(min_max_hyp_na_ww, max_hyp)
 
         chart_data = {
             "type": "vergelijk_fasen",
@@ -96,36 +98,23 @@ def build_risk_unemployment_section(
 
     align_columns_at_totaal(columns)
 
-    section = {
+    return {
         "id": "risk-unemployment",
         "title": "Werkloosheid",
         "visible": True,
         "narratives": narratives,
         "columns": columns,
+        "conclusion": conclusion,
     }
-
-    if min_max_hyp_na_ww < hypotheek:
-        section["advisor_note"] = (
-            "Na afloop van de WW-periode daalt uw maximale hypotheek "
-            "fors. Wij adviseren een financiële buffer van minimaal "
-            "6 maanden netto lasten aan te houden."
-        )
-
-    return section
 
 
 def _extract_ww_duur(scenario: dict) -> str:
-    """Haal WW-duur uit scenario dict.
-
-    Leest ww_details.ww_duur_maanden (int) uit het scenario.
-    Fallback: regex op scenario naam.
-    """
+    """Haal WW-duur uit scenario dict."""
     ww_details = scenario.get("ww_details") or {}
     maanden = ww_details.get("ww_duur_maanden", 0)
     if maanden and maanden > 0:
         return f"{maanden} maanden"
 
-    # Fallback: regex op naam
     naam = scenario.get("naam", "")
     match = re.search(r'(\d+)\s*maanden?', naam, re.IGNORECASE)
     if match:
@@ -134,11 +123,7 @@ def _extract_ww_duur(scenario: dict) -> str:
 
 
 def _extract_ww_fase_label(scenario_naam: str) -> str:
-    """Haal fase-label uit scenario naam.
-
-    'Werkloosheid aanvrager — 13 maanden WW' → 'Tijdens WW'
-    'Na WW aanvrager' → 'Na WW'
-    """
+    """Haal fase-label uit scenario naam."""
     lower = scenario_naam.lower()
     if "na ww" in lower:
         return "Na WW"

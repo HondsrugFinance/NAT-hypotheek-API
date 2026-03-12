@@ -43,7 +43,23 @@ from adviesrapport_v2.section_builders.risk_death import build_risk_death_sectio
 from adviesrapport_v2.section_builders.risk_disability import build_risk_disability_section
 from adviesrapport_v2.section_builders.risk_unemployment import build_risk_unemployment_section
 from adviesrapport_v2.section_builders.risk_relationship import build_risk_relationship_section
-from adviesrapport_v2.section_builders.closing import build_closing_section
+from adviesrapport_v2.section_builders.closing import build_closing_section, build_attention_points_section
+from adviesrapport_v2.scenario_status import (
+    derive_death_status,
+    derive_retirement_status,
+    derive_disability_status,
+    derive_unemployment_status,
+    derive_relationship_status,
+)
+from adviesrapport_v2.texts import ADVICE_RISK_LABELS
+
+# CSS class mapping voor scenario checks in template
+_STATUS_CSS_CLASS = {
+    "affordable": "ok",
+    "resolved": "ok",
+    "attention": "warning",
+    "shortfall": "warning",
+}
 
 logger = logging.getLogger("nat-api.adviesrapport_v2.orchestrator")
 
@@ -302,6 +318,7 @@ def generate_report(
             data=data,
             ww_scenarios=ww_scenarios,
             max_hypotheek_huidig=max_hypotheek,
+            buffer_months=None,
         ))
 
     # Relatiebeëindiging
@@ -314,7 +331,15 @@ def generate_report(
     if relatie_section:
         sections.append(relatie_section)
 
-    # Afsluiting
+    # Aandachtspunten
+    has_rvp = any(ld.rvp > 0 for ld in data.leningdelen_voor_api)
+    has_box3 = any(ld.bedrag_box3 > 0 for ld in data.leningdelen_voor_api)
+    sections.append(build_attention_points_section(
+        has_rvp=has_rvp,
+        has_box3=has_box3,
+    ))
+
+    # Afsluiting / Disclaimer
     sections.append(build_closing_section())
 
     # --- Stap 10: Assembleer rapport dict ---
@@ -554,48 +579,52 @@ def _bepaal_scenario_checks(
     max_hyp_aanvrager_alleen: float,
     max_hyp_partner_alleen: float,
 ) -> list[dict]:
-    """Bepaal scenario check statussen (ok/warning) voor samenvatting."""
+    """Bepaal scenario check statussen voor samenvatting.
+
+    Gebruikt de gecentraliseerde status-derivatie functies en
+    ADVICE_RISK_LABELS voor weergave (afgedekt / aandachtspunt / tekort aanwezig).
+    """
     hypotheek = data.hypotheek_bedrag
+    has_partner = not data.alleenstaand and data.partner is not None
+    orv_list = [v for v in (data.verzekeringen or []) if "overlijden" in v.type.lower()]
+    aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]
     checks = []
 
+    def _check(label: str, status_key: str):
+        return {
+            "label": label,
+            "status": ADVICE_RISK_LABELS[status_key],
+            "status_class": _STATUS_CSS_CLASS.get(status_key, "warning"),
+        }
+
     # Pensioen
-    aow_ok = all(
-        sc.get("max_hypotheek_annuitair", 0) >= hypotheek
-        for sc in aow_scenarios
-    ) if aow_scenarios else True
-    checks.append({"label": "Pensionering", "status": "ok" if aow_ok else "warning"})
+    ret_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek)
+    checks.append(_check("Pensionering", ret_status["status"]))
 
     # Overlijden (alleen stel)
-    if not data.alleenstaand and overlijden_scenarios:
-        overl_ok = all(
-            sc.get("max_hypotheek_annuitair", 0) >= hypotheek
-            for sc in overlijden_scenarios
-        )
-        checks.append({"label": "Overlijden", "status": "ok" if overl_ok else "warning"})
+    if has_partner and overlijden_scenarios:
+        death_status = derive_death_status(has_partner=True, has_orv=len(orv_list) > 0)
+        checks.append(_check("Overlijden", death_status["status"]))
 
     # AO
     if ao_scenarios:
-        ao_ok = all(
-            sc.get("max_hypotheek_annuitair", 0) >= hypotheek
-            for sc in ao_scenarios
-        )
-        checks.append({"label": "Arbeidsongeschiktheid", "status": "ok" if ao_ok else "warning"})
+        ao_status = derive_disability_status(has_aov=len(aov_list) > 0)
+        checks.append(_check("Arbeidsongeschiktheid", ao_status["status"]))
 
     # WW
     if ww_scenarios:
-        ww_ok = all(
-            sc.get("max_hypotheek_annuitair", 0) >= hypotheek
-            for sc in ww_scenarios
-        )
-        checks.append({"label": "Werkloosheid", "status": "ok" if ww_ok else "warning"})
+        ww_status = derive_unemployment_status(buffer_months=None)
+        checks.append(_check("Werkloosheid", ww_status["status"]))
 
     # Relatiebeëindiging
-    if not data.alleenstaand and data.partner:
-        relatie_ok = (
-            max_hyp_aanvrager_alleen >= hypotheek
-            and max_hyp_partner_alleen >= hypotheek
+    if has_partner:
+        rel_status = derive_relationship_status(
+            max_hyp_aanvrager=max_hyp_aanvrager_alleen,
+            max_hyp_partner=max_hyp_partner_alleen,
+            hypotheek=hypotheek,
         )
-        checks.append({"label": "Relatiebeëindiging", "status": "ok" if relatie_ok else "warning"})
+        rel_key = "affordable" if rel_status["overall_status"] == "affordable_for_both" else "attention"
+        checks.append(_check("Relatiebeëindiging", rel_key))
 
     return checks
 

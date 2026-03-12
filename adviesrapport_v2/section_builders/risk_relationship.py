@@ -2,6 +2,11 @@
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
+from adviesrapport_v2.scenario_status import derive_relationship_status
+from adviesrapport_v2.texts import (
+    RELATIONSHIP_TEXT,
+    render_relationship_scenario,
+)
 
 
 def build_risk_relationship_section(
@@ -10,27 +15,30 @@ def build_risk_relationship_section(
     max_hyp_partner_alleen: float,
     max_hypotheek_huidig: float,
 ) -> dict | None:
-    """Bouw de relatiebeëindiging sectie (alleen bij stel).
-
-    Args:
-        data: Genormaliseerde dossier data
-        max_hyp_aanvrager_alleen: Max hypotheek aanvrager als alleenstaande
-        max_hyp_partner_alleen: Max hypotheek partner als alleenstaande
-        max_hypotheek_huidig: Huidige max hypotheek (samen)
-
-    Returns:
-        None als alleenstaand, anders de sectie dict.
-    """
+    """Bouw de relatiebeëindiging sectie (alleen bij stel)."""
     if data.alleenstaand or not data.partner:
         return None
 
     hypotheek = data.hypotheek_bedrag
 
-    narratives = [
-        "Bij relatiebeëindiging valt het inkomen van de partner weg. "
-        "Er is geen recht op nabestaandenpensioen.",
-    ]
+    # --- Status derivatie ---
+    status_result = derive_relationship_status(
+        max_hyp_aanvrager=max_hyp_aanvrager_alleen,
+        max_hyp_partner=max_hyp_partner_alleen,
+        hypotheek=hypotheek,
+    )
 
+    # --- Render teksten ---
+    all_paragraphs = render_relationship_scenario(
+        text=RELATIONSHIP_TEXT,
+        overall_status=status_result["overall_status"],
+        applicant_status=status_result["applicant_status"],
+        partner_status=status_result["partner_status"],
+    )
+    narratives = all_paragraphs[:1]
+    conclusion = all_paragraphs[1:]
+
+    # --- Columns ---
     columns = [
         {
             "title": f"{data.aanvrager.naam} alleen",
@@ -66,21 +74,11 @@ def build_risk_relationship_section(
         },
     ]
 
-    section = {
+    return {
         "id": "risk-relationship",
         "title": "Relatiebeëindiging",
         "visible": True,
         "narratives": narratives,
         "columns": columns,
+        "conclusion": conclusion,
     }
-
-    # Advisor note
-    min_hyp = min(max_hyp_aanvrager_alleen, max_hyp_partner_alleen)
-    if min_hyp < hypotheek:
-        section["advisor_note"] = (
-            "Bij relatiebeëindiging moet de hypotheek door één inkomen "
-            "gedragen worden. Partneralimentatie kan het inkomen "
-            "aanvullen maar is niet gegarandeerd op lange termijn."
-        )
-
-    return section
