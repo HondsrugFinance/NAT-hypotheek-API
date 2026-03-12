@@ -61,6 +61,9 @@ def build_retirement_section(
     aow_partner = data.partner.inkomen.aow_uitkering if data.partner else 0
     pensioen_partner = data.partner.inkomen.pensioen if data.partner else 0
 
+    voornaam_a = data.aanvrager.voornaam or data.aanvrager.naam
+    voornaam_p = (data.partner.voornaam or data.partner.naam) if data.partner else "Partner"
+
     if data.alleenstaand:
         rows = []
         for sc in aow_scenarios:
@@ -77,7 +80,7 @@ def build_retirement_section(
                 rows.append({"label": "Pensioen", "value": format_bedrag(pensioen_aanvrager), "sub": True})
             if aow_aanvrager == 0 and pensioen_aanvrager == 0 and sc.get("inkomen_aanvrager", 0) > 0:
                 rows.append({
-                    "label": f"Inkomen {data.aanvrager.naam or 'aanvrager'}",
+                    "label": f"Inkomen {voornaam_a}",
                     "value": format_bedrag(sc["inkomen_aanvrager"]),
                     "sub": True,
                 })
@@ -109,26 +112,29 @@ def build_retirement_section(
             aanvrager_op_aow = "aanvrager" in naam_lower or "partner" in naam_lower
             partner_op_aow = "partner" in naam_lower
 
-            if ink_aanvrager > 0:
+            if aanvrager_op_aow:
+                if aow_aanvrager > 0:
+                    col_rows.append({"label": f"AOW-uitkering {voornaam_a}", "value": format_bedrag(aow_aanvrager), "sub": True})
+                if pensioen_aanvrager > 0:
+                    col_rows.append({"label": f"Pensioen {voornaam_a}", "value": format_bedrag(pensioen_aanvrager), "sub": True})
+            elif ink_aanvrager > 0:
                 col_rows.append({
-                    "label": f"Inkomen {data.aanvrager.naam}",
+                    "label": f"Inkomen {voornaam_a}",
                     "value": format_bedrag(ink_aanvrager),
                     "sub": True,
                 })
-                if aanvrager_op_aow and aow_aanvrager > 0:
-                    col_rows.append({"label": "  AOW-uitkering", "value": format_bedrag(aow_aanvrager), "sub": True})
-                if aanvrager_op_aow and pensioen_aanvrager > 0:
-                    col_rows.append({"label": "  Pensioen", "value": format_bedrag(pensioen_aanvrager), "sub": True})
-            if ink_partner > 0 and data.partner:
-                col_rows.append({
-                    "label": f"Inkomen {data.partner.naam}",
-                    "value": format_bedrag(ink_partner),
-                    "sub": True,
-                })
-                if partner_op_aow and aow_partner > 0:
-                    col_rows.append({"label": "  AOW-uitkering", "value": format_bedrag(aow_partner), "sub": True})
-                if partner_op_aow and pensioen_partner > 0:
-                    col_rows.append({"label": "  Pensioen", "value": format_bedrag(pensioen_partner), "sub": True})
+            if data.partner:
+                if partner_op_aow:
+                    if aow_partner > 0:
+                        col_rows.append({"label": f"AOW-uitkering {voornaam_p}", "value": format_bedrag(aow_partner), "sub": True})
+                    if pensioen_partner > 0:
+                        col_rows.append({"label": f"Pensioen {voornaam_p}", "value": format_bedrag(pensioen_partner), "sub": True})
+                elif ink_partner > 0:
+                    col_rows.append({
+                        "label": f"Inkomen {voornaam_p}",
+                        "value": format_bedrag(ink_partner),
+                        "sub": True,
+                    })
 
             col_rows.append({
                 "label": "Totaal inkomen",

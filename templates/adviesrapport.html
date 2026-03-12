@@ -434,6 +434,9 @@
     font-size: 8pt;
     margin-bottom: 2px;
   }
+  .advisor-note > div + div {
+    margin-top: 6px;
+  }
 
   /* --- Subsecties (huidige situatie) --- */
   .subsection {
@@ -809,7 +812,7 @@
     {# Conclusie (V2: list) of Toelichting (V1: string) #}
     {% if section.conclusion %}
     <div class="advisor-note">
-      <div class="advisor-note-label">Conclusie</div>
+      <div class="advisor-note-label">Toelichting</div>
       {% for text in section.conclusion %}
       <div>{{ text }}</div>
       {% endfor %}
@@ -885,7 +888,7 @@
     {# Conclusie (V2: list) of Toelichting (V1: string) #}
     {% if section.conclusion %}
     <div class="advisor-note">
-      <div class="advisor-note-label">Conclusie</div>
+      <div class="advisor-note-label">Toelichting</div>
       {% for text in section.conclusion %}
       <div>{{ text }}</div>
       {% endfor %}
@@ -1034,7 +1037,7 @@
     {# Conclusie (V2: list) of Toelichting (V1: string) #}
     {% if section.conclusion %}
     <div class="advisor-note">
-      <div class="advisor-note-label">Conclusie</div>
+      <div class="advisor-note-label">Toelichting</div>
       {% for text in section.conclusion %}
       <div>{{ text }}</div>
       {% endfor %}

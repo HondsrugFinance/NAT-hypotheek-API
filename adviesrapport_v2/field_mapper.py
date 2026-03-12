@@ -127,6 +127,7 @@ class NormalizedInkomen:
 class NormalizedPersoon:
     """Gegevens van één persoon (aanvrager of partner)."""
     naam: str = ""
+    voornaam: str = ""
     voorletters_achternaam: str = ""
     geboortedatum: str = ""  # YYYY-MM-DD
     adres: str = ""
@@ -573,6 +574,7 @@ def _extract_persoon_from_aanvraag(
 
     return NormalizedPersoon(
         naam=naam,
+        voornaam=roepnaam,
         voorletters_achternaam=voorletters_achternaam,
         geboortedatum=geboortedatum,
         adres=adres,
@@ -1233,16 +1235,18 @@ def _extract_persoon_from_dossier(
     if contact_gegevens and isinstance(contact_gegevens, dict):
         contact = contact_gegevens.get(suffix_lower) or {}
 
+    roepnaam = str(_get(klant, f"roepnaam{suffix_camel}") or
+                   _get(contact, "voornaam") or "").strip()
     naam = str(_get(klant, f"naam{suffix_camel}", f"naam_{suffix_lower}") or "").strip()
     if not naam:
-        roepnaam = str(_get(klant, f"roepnaam{suffix_camel}") or
-                       _get(contact, "voornaam") or "").strip()
         tussenvoegsel = str(_get(klant, f"tussenvoegsel{suffix_camel}") or
                             _get(contact, "tussenvoegsel") or "").strip()
         achternaam = str(_get(klant, f"achternaam{suffix_camel}") or
                          _get(contact, "achternaam") or "").strip()
         parts = [p for p in [roepnaam, tussenvoegsel, achternaam] if p]
         naam = " ".join(parts)
+    if not roepnaam and naam:
+        roepnaam = naam.split()[0]
 
     geboortedatum = str(
         _get(klant, f"geboortedatum{suffix_camel}", f"geboortedatum_{suffix_lower}") or ""
@@ -1296,6 +1300,7 @@ def _extract_persoon_from_dossier(
 
     return NormalizedPersoon(
         naam=naam,
+        voornaam=roepnaam,
         voorletters_achternaam=voorletters,
         geboortedatum=geboortedatum,
         adres=adres,

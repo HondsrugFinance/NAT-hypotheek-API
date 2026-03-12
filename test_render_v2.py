@@ -110,6 +110,7 @@ MOCK_AANVRAAG_STEL = {
         "heeftPartner": True,
         "aanvrager": {
             "persoon": {
+                "roepnaam": "Harry",
                 "initialen": "H.",
                 "achternaam": "Slinger",
                 "geboortedatum": "1980-01-01",
@@ -117,6 +118,7 @@ MOCK_AANVRAAG_STEL = {
         },
         "partner": {
             "persoon": {
+                "roepnaam": "Harriëtte",
                 "initialen": "H.V.",
                 "achternaam": "Slinger-Aap",
                 "geboortedatum": "1985-01-01",
