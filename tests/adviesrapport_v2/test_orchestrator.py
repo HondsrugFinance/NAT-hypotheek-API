@@ -173,10 +173,10 @@ class TestSectionBuilders:
         assert "Hypotheekconstructie" in subtitles
 
     def test_closing_section(self):
-        """Afsluiting/disclaimer sectie moet narratives hebben."""
+        """Afsluiting sectie moet bullets hebben."""
         section = build_closing_section()
-        assert section["id"] == "disclaimer"
-        assert len(section["narratives"]) >= 2
+        assert section["id"] == "closing"
+        assert len(section["bullets"]) >= 4
 
 
 class TestPensioenChartData:

@@ -1,33 +1,14 @@
-"""Afsluiting sectie — aandachtspunten + disclaimer tekst."""
+"""Afsluiting sectie — aandachtspunten + ondertekening."""
 
-from adviesrapport_v2.texts import build_attention_points, build_disclaimer_narratives
-
-
-def build_attention_points_section(
-    *,
-    has_rvp: bool = True,
-    has_box3: bool = False,
-    customer_rejected_orv: bool = False,
-) -> dict:
-    """Bouw de aandachtspunten sectie."""
-    items = build_attention_points(
-        has_rvp=has_rvp,
-        has_box3=has_box3,
-        customer_rejected_orv=customer_rejected_orv,
-    )
-    return {
-        "id": "attention-points",
-        "title": "Aandachtspunten",
-        "visible": True,
-        "bullets": items,
-    }
+from adviesrapport_v2.texts import build_closing_bullets
 
 
 def build_closing_section() -> dict:
-    """Bouw de disclaimer/afsluiting sectie."""
+    """Bouw de afsluiting sectie met aandachtspunten."""
     return {
-        "id": "disclaimer",
-        "title": "Disclaimer",
+        "id": "closing",
+        "title": "Afsluiting",
         "visible": True,
-        "narratives": build_disclaimer_narratives(),
+        "bullets_heading": "Belangrijke aandachtspunten",
+        "bullets": build_closing_bullets(),
     }

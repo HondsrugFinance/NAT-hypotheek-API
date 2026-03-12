@@ -616,7 +616,7 @@
 {% if section.visible %}
 
   {# --- Paginawissel + header --- #}
-  {% if section.id in page_break_before or section.id in risk_sections or section.id in ('closing', 'attention-points') %}
+  {% if section.id in page_break_before or section.id in risk_sections or section.id == 'closing' %}
   </div>{# sluit vorige a4-page #}
   <div class="page-break"></div>
   <div class="a4-page">
@@ -625,21 +625,28 @@
     <span class="right">{{ meta.date }}</span>
   </div>
   {# Hoofdstuktitel #}
-  {% if section.id in page_break_before or section.id in ('closing', 'attention-points') %}
+  {% if section.id in page_break_before or section.id == 'closing' %}
   <h2 class="chapter-title">{{ section.title }}</h2>
   {% elif section.id == 'retirement' %}
   <h2 class="chapter-title">Risico's</h2>
   {% endif %}
   {% endif %}
 
-  {# --- Afsluiting/Disclaimer: tekst + ondertekening --- #}
-  {% if section.id in ('closing', 'disclaimer') %}
+  {# --- Afsluiting: aandachtspunten + ondertekening --- #}
+  {% if section.id == 'closing' %}
   <div class="section">
+    {% if section.bullets_heading %}
+    <h3 class="section-title">{{ section.bullets_heading }}</h3>
+    {% endif %}
+    {% if section.bullets %}
     <div class="text-block">
-      {% for text in section.narratives %}
-      <div>{{ text }}</div>
-      {% endfor %}
+      <ul>
+        {% for text in section.bullets %}
+        <li>{{ text }}</li>
+        {% endfor %}
+      </ul>
     </div>
+    {% endif %}
     <div style="margin-top: 40px; font-size: 9pt; line-height: 2;">
       <div>{{ meta.date }}</div>
       <div style="margin-top: 8px;"><strong>{{ meta.advisor }}</strong></div>
@@ -758,18 +765,7 @@
     {% endfor %}
   </div>
 
-  {# --- Aandachtspunten: bullet list --- #}
-  {% elif section.id == 'attention-points' %}
-  <div class="section">
-    {% if section.id not in page_break_before %}<h3 class="section-title">{{ section.title }}</h3>{% endif %}
-    <div class="text-block">
-      <ul>
-        {% for text in section.bullets|default(section.narratives|default([])) %}
-        <li>{{ text }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
+  {# --- (attention-points verwijderd, samengevoegd in closing) --- #}
 
   {# --- Risk-analysis: scenario overzicht met tabel + chart --- #}
   {% elif section.id == 'risk-analysis' %}

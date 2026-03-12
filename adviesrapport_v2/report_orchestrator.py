@@ -43,7 +43,7 @@ from adviesrapport_v2.section_builders.risk_death import build_risk_death_sectio
 from adviesrapport_v2.section_builders.risk_disability import build_risk_disability_section
 from adviesrapport_v2.section_builders.risk_unemployment import build_risk_unemployment_section
 from adviesrapport_v2.section_builders.risk_relationship import build_risk_relationship_section
-from adviesrapport_v2.section_builders.closing import build_closing_section, build_attention_points_section
+from adviesrapport_v2.section_builders.closing import build_closing_section
 from adviesrapport_v2.scenario_status import (
     derive_death_status,
     derive_retirement_status,
@@ -331,15 +331,7 @@ def generate_report(
     if relatie_section:
         sections.append(relatie_section)
 
-    # Aandachtspunten
-    has_rvp = any(ld.rvp > 0 for ld in data.leningdelen_voor_api)
-    has_box3 = any(ld.bedrag_box3 > 0 for ld in data.leningdelen_voor_api)
-    sections.append(build_attention_points_section(
-        has_rvp=has_rvp,
-        has_box3=has_box3,
-    ))
-
-    # Afsluiting / Disclaimer
+    # Afsluiting (aandachtspunten + ondertekening)
     sections.append(build_closing_section())
 
     # --- Stap 10: Assembleer rapport dict ---

@@ -555,46 +555,19 @@ def build_tax_narratives(
     return blocks
 
 
-def build_attention_points(
-    *,
-    has_rvp: bool = True,
-    has_box3: bool = False,
-    customer_rejected_orv: bool = False,
-) -> list[str]:
-    """Aandachtspunten (bullet list)."""
-    items: list[str] = []
-
-    if has_rvp:
-        items.append(
-            "Na afloop van de rentevaste periode kan de rente wijzigen, "
-            "waardoor de maandlasten kunnen stijgen of dalen."
-        )
-    if has_box3:
-        items.append(
-            "Voor zover sprake is van een leningdeel in box 3, is de rente daarop "
-            "niet aftrekbaar als eigenwoningrente."
-        )
-    if customer_rejected_orv:
-        items.append(
-            "U heeft ervoor gekozen om geen overlijdensrisicoverzekering af te sluiten. "
-            "Dit betekent dat het financiële risico bij overlijden niet afzonderlijk is afgedekt."
-        )
-
-    items.append(
-        "Veranderingen in uw persoonlijke of financiële situatie kunnen invloed "
-        "hebben op de betaalbaarheid van de hypotheek."
-    )
-
-    return items
-
-
-def build_disclaimer_narratives() -> list[str]:
-    """Disclaimer-paragrafen."""
+def build_closing_bullets() -> list[str]:
+    """Belangrijke aandachtspunten (bullet list) voor de afsluiting."""
     return [
+        "Na afloop van de rentevaste periode kan de rente wijzigen. "
+        "Hierdoor kunnen de maandlasten stijgen of dalen.",
+        "Veranderingen in uw persoonlijke of financiële situatie kunnen invloed "
+        "hebben op de betaalbaarheid van de hypotheek.",
         "Dit adviesrapport is opgesteld op basis van de door u verstrekte informatie. "
         "Wij gaan ervan uit dat deze gegevens juist en volledig zijn.",
         "Het advies is een momentopname en gebaseerd op de huidige wet- en regelgeving "
-        "en de op het moment van opstellen bekende uitgangspunten.",
+        "en de uitgangspunten die gelden op het moment van opstellen.",
+        "Toekomstige wijzigingen in fiscale wet- en regelgeving kunnen invloed "
+        "hebben op de netto maandlasten.",
         "De definitieve acceptatie van de hypotheek is afhankelijk van de beoordeling "
         "door de geldverstrekker.",
     ]
