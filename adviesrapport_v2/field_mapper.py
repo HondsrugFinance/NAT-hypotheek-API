@@ -169,11 +169,14 @@ class NormalizedVerzekering:
         """Leesbare weergave van verzekering type."""
         mapping = {
             "overlijdensrisicoverzekering": "ORV",
+            "orv": "ORV",
             "arbeidsongeschiktheidsverzekering": "AOV",
             "arbeidsongeschiktheid": "AOV",
+            "aov": "AOV",
             "woonlastenverzekering": "Woonlastenverzekering",
             "lijfrenteverzekering": "Lijfrente",
             "lijfrente": "Lijfrente",
+            "levensverzekering": "Levensverzekering",
         }
         return mapping.get(self.type.lower(), self.type.capitalize())
 
@@ -404,13 +407,25 @@ WONING_TYPE_MAPPING = {
     "nieuw_bouw": "Nieuwbouw",
 }
 
-# Samenlevingsvorm mapping
+# Burgerlijke staat mapping (Lovable dropdown: 'samenwonend' | 'gehuwd' | 'geregistreerd_partner')
+BURGERLIJKE_STAAT_MAPPING = {
+    "samenwonend": "Samenwonend",
+    "gehuwd": "Gehuwd",
+    "geregistreerd_partner": "Geregistreerd partnerschap",
+    "geregistreerd_partnerschap": "Geregistreerd partnerschap",
+    "alleenstaand": "Alleenstaand",
+    "ongehuwd": "Ongehuwd",
+    "gescheiden": "Gescheiden",
+}
+
+# Samenlevingsvorm mapping (Lovable: 'met_samenlevingscontract' | 'zonder_samenlevingscontract')
 SAMENLEVINGSVORM_MAPPING = {
     "beperkte_gemeenschap": "Beperkte gemeenschap van goederen",
     "gemeenschap_van_goederen": "Gemeenschap van goederen",
     "huwelijkse_voorwaarden": "Huwelijkse voorwaarden",
     "geregistreerd_partnerschap": "Geregistreerd partnerschap",
     "samenwonend": "Samenwonend",
+    "met_samenlevingscontract": "Met samenlevingscontract",
     "zonder_samenlevingscontract": "Zonder samenlevingscontract",
 }
 
@@ -506,14 +521,18 @@ def _extract_inkomen_from_aanvraag(items: list) -> NormalizedInkomen:
             dienstverband = "Onderneming"
 
         elif item_type == "vermogen":
-            overig += jaarbedrag
+            bedrag = jaarbedrag
+            if not bedrag:
+                vd = item.get("vermogenData") or {}
+                bedrag = _to_float(vd.get("bedrag") or vd.get("jaarlijksBrutoInkomen"))
+            overig += bedrag
 
         elif item_type in ("ander_inkomen", "ander inkomen"):
-            overig += _to_float(
-                item.get("jaarbedrag")
-                or _get(item.get("anderInkomenData") or {},
-                        "jaarlijksBrutoInkomen")
-            )
+            bedrag = jaarbedrag
+            if not bedrag:
+                ai = item.get("anderInkomenData") or {}
+                bedrag = _to_float(ai.get("jaarlijksBrutoInkomen"))
+            overig += bedrag
 
         else:
             # Onbekend type — tel mee als overig, log waarschuwing
@@ -834,7 +853,11 @@ def _extract_werkgever_from_aanvraag(persoon_data: dict) -> Optional[NormalizedW
         return None
 
     dienstverband = str(wg.get("soortDienstverband") or wg.get("dienstverband") or "").strip()
-    datum = str(wg.get("datumInDienst") or wg.get("datum_in_dienst") or "").strip()
+    datum = str(
+        wg.get("datumInDienst") or wg.get("datum_in_dienst")
+        or wg.get("inDienstSinds")  # Lovable veldnaam
+        or ""
+    ).strip()
 
     return NormalizedWerkgever(naam=naam, dienstverband=dienstverband, datum_in_dienst=datum)
 
@@ -983,8 +1006,9 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
         status = str(w.get("woningstatus") or w.get("status") or "").strip()
         erfpacht = bool(w.get("erfpacht"))
         erfpachtcanon = _to_float(
-            w.get("erfpachtcanon") or w.get("canonPerJaar")
-            or w.get("canonBedrag") or w.get("canon")
+            w.get("jaarlijkseErfpacht")  # Lovable veldnaam
+            or w.get("erfpachtcanon") or w.get("erfpachtCanon")
+            or w.get("canonPerJaar") or w.get("canonBedrag") or w.get("canon")
         )
         energielabel = str(w.get("energielabel") or "").strip()
 
@@ -1088,18 +1112,29 @@ def _extract_verplichtingen_details_from_aanvraag(aanvraag_data: dict) -> list[d
         "doorlopend_krediet": "Doorlopend krediet",
         "aflopend_krediet": "Aflopend krediet",
         "persoonlijke_lening": "Persoonlijke lening",
+        "private_lease": "Private lease",
         "huurkoop": "Huurkoop/Private lease",
+        "partneralimentatie": "Partneralimentatie",
         "creditcard": "Creditcard",
     }
 
     for item in items:
         vtype = str(item.get("type") or "").strip()
-        maandbedrag = _to_float(item.get("maandbedrag"))
-        saldo = _to_float(
-            item.get("saldo") or item.get("restantBedrag")
-            or item.get("restschuld") or item.get("restantSaldo")
+        maandbedrag = _to_float(
+            item.get("maandbedrag") or item.get("maandlast")
         )
-        omschrijving = str(item.get("omschrijving") or item.get("naam") or "").strip()
+        saldo = _to_float(
+            item.get("saldo")
+            or item.get("nogAfTeLossen")    # Lovable: aflopend krediet
+            or item.get("nogTeBetalen")     # Lovable: aflopend krediet
+            or item.get("kredietbedrag")    # Lovable: doorlopend krediet limiet
+            or item.get("restantBedrag") or item.get("restschuld")
+            or item.get("restantSaldo")
+        )
+        omschrijving = str(
+            item.get("omschrijving") or item.get("naam")
+            or item.get("maatschappij") or ""
+        ).strip()
 
         result.append({
             "type": TYPE_DISPLAY.get(vtype, vtype.replace("_", " ").capitalize()),
@@ -1474,6 +1509,18 @@ def extract_dossier_data(
     logger.info("Dossier keys: %s", list(dossier.keys()) if isinstance(dossier, dict) else "niet-dict")
     logger.info("Aanvraag data keys: %s", list(aanvraag_data.keys()) if aanvraag_data else "leeg")
 
+    # Diagnostic: dump veldnamen van woningen, verplichtingen, verzekeringen
+    if has_aanvraag:
+        for i, w in enumerate(aanvraag_data.get("woningen") or []):
+            logger.info("  woningen[%d] keys=%s, erfpacht=%s, jaarlijkseErfpacht=%s",
+                        i, sorted(w.keys()), w.get("erfpacht"), w.get("jaarlijkseErfpacht"))
+        for i, v in enumerate(aanvraag_data.get("verplichtingen") or []):
+            logger.info("  verplichtingen[%d] type=%s, keys=%s, saldo=%s, nogAfTeLossen=%s",
+                        i, v.get("type"), sorted(v.keys()), v.get("saldo"), v.get("nogAfTeLossen"))
+        voorz = (aanvraag_data.get("voorzieningen") or {}).get("verzekeringen") or []
+        for i, vz in enumerate(voorz):
+            logger.info("  verzekeringen[%d] type=%s, keys=%s", i, vz.get("type"), sorted(vz.keys()))
+
     klant = _get(invoer, "klantGegevens", "klant") or {}
     contact_gegevens = dossier.get("klant_contact_gegevens")
     if isinstance(contact_gegevens, str):
@@ -1594,7 +1641,10 @@ def extract_dossier_data(
     # ── Burgerlijke staat ──
     if has_aanvraag:
         bs_raw = aanvraag_data.get("burgerlijkeStaat") or ""
-        burgerlijke_staat = bs_raw.capitalize() if bs_raw else ("Alleenstaand" if alleenstaand else "Gehuwd")
+        burgerlijke_staat = BURGERLIJKE_STAAT_MAPPING.get(
+            bs_raw.lower().strip(),
+            bs_raw.replace("_", " ").title() if bs_raw else ("Alleenstaand" if alleenstaand else "Gehuwd")
+        )
 
         sv_raw = aanvraag_data.get("samenlevingsvorm") or ""
         huwelijkse_voorwaarden = SAMENLEVINGSVORM_MAPPING.get(sv_raw, sv_raw)
