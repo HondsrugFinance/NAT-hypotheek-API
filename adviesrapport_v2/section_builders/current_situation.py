@@ -339,7 +339,7 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             if "lijfrente" in type_lower:
                 bedrag = verz.dekking
                 dekking = format_bedrag(bedrag) + " p/j" if bedrag > 0 else "-"
-            elif "arbeidsongeschiktheid" in type_lower:
+            elif "arbeidsongeschiktheid" in type_lower or type_lower == "aov":
                 bedrag = verz.dekking_aov or verz.dekking
                 dekking = format_bedrag(bedrag) + " p/j" if bedrag > 0 else "-"
             elif "woonlasten" in type_lower:
