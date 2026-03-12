@@ -306,11 +306,15 @@ class NormalizedDossierData:
 
     @property
     def inkomen_aanvrager_huidig(self) -> float:
-        return self.aanvrager.inkomen.hoofd_inkomen
+        ink = self.aanvrager.inkomen
+        return ink.hoofd_inkomen + ink.overig + ink.uitkering
 
     @property
     def inkomen_partner_huidig(self) -> float:
-        return self.partner.inkomen.hoofd_inkomen if self.partner else 0
+        if not self.partner:
+            return 0
+        ink = self.partner.inkomen
+        return ink.hoofd_inkomen + ink.overig + ink.uitkering
 
     @property
     def inkomen_aanvrager_aow(self) -> float:
