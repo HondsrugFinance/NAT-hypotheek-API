@@ -331,6 +331,11 @@
   .scenario-item:nth-child(2n) {
     float: right;
   }
+  .scenario-item-full {
+    float: none;
+    clear: both;
+    width: 100%;
+  }
   .scenario-ok {
     background: #E3F0E9;
     color: #2E5644;
@@ -957,7 +962,7 @@
     <div class="scenario-heading">Verantwoord blijven wonen?</div>
     <div class="scenario-grid">
       {% for check in section.scenario_checks %}
-      <div class="scenario-item scenario-{{ check.status_class|default(check.status) }}">
+      <div class="scenario-item{{ ' scenario-item-full' if check.full_width }} scenario-{{ check.status_class|default(check.status) }}">
         <span class="scenario-dot"></span>
         {{ check.label }}: {{ check.status }}
       </div>
