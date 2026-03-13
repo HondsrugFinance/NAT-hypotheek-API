@@ -1,5 +1,9 @@
 """Field mapper: Supabase dossier/aanvraag → genormaliseerde Python dataclasses.
 
+Constanten:
+  ONDERNEMER_DREMPEL — Drempel (0.75 = 75%) waarboven iemand als "overwegend
+  ondernemer" wordt beschouwd voor tekst-doeleinden (RVC, nuance).
+
 Dit is het hart van Optie B. Alle veldnaam-variaties (camelCase vs snake_case,
 Lovable vs API, percentage vs decimaal) worden hier afgevangen. Als Lovable
 ooit veldnamen verandert, hoeft alleen dit bestand aangepast te worden.
@@ -38,6 +42,8 @@ from typing import Optional
 from aow_calculator import bereken_aow_datum
 
 logger = logging.getLogger("nat-api.adviesrapport_v2.field_mapper")
+
+ONDERNEMER_DREMPEL = 0.75  # Onderneming > 75% van actief inkomen → "overwegend ondernemer"
 
 # Mapping van Lovable aflossingsvorm → API aflos_type
 AFLOSVORM_MAPPING = {
@@ -128,6 +134,22 @@ class NormalizedInkomen:
     def hoofd_inkomen(self) -> float:
         """Hoofdinkomen = loondienst + onderneming + roz."""
         return self.loondienst + self.onderneming + self.roz
+
+    @property
+    def is_ondernemer(self) -> bool:
+        """Pure ondernemer: alleen ondernemingsinkomen, geen loondienst."""
+        return self.onderneming > 0 and self.loondienst == 0
+
+    @property
+    def is_overwegend_ondernemer(self) -> bool:
+        """Onderneming > 75% van actief inkomen (loondienst + onderneming).
+
+        True voor zowel pure als overwegend ondernemers.
+        """
+        actief = self.loondienst + self.onderneming
+        if actief <= 0:
+            return False
+        return self.onderneming / actief > ONDERNEMER_DREMPEL
 
 
 @dataclass

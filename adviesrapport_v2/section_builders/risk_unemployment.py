@@ -24,17 +24,12 @@ def build_risk_unemployment_section(
     hypotheek = data.hypotheek_bedrag
 
     # --- Ondernemer-detectie per persoon ---
-    aanvrager_is_ondernemer = (
-        data.aanvrager.inkomen.onderneming > 0
-        and data.aanvrager.inkomen.loondienst == 0
-    )
-    partner_is_ondernemer = (
-        data.partner is not None
-        and data.partner.inkomen.onderneming > 0
-        and data.partner.inkomen.loondienst == 0
-    )
-    alle_ondernemers = aanvrager_is_ondernemer and (
-        data.alleenstaand or data.partner is None or partner_is_ondernemer
+    aanvrager_is_ondernemer = data.aanvrager.inkomen.is_ondernemer
+    aanvrager_overwegend = data.aanvrager.inkomen.is_overwegend_ondernemer
+    partner_is_ondernemer = data.partner is not None and data.partner.inkomen.is_ondernemer
+    partner_overwegend = data.partner is not None and data.partner.inkomen.is_overwegend_ondernemer
+    alle_ondernemers = aanvrager_overwegend and (
+        data.alleenstaand or data.partner is None or partner_overwegend
     )
 
     # --- Groepeer per persoon ---
@@ -53,7 +48,7 @@ def build_risk_unemployment_section(
     for persoon_key, scenarios in personen.items():
         naam = data.aanvrager.korte_naam if persoon_key == "aanvrager" else (data.partner.korte_naam if data.partner else "Partner")
         partner_names.append(naam)
-        is_ond = aanvrager_is_ondernemer if persoon_key == "aanvrager" else partner_is_ondernemer
+        is_ond = aanvrager_overwegend if persoon_key == "aanvrager" else partner_overwegend
         per_partner_is_ondernemer.append(is_ond)
         # Slechtste fase (laagste max_hypotheek)
         worst_max_hyp = min(
@@ -118,7 +113,14 @@ def build_risk_unemployment_section(
     buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ww > 0 and beschikbare_buffer >= max_tekort_ww
     buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_ww > 0 and not buffer_dekt_alles
 
+    # Overwegend ondernemer nuance (alleen als niet pure ondernemer)
+    heeft_overwegend = (
+        (aanvrager_overwegend and not aanvrager_is_ondernemer)
+        or (partner_overwegend and not partner_is_ondernemer)
+    )
+
     nuance_keys = compact_keys(
+        ("overwegend_ondernemer", heeft_overwegend),
         ("buffer_covers_shortfall", buffer_dekt_alles and not buffer_used_inline),
         ("buffer_partial", buffer_dekt_deels and not buffer_used_inline),
     )

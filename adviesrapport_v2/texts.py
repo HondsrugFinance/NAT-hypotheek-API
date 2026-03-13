@@ -335,6 +335,12 @@ DISABILITY_TEXT: StandardScenarioText = {
             "De beschikbare eigen middelen kunnen een deel van dit tekort "
             "opvangen, maar zijn niet volledig toereikend."
         ),
+        "overwegend_ondernemer": (
+            "Het inkomen bestaat voor het overgrote deel uit ondernemersinkomen. "
+            "De WIA-beoordeling is alleen van toepassing op het beperkte deel in loondienst. "
+            "Een arbeidsongeschiktheidsverzekering (AOV) is daarom het belangrijkste "
+            "vangnet bij arbeidsongeschiktheid."
+        ),
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op een indicatief scenario "
@@ -395,6 +401,12 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
         "buffer_partial": (
             "De beschikbare eigen middelen kunnen een deel van dit tekort "
             "opvangen, maar zijn niet volledig toereikend."
+        ),
+        "overwegend_ondernemer": (
+            "Het inkomen bestaat voor het overgrote deel uit ondernemersinkomen. "
+            "De WW-uitkering is alleen van toepassing op het beperkte deel in loondienst. "
+            "Bij verlies van opdrachtgevers of omzetdaling bestaan er geen "
+            "wettelijke vangnetten voor het ondernemersinkomen."
         ),
     },
     "disclaimer": (
