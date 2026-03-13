@@ -239,6 +239,7 @@ class NormalizedFinanciering:
     kosten_koper: float = 0
     eigen_middelen: float = 0
     schenking_inbreng: float = 0  # Schenking ingezet voor financiering
+    overwaarde: float = 0         # Overwaarde bestaande woning
     woningwaarde: float = 0
     woz_waarde: float = 0
     energielabel: str = "Geen (geldig) Label"
@@ -256,6 +257,21 @@ class NormalizedFinanciering:
     verbouwing: float = 0
     ebv_ebb: float = 0             # Energiebesparende voorzieningen/budget
     overbrugging: float = 0        # Overbruggingskrediet bedrag
+    aankoopmakelaar: float = 0     # Aankoopmakelaar kosten
+    consumptief: float = 0         # Consumptief bedrag
+    # Nieuwbouw project
+    koopsom_grond: float = 0
+    aanneemsom: float = 0
+    meerwerk: float = 0            # meerwerkOpties + meerwerkEigenBeheer
+    bouwrente: float = 0
+    # Nieuwbouw eigen beheer
+    koopsom_kavel: float = 0
+    sloop_oude_woning: float = 0
+    bouw_woning: float = 0
+    # Extra posten (custom)
+    extra_posten_aankoop: list = field(default_factory=list)   # [{label, value}]
+    extra_posten_kosten: list = field(default_factory=list)    # [{label, value}]
+    extra_posten_eigen_middelen: list = field(default_factory=list)  # [{label, value}]
 
 
 @dataclass
@@ -395,6 +411,21 @@ def _to_float(val, default: float = 0) -> float:
         return default
 
 
+def _extract_extra_posten(items) -> list[dict]:
+    """Extraheer extra posten array [{label, value}] → [{label: str, value: float}]."""
+    if not items or not isinstance(items, list):
+        return []
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        value = _to_float(item.get("value"))
+        if label and value > 0:
+            result.append({"label": label, "value": value})
+    return result
+
+
 def _normalize_rente(val) -> float:
     """Normaliseer rente naar decimaal. 4.1 → 0.041, 0.041 → 0.041."""
     f = _to_float(val, 0.05)
@@ -423,6 +454,8 @@ WONING_TYPE_MAPPING = {
     "bestaande bouw": "Bestaande bouw",
     "nieuwbouw": "Nieuwbouw",
     "nieuw_bouw": "Nieuwbouw",
+    "nieuwbouw_project": "Nieuwbouw (project)",
+    "nieuwbouw_eigen_beheer": "Nieuwbouw (eigen beheer)",
 }
 
 # Burgerlijke staat mapping (Lovable dropdown: 'samenwonend' | 'gehuwd' | 'geregistreerd_partner')
@@ -733,6 +766,7 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     koopsom = _to_float(fin.get("aankoopsomWoning"))
     eigen_geld = _to_float(fin.get("eigenGeld"))
     schenking_inbreng = _to_float(fin.get("schenkingLening") or fin.get("schenking"))
+    overwaarde = _to_float(fin.get("overwaarde"))
 
     # Individuele kostenposten
     overdrachtsbelasting = _to_float(fin.get("overdrachtsbelasting"))
@@ -744,11 +778,33 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     nhg_kosten = _to_float(fin.get("nhgKosten"))
     verbouwing = _to_float(fin.get("verbouwing"))
     ebv_ebb = _to_float(fin.get("ebvEbb") or fin.get("energiebesparendBudget"))
+    aankoopmakelaar = _to_float(fin.get("aankoopmakelaar"))
+    consumptief = _to_float(fin.get("consumptief"))
+
+    # Nieuwbouw project
+    koopsom_grond = _to_float(fin.get("koopsomGrond"))
+    aanneemsom = _to_float(fin.get("aanneemsom"))
+    meerwerk_opties = _to_float(fin.get("meerwerkOpties") or fin.get("meerwerk"))
+    meerwerk_eigen = _to_float(fin.get("meerwerkEigenBeheer"))
+    meerwerk = meerwerk_opties + meerwerk_eigen
+    bouwrente = _to_float(fin.get("bouwrente"))
+
+    # Nieuwbouw eigen beheer
+    koopsom_kavel = _to_float(fin.get("koopsomKavel"))
+    sloop_oude_woning = _to_float(fin.get("sloopOudeWoning"))
+    bouw_woning = _to_float(fin.get("bouwWoning"))
+
+    # Extra posten (custom arrays)
+    extra_posten_aankoop = _extract_extra_posten(fin.get("extraPostenAankoop"))
+    extra_posten_kosten = _extract_extra_posten(fin.get("extraPostenKosten"))
+    extra_posten_eigen_middelen = _extract_extra_posten(fin.get("extraPostenEigenMiddelen"))
 
     notariskosten = hypotheekakte + transportakte
     kosten_koper = (
         overdrachtsbelasting + bankgarantie + notariskosten
         + taxatiekosten + advies_bemiddeling + nhg_kosten
+        + aankoopmakelaar
+        + sum(ep["value"] for ep in extra_posten_kosten)
     )
 
     # Woningwaarde uit onderpand (marktwaarde)
@@ -789,6 +845,7 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
         schenking_inbreng=schenking_inbreng,
+        overwaarde=overwaarde,
         woningwaarde=woningwaarde,
         woz_waarde=woz_waarde,
         energielabel=energielabel,
@@ -805,6 +862,18 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         verbouwing=verbouwing,
         ebv_ebb=ebv_ebb,
         overbrugging=overbrugging,
+        aankoopmakelaar=aankoopmakelaar,
+        consumptief=consumptief,
+        koopsom_grond=koopsom_grond,
+        aanneemsom=aanneemsom,
+        meerwerk=meerwerk,
+        bouwrente=bouwrente,
+        koopsom_kavel=koopsom_kavel,
+        sloop_oude_woning=sloop_oude_woning,
+        bouw_woning=bouw_woning,
+        extra_posten_aankoop=extra_posten_aankoop,
+        extra_posten_kosten=extra_posten_kosten,
+        extra_posten_eigen_middelen=extra_posten_eigen_middelen,
     )
 
 

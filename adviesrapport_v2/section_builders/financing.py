@@ -26,9 +26,45 @@ def build_financing_section(
     subsections.append({"subtitle": "Onderpand", "rows": onderpand_rows})
 
     # --- Financieringsopzet ---
-    opzet_rows = [
-        {"label": "Aankoop", "value": format_bedrag(fin.koopsom)},
-    ]
+    opzet_rows = []
+    is_nieuwbouw_project = "project" in fin.type_woning.lower()
+    is_nieuwbouw_eigen_beheer = "eigen beheer" in fin.type_woning.lower()
+
+    # Aankoopposten (afhankelijk van woningtype)
+    if is_nieuwbouw_project:
+        if fin.koopsom_grond > 0:
+            opzet_rows.append({"label": "Koopsom grond", "value": format_bedrag(fin.koopsom_grond)})
+        if fin.aanneemsom > 0:
+            opzet_rows.append({"label": "Aanneemsom", "value": format_bedrag(fin.aanneemsom)})
+        if fin.meerwerk > 0:
+            opzet_rows.append({"label": "Meerwerk", "value": format_bedrag(fin.meerwerk)})
+        if fin.bouwrente > 0:
+            opzet_rows.append({"label": "Bouwrente", "value": format_bedrag(fin.bouwrente)})
+        # Fallback: als geen deelposten maar wel koopsom
+        if not opzet_rows and fin.koopsom > 0:
+            opzet_rows.append({"label": "Koop-/aanneemsom", "value": format_bedrag(fin.koopsom)})
+    elif is_nieuwbouw_eigen_beheer:
+        if fin.koopsom_kavel > 0:
+            opzet_rows.append({"label": "Koopsom kavel", "value": format_bedrag(fin.koopsom_kavel)})
+        if fin.sloop_oude_woning > 0:
+            opzet_rows.append({"label": "Sloop oude woning", "value": format_bedrag(fin.sloop_oude_woning)})
+        if fin.bouw_woning > 0:
+            opzet_rows.append({"label": "Bouw woning", "value": format_bedrag(fin.bouw_woning)})
+        if fin.meerwerk > 0:
+            opzet_rows.append({"label": "Meerwerk", "value": format_bedrag(fin.meerwerk)})
+        if fin.bouwrente > 0:
+            opzet_rows.append({"label": "Bouwrente", "value": format_bedrag(fin.bouwrente)})
+        # Fallback
+        if not opzet_rows and fin.koopsom > 0:
+            opzet_rows.append({"label": "Aankoop", "value": format_bedrag(fin.koopsom)})
+    else:
+        # Bestaande bouw
+        opzet_rows.append({"label": "Aankoop", "value": format_bedrag(fin.koopsom)})
+
+    # Extra posten aankoop (custom)
+    for ep in fin.extra_posten_aankoop:
+        opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+
     # Individuele kostenposten (alleen tonen als > 0)
     if fin.overdrachtsbelasting > 0:
         opzet_rows.append({"label": "Overdrachtsbelasting", "value": format_bedrag(fin.overdrachtsbelasting)})
@@ -38,6 +74,10 @@ def build_financing_section(
         opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
     if fin.ebv_ebb > 0:
         opzet_rows.append({"label": "EBB", "value": format_bedrag(fin.ebv_ebb)})
+    if fin.consumptief > 0:
+        opzet_rows.append({"label": "Consumptief", "value": format_bedrag(fin.consumptief)})
+    if fin.aankoopmakelaar > 0:
+        opzet_rows.append({"label": "Aankoopmakelaar", "value": format_bedrag(fin.aankoopmakelaar)})
     if fin.advies_bemiddeling > 0:
         opzet_rows.append({"label": "Hypotheekadvies", "value": format_bedrag(fin.advies_bemiddeling)})
     if fin.taxatiekosten > 0:
@@ -47,8 +87,20 @@ def build_financing_section(
     if fin.nhg_kosten > 0:
         opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
 
-    # Totaal
-    totale_investering = fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+    # Extra posten kosten (custom)
+    for ep in fin.extra_posten_kosten:
+        opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+
+    # Totaal investering
+    extra_aankoop_totaal = sum(ep["value"] for ep in fin.extra_posten_aankoop)
+    extra_kosten_totaal = sum(ep["value"] for ep in fin.extra_posten_kosten)
+    totale_investering = (
+        fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+        + fin.consumptief + fin.meerwerk + fin.bouwrente
+        + fin.koopsom_grond + fin.aanneemsom
+        + fin.koopsom_kavel + fin.sloop_oude_woning + fin.bouw_woning
+        + extra_aankoop_totaal + extra_kosten_totaal
+    )
     opzet_rows.append({"label": "Totaal", "value": format_bedrag(totale_investering), "bold": True})
     opzet_rows.append({"label": "", "value": ""})  # Spacer
 
@@ -62,11 +114,17 @@ def build_financing_section(
     if overbrugging > 0:
         opzet_rows.append({"label": "Overbrugging", "value": f"-/{format_bedrag(overbrugging)}"})
 
-    # Eigen middelen (aftrekpost)
+    # Eigen middelen (aftrekposten)
     if fin.eigen_middelen > 0:
         opzet_rows.append({"label": "Af: Eigen geld", "value": f"-/{format_bedrag(fin.eigen_middelen)}"})
     if fin.schenking_inbreng > 0:
         opzet_rows.append({"label": "Af: Schenking", "value": f"-/{format_bedrag(fin.schenking_inbreng)}"})
+    if fin.overwaarde > 0:
+        opzet_rows.append({"label": "Af: Overwaarde", "value": f"-/{format_bedrag(fin.overwaarde)}"})
+
+    # Extra posten eigen middelen (custom)
+    for ep in fin.extra_posten_eigen_middelen:
+        opzet_rows.append({"label": f"Af: {ep['label']}", "value": f"-/{format_bedrag(ep['value'])}"})
 
     opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
     subsections.append({"subtitle": "Financieringsopzet", "rows": opzet_rows})
