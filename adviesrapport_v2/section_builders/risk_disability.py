@@ -86,6 +86,12 @@ def build_risk_disability_section(
                 )
                 analysis_sentences.append(DISABILITY_TEXT["advice"]["no_action"])
 
+    # --- Ondernemer-detectie per persoon ---
+    aanvrager_is_ondernemer = data.aanvrager.inkomen.is_ondernemer
+    aanvrager_overwegend = data.aanvrager.inkomen.is_overwegend_ondernemer
+    partner_is_ondernemer = data.partner is not None and data.partner.inkomen.is_ondernemer
+    partner_overwegend = data.partner is not None and data.partner.inkomen.is_overwegend_ondernemer
+
     # --- Nuance keys ---
     max_tekort_ao = max(shortfall_amounts) if shortfall_amounts else 0
     buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ao > 0 and beschikbare_buffer >= max_tekort_ao
@@ -116,11 +122,6 @@ def build_risk_disability_section(
     narratives = all_paragraphs[:1]
 
     # Uitgangspunten per inkomenstype
-    aanvrager_is_ondernemer = data.aanvrager.inkomen.is_ondernemer
-    aanvrager_overwegend = data.aanvrager.inkomen.is_overwegend_ondernemer
-    partner_is_ondernemer = data.partner is not None and data.partner.inkomen.is_ondernemer
-    partner_overwegend = data.partner is not None and data.partner.inkomen.is_overwegend_ondernemer
-
     if data.alleenstaand or data.partner is None:
         # Alleenstaand → één zin
         rvc = 100 if aanvrager_overwegend else int(benutting_rvc)
