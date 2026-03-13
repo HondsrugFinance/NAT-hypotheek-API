@@ -67,15 +67,25 @@ def build_summary_section(
         {"label": "Rentevastperiode", "value": f"{rvp_jaren} jaar"},
     ]
 
-    # Narratives
-    adres_tekst = data.financiering.adres or "de aangekochte woning"
+    # Narratives — woningtype bepalen voor intro-zin
+    is_nieuwbouw = "nieuwbouw" in fin.type_woning.lower() or "project" in fin.type_woning.lower()
+    woning_label = "nieuwbouwwoning" if is_nieuwbouw else "woning"
+    adres_tekst = data.financiering.adres
+    has_adres = bool(adres_tekst and adres_tekst.strip(", "))
+
     if data.alleenstaand:
-        intro = f"U wilt een hypotheek afsluiten voor {adres_tekst}."
+        if has_adres:
+            intro = f"U wilt een hypotheek afsluiten voor de aankoop van een {woning_label} aan {adres_tekst}."
+        else:
+            intro = f"U wilt een hypotheek afsluiten voor de aankoop van een {woning_label}."
     else:
-        intro = (
-            f"U wilt samen een hypotheek afsluiten voor de aankoop van een "
-            f"woning aan {adres_tekst}."
-        )
+        if has_adres:
+            intro = (
+                f"U wilt samen een hypotheek afsluiten voor de aankoop van een "
+                f"{woning_label} aan {adres_tekst}."
+            )
+        else:
+            intro = f"U wilt samen een hypotheek afsluiten voor de aankoop van een {woning_label}."
 
     # Advies en onderbouwing — specifieke advies-paragraaf
     verstrekker = hypotheekverstrekker or fin.hypotheekverstrekker or "de geldverstrekker"

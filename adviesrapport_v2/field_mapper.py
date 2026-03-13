@@ -869,11 +869,17 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     woning_type_raw = str(fin.get("woningType") or "").lower().strip()
     type_woning = _map_woning_type(woning_type_raw)
 
-    # Onderpand adres
-    straat = str(onderpand.get("straat") or "")
-    postcode = str(onderpand.get("postcode") or "")
-    woonplaats = str(onderpand.get("woonplaats") or "")
-    adres = f"{straat}, {postcode} {woonplaats}".strip(", ")
+    # Onderpand adres (inclusief huisnummer + toevoeging)
+    straat = str(onderpand.get("straat") or "").strip()
+    huisnr = str(onderpand.get("huisnummer") or "").strip()
+    toevoeging = str(onderpand.get("toevoeging") or onderpand.get("huisnummerToevoeging") or "").strip()
+    postcode = str(onderpand.get("postcode") or "").strip()
+    woonplaats = str(onderpand.get("woonplaats") or "").strip()
+    straat_deel = f"{straat} {huisnr}".strip()
+    if toevoeging:
+        straat_deel = f"{straat_deel}{toevoeging}"
+    postcode_deel = f"{postcode} {woonplaats}".strip()
+    adres = f"{straat_deel}, {postcode_deel}".strip(", ")
 
     # Hypotheekverstrekker + NHG
     hypotheekverstrekker = str(samenstellen.get("geldverstrekker") or "")
@@ -890,8 +896,14 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     overbrugging = _to_float(fin.get("overbrugging"))
 
     # Onderpand detail (#66-68, #70)
-    plannummer = str(onderpand.get("plannummer") or onderpand.get("planNummer") or "").strip()
-    bouwnummer = str(onderpand.get("bouwnummer") or onderpand.get("bouwNummer") or "").strip()
+    plannummer = str(
+        onderpand.get("plannummerProject") or onderpand.get("plannummer")
+        or onderpand.get("planNummer") or ""
+    ).strip()
+    bouwnummer = str(
+        onderpand.get("bouwnummerOnderpand") or onderpand.get("bouwnummer")
+        or onderpand.get("bouwNummer") or ""
+    ).strip()
     erfpacht_onderpand = bool(onderpand.get("erfpacht") or onderpand.get("heeftErfpacht"))
     erfpachtcanon_onderpand = _to_float(
         onderpand.get("jaarlijkseErfpacht") or onderpand.get("erfpachtcanon")

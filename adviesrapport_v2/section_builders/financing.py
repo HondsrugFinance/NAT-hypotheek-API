@@ -16,9 +16,15 @@ def build_financing_section(
 
     # --- Onderpand ---
     onderpand_rows = []
-    if fin.adres:
+    has_adres = bool(fin.adres and fin.adres.strip(", "))
+    if has_adres:
         onderpand_rows.append({"label": "Adres", "value": fin.adres})
     onderpand_rows.append({"label": "Type woning", "value": fin.type_woning})
+    # #66: Plannummer + bouwnummer (nieuwbouw)
+    if fin.plannummer:
+        onderpand_rows.append({"label": "Plannummer project", "value": fin.plannummer})
+    if fin.bouwnummer:
+        onderpand_rows.append({"label": "Bouwnummer onderpand", "value": fin.bouwnummer})
     onderpand_rows.append({"label": "Marktwaarde", "value": format_bedrag(fin.woningwaarde)})
     # #68: Marktwaarde na verbouwing (alleen als hoger dan gewone marktwaarde)
     if fin.marktwaarde_na_verbouwing > fin.woningwaarde:
@@ -26,11 +32,6 @@ def build_financing_section(
     if fin.woz_waarde > 0:
         onderpand_rows.append({"label": "WOZ-waarde", "value": format_bedrag(fin.woz_waarde)})
     onderpand_rows.append({"label": "Energielabel", "value": fin.energielabel})
-    # #66: Plannummer + bouwnummer (nieuwbouw)
-    if fin.plannummer:
-        onderpand_rows.append({"label": "Plannummer", "value": fin.plannummer})
-    if fin.bouwnummer:
-        onderpand_rows.append({"label": "Bouwnummer", "value": fin.bouwnummer})
     # #67: Erfpacht details onderpand
     if fin.erfpacht_onderpand:
         if fin.erfpachtcanon_onderpand > 0:
