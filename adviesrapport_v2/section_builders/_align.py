@@ -61,6 +61,45 @@ def align_columns_at_totaal(columns: list[dict]) -> list[dict]:
     return columns
 
 
+def align_tables_in_columns(columns: list[dict]) -> list[dict]:
+    """Pad tabel-rijen zodat <tfoot> (Totaal) op dezelfde hoogte staat.
+
+    Vergelijkt tabellen op dezelfde index over alle kolommen.
+    De kortere tabel krijgt lege rijen vóór de totaal-voet.
+    """
+    if len(columns) < 2:
+        return columns
+
+    # Bepaal max aantal tabellen over alle kolommen
+    max_tables = max(len(col.get("tables", [])) for col in columns)
+
+    for table_idx in range(max_tables):
+        tables = []
+        for col in columns:
+            col_tables = col.get("tables", [])
+            if table_idx < len(col_tables):
+                tables.append(col_tables[table_idx])
+            else:
+                tables.append(None)
+
+        # Maximaal aantal rijen over alle tabellen op deze index
+        max_rows = max(
+            len(t.get("rows", [])) for t in tables if t is not None
+        )
+
+        for t in tables:
+            if t is None:
+                continue
+            gap = max_rows - len(t["rows"])
+            if gap > 0:
+                num_cols = len(t.get("headers", ["", ""]))
+                empty_row = [""] * num_cols
+                # Voeg lege rijen toe vóór de bestaande rijen (zodat totaal uitlijnt)
+                t["rows"] = t["rows"] + [empty_row] * gap
+
+    return columns
+
+
 def _split_at_dividers(rows: list[dict]) -> list[list[dict]]:
     """Splits rows in chunks bij lege divider-rijen (label='' en value='')."""
     chunks = []

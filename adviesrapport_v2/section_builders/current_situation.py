@@ -4,6 +4,7 @@ from adviesrapport_v2.field_mapper import (
     NormalizedDossierData, AFLOSVORM_DISPLAY, _map_aflosvorm,
 )
 from adviesrapport_v2.formatters import format_bedrag, format_datum, format_looptijd_jaren, format_percentage
+from adviesrapport_v2.section_builders._align import align_tables_in_columns
 
 
 def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
@@ -172,12 +173,14 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             "tables": [_inkomen_tabel(data.aanvrager)],
         })
     else:
+        inkomen_cols = [
+            {"title": data.aanvrager.naam, "tables": [_inkomen_tabel(data.aanvrager)]},
+            {"title": data.partner.naam, "tables": [_inkomen_tabel(data.partner)]},
+        ]
+        align_tables_in_columns(inkomen_cols)
         subsections.append({
             "subtitle": "Inkomen",
-            "columns": [
-                {"title": data.aanvrager.naam, "tables": [_inkomen_tabel(data.aanvrager)]},
-                {"title": data.partner.naam, "tables": [_inkomen_tabel(data.partner)]},
-            ],
+            "columns": inkomen_cols,
         })
 
     # --- Inkomen na AOW ---
@@ -188,12 +191,14 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
                 "tables": [_inkomen_aow_tabel(data.aanvrager)],
             })
         else:
+            aow_cols = [
+                {"title": data.aanvrager.naam, "tables": [_inkomen_aow_tabel(data.aanvrager)]},
+                {"title": data.partner.naam, "tables": [_inkomen_aow_tabel(data.partner)]},
+            ]
+            align_tables_in_columns(aow_cols)
             subsections.append({
                 "subtitle": "Inkomen na AOW",
-                "columns": [
-                    {"title": data.aanvrager.naam, "tables": [_inkomen_aow_tabel(data.aanvrager)]},
-                    {"title": data.partner.naam, "tables": [_inkomen_aow_tabel(data.partner)]},
-                ],
+                "columns": aow_cols,
             })
 
     # --- Bestaande woning ---
