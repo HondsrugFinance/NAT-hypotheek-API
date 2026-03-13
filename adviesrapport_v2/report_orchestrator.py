@@ -156,6 +156,23 @@ def generate_report(
     )
     aow_scenarios = (aow_result or {}).get("scenarios", [])
 
+    # Voeg restschuld toe per AOW-scenario (nodig voor status-derivatie)
+    for sc in aow_scenarios:
+        peildatum_str = sc.get("peildatum", "")
+        if peildatum_str and ingangsdatum:
+            try:
+                from datetime import date as _date
+                peil = _date.fromisoformat(peildatum_str)
+                start_dt = _date.fromisoformat(ingangsdatum)
+                elapsed = max(0, (peil.year - start_dt.year) * 12 + (peil.month - start_dt.month))
+                restschuld = sum(
+                    _restschuld_leningdeel(ld, elapsed)
+                    for ld in data.leningdelen_voor_api
+                )
+                sc["restschuld_op_peildatum"] = round(restschuld)
+            except (ValueError, TypeError):
+                pass
+
     # 5b: Overlijden (alleen stel)
     overlijden_scenarios = []
     if not data.alleenstaand and data.partner:

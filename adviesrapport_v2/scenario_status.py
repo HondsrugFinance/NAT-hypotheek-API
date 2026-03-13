@@ -44,6 +44,10 @@ def derive_retirement_status(
 ) -> dict:
     """Pensioen status-derivatie op basis van AOW-scenario's.
 
+    Vergelijkt de RESTSCHULD op AOW-moment (niet het originele hypotheekbedrag)
+    met de maximale hypotheek. Bij aflossende hypotheken is de restschuld op
+    AOW-leeftijd lager dan het originele bedrag.
+
     Gebruikt de 5%-drempel: tekort ≤ 5% = limited (attention),
     tekort > 5% = material (shortfall).
     """
@@ -56,9 +60,11 @@ def derive_retirement_status(
             sc.get("max_hypotheek_annuitair", 0),
             sc.get("max_hypotheek_niet_annuitair", 0),
         )
-        if hypotheek > max_hyp > 0:
-            tekort = hypotheek - max_hyp
-            tekort_pct = (tekort / hypotheek * 100) if hypotheek > 0 else 0
+        # Vergelijk met restschuld op AOW-moment, niet het originele bedrag
+        schuld = sc.get("restschuld_op_peildatum", hypotheek)
+        if schuld > max_hyp > 0:
+            tekort = schuld - max_hyp
+            tekort_pct = (tekort / schuld * 100) if schuld > 0 else 0
             shortfalls.append({
                 "tekort": tekort,
                 "tekort_pct": tekort_pct,
