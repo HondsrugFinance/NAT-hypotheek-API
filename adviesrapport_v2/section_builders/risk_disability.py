@@ -22,7 +22,7 @@ def build_risk_disability_section(
     beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de arbeidsongeschiktheid sectie."""
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
 
     # --- Verzekeringen ---
     aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]

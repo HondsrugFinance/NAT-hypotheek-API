@@ -287,7 +287,9 @@ class NormalizedFinanciering:
     nhg_kosten: float = 0
     bankgarantie: float = 0
     verbouwing: float = 0
-    ebv_ebb: float = 0             # Energiebesparende voorzieningen/budget
+    ebv_ebb: float = 0             # Energiebesparende voorzieningen/budget (gecombineerd)
+    ebv: float = 0                 # EBV apart (voor display)
+    ebb: float = 0                 # EBB apart (voor display)
     overbrugging: float = 0        # Overbruggingskrediet bedrag
     aankoopmakelaar: float = 0     # Aankoopmakelaar kosten
     consumptief: float = 0         # Consumptief bedrag
@@ -317,6 +319,7 @@ class NormalizedFinanciering:
     uitkoop_partner: float = 0
     afkoop_erfpacht: float = 0
     oversluiten_leningen: float = 0
+    is_wijziging: bool = False     # True bij verhogen/oversluiten/uitkopen flows
 
 
 @dataclass
@@ -364,6 +367,19 @@ class NormalizedDossierData:
         return sum(
             d.totaal_bedrag for d in self.leningdelen if not d.is_overbrugging
         )
+
+    @property
+    def totale_hypotheekschuld(self) -> float:
+        """Totale hypotheekschuld incl. bestaande hypotheek bij wijziging.
+
+        Bij verhoging/oversluiten: nieuwe leningdelen + bestaande hypotheek
+        die in stand blijft (= fin.koopsom = huidigeHypotheek).
+        Bij aankoop: zelfde als hypotheek_bedrag.
+        """
+        base = self.hypotheek_bedrag
+        if self.financiering.is_wijziging:
+            base += self.financiering.koopsom
+        return base
 
     @property
     def totale_investering(self) -> float:
@@ -1103,6 +1119,8 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
         bankgarantie=0,
         verbouwing=verbouwing,
         ebv_ebb=ebv_ebb,
+        ebv=ebv,
+        ebb=ebb,
         overbrugging=overbrugging,
         aankoopmakelaar=0,
         consumptief=consumptief,
@@ -1127,6 +1145,7 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
         uitkoop_partner=uitkoop_partner,
         afkoop_erfpacht=afkoop_erfpacht,
         oversluiten_leningen=oversluiten_leningen,
+        is_wijziging=True,
     )
 
 

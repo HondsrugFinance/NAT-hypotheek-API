@@ -49,8 +49,11 @@ def build_financing_section(
     is_nieuwbouw_project = "project" in fin.type_woning.lower()
     is_nieuwbouw_eigen_beheer = "eigen beheer" in fin.type_woning.lower()
 
-    # Aankoopposten (afhankelijk van woningtype)
-    if is_nieuwbouw_project:
+    # Aankoopposten (afhankelijk van woningtype en flow)
+    if fin.is_wijziging:
+        # Wijziging flow: "Huidige hypotheek" als eerste post
+        opzet_rows.append({"label": "Huidige hypotheek", "value": format_bedrag(fin.koopsom)})
+    elif is_nieuwbouw_project:
         if fin.koopsom_grond > 0:
             opzet_rows.append({"label": "Koopsom grond", "value": format_bedrag(fin.koopsom_grond)})
         if fin.aanneemsom > 0:
@@ -77,50 +80,82 @@ def build_financing_section(
         if not opzet_rows and fin.koopsom > 0:
             opzet_rows.append({"label": "Aankoop", "value": format_bedrag(fin.koopsom)})
     else:
-        # Bestaande bouw
+        # Bestaande bouw (aankoop)
         opzet_rows.append({"label": "Aankoop", "value": format_bedrag(fin.koopsom)})
 
-    # Extra posten aankoop (custom)
-    for ep in fin.extra_posten_aankoop:
-        opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+    if fin.is_wijziging:
+        # Wijziging volgorde: investering → kosten → custom (matcht Lovable)
+        # Investering items
+        if fin.verbouwing > 0:
+            opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
+        # EBV en EBB apart tonen
+        if fin.ebv > 0:
+            opzet_rows.append({"label": "EBV", "value": format_bedrag(fin.ebv)})
+        if fin.ebb > 0:
+            opzet_rows.append({"label": "EBB", "value": format_bedrag(fin.ebb)})
+        if fin.afkoop_erfpacht > 0:
+            opzet_rows.append({"label": "Afkoop erfpacht", "value": format_bedrag(fin.afkoop_erfpacht)})
+        if fin.oversluiten_leningen > 0:
+            opzet_rows.append({"label": "Oversluiten leningen", "value": format_bedrag(fin.oversluiten_leningen)})
+        if fin.consumptief > 0:
+            opzet_rows.append({"label": "Consumptief", "value": format_bedrag(fin.consumptief)})
+        if fin.boeterente > 0:
+            opzet_rows.append({"label": "Boeterente", "value": format_bedrag(fin.boeterente)})
+        if fin.uitkoop_partner > 0:
+            opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
+        # Extra posten aankoop/investering (custom)
+        for ep in fin.extra_posten_aankoop:
+            opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+        # Kosten items
+        if fin.advies_bemiddeling > 0:
+            opzet_rows.append({"label": "Hypotheekadvies", "value": format_bedrag(fin.advies_bemiddeling)})
+        if fin.taxatiekosten > 0:
+            opzet_rows.append({"label": "Taxatiekosten", "value": format_bedrag(fin.taxatiekosten)})
+        if fin.notariskosten > 0:
+            opzet_rows.append({"label": "Notariskosten", "value": format_bedrag(fin.notariskosten)})
+        if fin.nhg_kosten > 0:
+            opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
+        # Extra posten kosten (custom)
+        for ep in fin.extra_posten_kosten:
+            opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+    else:
+        # Aankoop volgorde (ongewijzigd)
+        # Extra posten aankoop (custom)
+        for ep in fin.extra_posten_aankoop:
+            opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
 
-    # Individuele kostenposten (alleen tonen als > 0)
-    if fin.overdrachtsbelasting > 0:
-        opzet_rows.append({"label": "Overdrachtsbelasting", "value": format_bedrag(fin.overdrachtsbelasting)})
-    if fin.notariskosten > 0:
-        opzet_rows.append({"label": "Notariskosten", "value": format_bedrag(fin.notariskosten)})
-    if fin.verbouwing > 0:
-        opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
-    if fin.ebv_ebb > 0:
-        opzet_rows.append({"label": "EBB", "value": format_bedrag(fin.ebv_ebb)})
-    if fin.consumptief > 0:
-        opzet_rows.append({"label": "Consumptief", "value": format_bedrag(fin.consumptief)})
-    if fin.aankoopmakelaar > 0:
-        opzet_rows.append({"label": "Aankoopmakelaar", "value": format_bedrag(fin.aankoopmakelaar)})
-    if fin.advies_bemiddeling > 0:
-        opzet_rows.append({"label": "Hypotheekadvies", "value": format_bedrag(fin.advies_bemiddeling)})
-    if fin.taxatiekosten > 0:
-        opzet_rows.append({"label": "Taxatiekosten", "value": format_bedrag(fin.taxatiekosten)})
-    if fin.bankgarantie > 0:
-        opzet_rows.append({"label": "Bankgarantie", "value": format_bedrag(fin.bankgarantie)})
-    if fin.nhg_kosten > 0:
-        opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
-    # #74: Boeterente
-    if fin.boeterente > 0:
-        opzet_rows.append({"label": "Boeterente", "value": format_bedrag(fin.boeterente)})
-    # #75: Uitkoop partner
-    if fin.uitkoop_partner > 0:
-        opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
-    # #76: Afkoop erfpacht
-    if fin.afkoop_erfpacht > 0:
-        opzet_rows.append({"label": "Afkoop erfpacht", "value": format_bedrag(fin.afkoop_erfpacht)})
-    # #77: Oversluiten leningen
-    if fin.oversluiten_leningen > 0:
-        opzet_rows.append({"label": "Oversluiten leningen", "value": format_bedrag(fin.oversluiten_leningen)})
-
-    # Extra posten kosten (custom)
-    for ep in fin.extra_posten_kosten:
-        opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
+        # Individuele kostenposten (alleen tonen als > 0)
+        if fin.overdrachtsbelasting > 0:
+            opzet_rows.append({"label": "Overdrachtsbelasting", "value": format_bedrag(fin.overdrachtsbelasting)})
+        if fin.notariskosten > 0:
+            opzet_rows.append({"label": "Notariskosten", "value": format_bedrag(fin.notariskosten)})
+        if fin.verbouwing > 0:
+            opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
+        if fin.ebv_ebb > 0:
+            opzet_rows.append({"label": "EBB", "value": format_bedrag(fin.ebv_ebb)})
+        if fin.consumptief > 0:
+            opzet_rows.append({"label": "Consumptief", "value": format_bedrag(fin.consumptief)})
+        if fin.aankoopmakelaar > 0:
+            opzet_rows.append({"label": "Aankoopmakelaar", "value": format_bedrag(fin.aankoopmakelaar)})
+        if fin.advies_bemiddeling > 0:
+            opzet_rows.append({"label": "Hypotheekadvies", "value": format_bedrag(fin.advies_bemiddeling)})
+        if fin.taxatiekosten > 0:
+            opzet_rows.append({"label": "Taxatiekosten", "value": format_bedrag(fin.taxatiekosten)})
+        if fin.bankgarantie > 0:
+            opzet_rows.append({"label": "Bankgarantie", "value": format_bedrag(fin.bankgarantie)})
+        if fin.nhg_kosten > 0:
+            opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
+        if fin.boeterente > 0:
+            opzet_rows.append({"label": "Boeterente", "value": format_bedrag(fin.boeterente)})
+        if fin.uitkoop_partner > 0:
+            opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
+        if fin.afkoop_erfpacht > 0:
+            opzet_rows.append({"label": "Afkoop erfpacht", "value": format_bedrag(fin.afkoop_erfpacht)})
+        if fin.oversluiten_leningen > 0:
+            opzet_rows.append({"label": "Oversluiten leningen", "value": format_bedrag(fin.oversluiten_leningen)})
+        # Extra posten kosten (custom)
+        for ep in fin.extra_posten_kosten:
+            opzet_rows.append({"label": ep["label"], "value": format_bedrag(ep["value"])})
 
     # Totaal investering
     extra_aankoop_totaal = sum(ep["value"] for ep in fin.extra_posten_aankoop)
@@ -159,7 +194,7 @@ def build_financing_section(
     for ep in fin.extra_posten_eigen_middelen:
         opzet_rows.append({"label": f"Af: {ep['label']}", "value": f"-/{format_bedrag(ep['value'])}"})
 
-    opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
+    opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.totale_hypotheekschuld), "bold": True})
     subsections.append({"subtitle": "Financieringsopzet", "rows": opzet_rows})
 
     # --- Hypotheekconstructie ---

@@ -174,6 +174,8 @@ async def debug_dossier_data(
                     for h in data.bestaande_hypotheken
                 ],
                 "hypotheek_bedrag": data.hypotheek_bedrag,
+                "totale_hypotheekschuld": data.totale_hypotheekschuld,
+                "is_wijziging": data.financiering.is_wijziging,
                 "leningdelen_count": len(data.leningdelen),
                 "leningdelen": [
                     {

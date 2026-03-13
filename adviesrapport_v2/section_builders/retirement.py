@@ -21,7 +21,7 @@ def build_retirement_section(
     beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de pensioen sectie."""
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
 
     # --- Status derivatie ---
     status_result = derive_retirement_status(

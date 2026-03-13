@@ -123,7 +123,7 @@ def generate_report(
         studievoorschot_studielening=data.studielening_maandlast,
         erfpachtcanon_per_jaar=data.erfpachtcanon_per_maand,
         jaarlast_overige_kredieten=data.overige_kredieten_maandlast,
-        geadviseerd_hypotheekbedrag=data.hypotheek_bedrag,
+        geadviseerd_hypotheekbedrag=data.totale_hypotheekschuld,
     )
 
     # AOW-inkomen: gebruik data uit Supabase, of schat op basis van standaard AOW
@@ -605,7 +605,7 @@ def _bepaal_scenario_checks(
     Gebruikt de gecentraliseerde status-derivatie functies en
     ADVICE_RISK_LABELS voor weergave (afgedekt / aandachtspunt / tekort aanwezig).
     """
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
     has_partner = not data.alleenstaand and data.partner is not None
     orv_list = [v for v in (data.verzekeringen or []) if "overlijden" in v.type.lower()]
     aov_list = [v for v in (data.verzekeringen or []) if "arbeidsongeschikt" in v.type.lower()]
@@ -734,7 +734,7 @@ def _build_pensioen_chart_data(
     if not aow_scenarios:
         return None
 
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
     start_jaar = date.today().year
     alleenstaande = "NEE" if not data.alleenstaand else "JA"
 

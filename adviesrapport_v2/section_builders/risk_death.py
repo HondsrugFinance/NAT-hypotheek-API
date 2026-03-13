@@ -21,7 +21,7 @@ def build_risk_death_section(
     beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de overlijden sectie."""
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
 
     # Alleenstaand: kort verhaal
     if data.alleenstaand:

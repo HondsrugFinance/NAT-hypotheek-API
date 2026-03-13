@@ -14,7 +14,7 @@ def build_summary_section(
 ) -> dict:
     """Bouw de samenvatting sectie."""
     fin = data.financiering
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
     woningwaarde = fin.woningwaarde
 
     # Schuld-marktwaardeverhouding
@@ -72,8 +72,15 @@ def build_summary_section(
     woning_label = "nieuwbouwwoning" if is_nieuwbouw else "woning"
     adres_tekst = data.financiering.adres
     has_adres = bool(adres_tekst and adres_tekst.strip(", "))
+    samen = "" if data.alleenstaand else " samen"
 
-    if data.alleenstaand:
+    if fin.is_wijziging:
+        # Wijziging flow: verhoging/oversluiting/uitkoop
+        if has_adres:
+            intro = f"U wilt{samen} een aanvullende hypotheek afsluiten op uw woning aan {adres_tekst}."
+        else:
+            intro = f"U wilt{samen} een aanvullende hypotheek afsluiten."
+    elif data.alleenstaand:
         if has_adres:
             intro = f"U wilt een hypotheek afsluiten voor de aankoop van een {woning_label} aan {adres_tekst}."
         else:

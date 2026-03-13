@@ -17,7 +17,7 @@ def build_risk_relationship_section(
     if data.alleenstaand or not data.partner:
         return None
 
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
 
     # --- Status derivatie ---
     status_result = derive_relationship_status(

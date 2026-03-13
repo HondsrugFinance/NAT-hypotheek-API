@@ -21,7 +21,7 @@ def build_risk_unemployment_section(
     beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de werkloosheid sectie."""
-    hypotheek = data.hypotheek_bedrag
+    hypotheek = data.totale_hypotheekschuld
 
     # --- Ondernemer-detectie per persoon ---
     aanvrager_is_ondernemer = data.aanvrager.inkomen.is_ondernemer
