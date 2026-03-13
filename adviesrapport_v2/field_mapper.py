@@ -143,6 +143,11 @@ class NormalizedPersoon:
     email: str = ""
     inkomen: NormalizedInkomen = field(default_factory=NormalizedInkomen)
     dienstverband: str = "Loondienst"  # Loondienst, Onderneming, ROZ
+    eerder_gehuwd: bool = False
+    datum_echtscheiding: str = ""
+    weduwe_weduwnaar: bool = False
+    flexibel_inkomen_3j: bool = False  # Flexibel inkomen over 3 jaar
+    arbeidsmarktscan_fase: str = ""    # Fase arbeidsmarktscan
 
     @property
     def korte_naam(self) -> str:
@@ -211,6 +216,11 @@ class NormalizedBestaandeWoning:
     erfpacht: bool = False
     erfpachtcanon: float = 0     # Canon per jaar
     energielabel: str = ""
+    eigenaar: str = ""            # "aanvrager", "partner", "gezamenlijk"
+    eigendom_aanvrager: float = 0 # percentage (0-100)
+    eigendom_partner: float = 0   # percentage (0-100)
+    woontoepassing: str = ""      # "hoofdverblijf", "recreatiewoning", etc.
+    huur_per_maand: float = 0
 
 
 @dataclass
@@ -272,6 +282,19 @@ class NormalizedFinanciering:
     extra_posten_aankoop: list = field(default_factory=list)   # [{label, value}]
     extra_posten_kosten: list = field(default_factory=list)    # [{label, value}]
     extra_posten_eigen_middelen: list = field(default_factory=list)  # [{label, value}]
+    # Onderpand detail
+    plannummer: str = ""
+    bouwnummer: str = ""
+    erfpacht_onderpand: bool = False
+    erfpachtcanon_onderpand: float = 0  # Canon per jaar
+    marktwaarde_na_verbouwing: float = 0
+    eigendom_aanvrager: float = 50      # percentage (0-100)
+    eigendom_partner: float = 50        # percentage (0-100)
+    # Wijziging financieringsopzet
+    boeterente: float = 0
+    uitkoop_partner: float = 0
+    afkoop_erfpacht: float = 0
+    oversluiten_leningen: float = 0
 
 
 @dataclass
@@ -730,8 +753,15 @@ def _extract_persoon_from_aanvraag(
     # Inkomen uit array
     inkomen = _extract_inkomen_from_aanvraag(inkomen_items, aow_datum=aow_datum)
 
-    # Dienstverband uit loondienst items
+    # Eerder gehuwd / weduwe (#5, #6)
+    eerder_gehuwd = bool(persoon.get("eerderGehuwd") or persoon.get("eerder_gehuwd"))
+    datum_echtscheiding = str(persoon.get("datumEchtscheiding") or persoon.get("datum_echtscheiding") or "")
+    weduwe_weduwnaar = bool(persoon.get("weduweWeduwnaar") or persoon.get("weduwe") or persoon.get("isWeduweWeduwnaar"))
+
+    # Dienstverband + flexibel inkomen + arbeidsmarktscan uit loondienst items (#23, #24)
     dienstverband = "Loondienst"
+    flexibel_inkomen_3j = False
+    arbeidsmarktscan_fase = ""
     for item in (inkomen_items or []):
         if str(item.get("type", "")).lower() == "loondienst":
             ld_data = item.get("loondienst") or {}
@@ -741,6 +771,20 @@ def _extract_persoon_from_aanvraag(
                 dienstverband = "Onderneming"
             elif "roz" in soort:
                 dienstverband = "ROZ"
+            # Flexibel inkomen (3 jaar) en arbeidsmarktscan
+            flexibel_inkomen_3j = bool(
+                dv_data.get("flexibelInkomen")
+                or dv_data.get("flexibelInkomenDrieJaar")
+                or dv_data.get("isFlexibel")
+                or ld_data.get("flexibelInkomen")
+            )
+            arbeidsmarktscan_fase = str(
+                dv_data.get("arbeidsmarktscanFase")
+                or dv_data.get("arbeidsmarktscan")
+                or ld_data.get("arbeidsmarktscanFase")
+                or item.get("arbeidsmarktscanFase")
+                or ""
+            )
             break
 
     return NormalizedPersoon(
@@ -754,6 +798,11 @@ def _extract_persoon_from_aanvraag(
         email=email,
         inkomen=inkomen,
         dienstverband=dienstverband,
+        eerder_gehuwd=eerder_gehuwd,
+        datum_echtscheiding=datum_echtscheiding,
+        weduwe_weduwnaar=weduwe_weduwnaar,
+        flexibel_inkomen_3j=flexibel_inkomen_3j,
+        arbeidsmarktscan_fase=arbeidsmarktscan_fase,
     )
 
 
@@ -840,6 +889,29 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     # Overbrugging: zoek in leningdelen
     overbrugging = _to_float(fin.get("overbrugging"))
 
+    # Onderpand detail (#66-68, #70)
+    plannummer = str(onderpand.get("plannummer") or onderpand.get("planNummer") or "").strip()
+    bouwnummer = str(onderpand.get("bouwnummer") or onderpand.get("bouwNummer") or "").strip()
+    erfpacht_onderpand = bool(onderpand.get("erfpacht") or onderpand.get("heeftErfpacht"))
+    erfpachtcanon_onderpand = _to_float(
+        onderpand.get("jaarlijkseErfpacht") or onderpand.get("erfpachtcanon")
+        or onderpand.get("canonPerJaar") or onderpand.get("groundLeaseAnnual")
+    )
+    marktwaarde_na_verbouwing = _to_float(
+        onderpand.get("marktwaardeNaVerbouwing") or onderpand.get("marketValueAfterRenovation")
+    )
+    eigendom_aanvrager = _to_float(onderpand.get("eigendomAanvrager") or onderpand.get("eigendomsverhouding_aanvrager") or fin.get("eigendomAanvrager"))
+    eigendom_partner = _to_float(onderpand.get("eigendomPartner") or onderpand.get("eigendomsverhouding_partner") or fin.get("eigendomPartner"))
+    if eigendom_aanvrager == 0 and eigendom_partner == 0:
+        eigendom_aanvrager = 50
+        eigendom_partner = 50
+
+    # Wijziging financieringsopzet (#74-77)
+    boeterente = _to_float(fin.get("boeterente") or fin.get("penaltyInterest"))
+    uitkoop_partner = _to_float(fin.get("uitkoopPartner") or fin.get("uitkoop"))
+    afkoop_erfpacht = _to_float(fin.get("afkoopErfpacht"))
+    oversluiten_leningen = _to_float(fin.get("oversluitenLeningen") or fin.get("aflossenLeningen"))
+
     return NormalizedFinanciering(
         koopsom=koopsom,
         kosten_koper=kosten_koper,
@@ -874,6 +946,17 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         extra_posten_aankoop=extra_posten_aankoop,
         extra_posten_kosten=extra_posten_kosten,
         extra_posten_eigen_middelen=extra_posten_eigen_middelen,
+        plannummer=plannummer,
+        bouwnummer=bouwnummer,
+        erfpacht_onderpand=erfpacht_onderpand,
+        erfpachtcanon_onderpand=erfpachtcanon_onderpand,
+        marktwaarde_na_verbouwing=marktwaarde_na_verbouwing,
+        eigendom_aanvrager=eigendom_aanvrager,
+        eigendom_partner=eigendom_partner,
+        boeterente=boeterente,
+        uitkoop_partner=uitkoop_partner,
+        afkoop_erfpacht=afkoop_erfpacht,
+        oversluiten_leningen=oversluiten_leningen,
     )
 
 
@@ -1167,6 +1250,16 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
         )
         energielabel = str(w.get("energielabel") or "").strip()
 
+        # Eigenaar / eigendomsverhouding / woontoepassing / huur (#37-39, #42)
+        eigenaar = str(w.get("eigenaar") or w.get("eigenaarWoning") or "").strip()
+        eigendom_aanvrager = _to_float(w.get("eigendomAanvrager") or w.get("eigendomsverhouding_aanvrager"))
+        eigendom_partner = _to_float(w.get("eigendomPartner") or w.get("eigendomsverhouding_partner"))
+        woontoepassing = str(w.get("woontoepassing") or w.get("woningToepassing") or "").strip()
+        huur_per_maand = _to_float(
+            w.get("huurPerMaand") or w.get("huurBedrag")
+            or w.get("maandelijkseHuur") or w.get("huur")
+        )
+
         result.append(NormalizedBestaandeWoning(
             adres=adres,
             postcode_plaats=postcode_plaats,
@@ -1177,6 +1270,11 @@ def _extract_woningen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBesta
             erfpacht=erfpacht,
             erfpachtcanon=erfpachtcanon,
             energielabel=energielabel,
+            eigenaar=eigenaar,
+            eigendom_aanvrager=eigendom_aanvrager,
+            eigendom_partner=eigendom_partner,
+            woontoepassing=woontoepassing,
+            huur_per_maand=huur_per_maand,
         ))
 
     logger.info("Bestaande woningen: %d gevonden", len(result))

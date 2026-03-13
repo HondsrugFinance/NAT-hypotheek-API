@@ -69,6 +69,27 @@ def _inkomen_aow_tabel(persoon, aow_jaar: str = "") -> dict:
     }
 
 
+def _persoon_rows(persoon) -> list[dict]:
+    """Bouw persoonsgegevens rijen voor één persoon, inclusief conditionele velden."""
+    rows = [
+        {"label": "Naam", "value": persoon.voorletters_achternaam or persoon.naam},
+        {"label": "Geboortedatum", "value": format_datum(persoon.geboortedatum)},
+        {"label": "Adres", "value": persoon.adres},
+        {"label": "Postcode en plaats", "value": persoon.postcode_plaats},
+        {"label": "Telefoon", "value": persoon.telefoon},
+        {"label": "E-mail", "value": persoon.email},
+    ]
+    # #5: Eerder gehuwd (alleen als Ja)
+    if persoon.eerder_gehuwd:
+        rows.append({"label": "Eerder gehuwd", "value": "Ja"})
+        if persoon.datum_echtscheiding:
+            rows.append({"label": "Datum echtscheiding", "value": format_datum(persoon.datum_echtscheiding)})
+    # #6: Weduwe/weduwnaar (alleen als Ja)
+    if persoon.weduwe_weduwnaar:
+        rows.append({"label": "Weduwe/weduwnaar", "value": "Ja"})
+    return rows
+
+
 def build_current_situation_section(data: NormalizedDossierData) -> dict:
     """Bouw de huidige situatie sectie met subsections."""
     subsections = []
@@ -78,14 +99,7 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         a = data.aanvrager
         subsections.append({
             "subtitle": "Persoonsgegevens",
-            "rows": [
-                {"label": "Naam", "value": a.voorletters_achternaam or a.naam},
-                {"label": "Geboortedatum", "value": format_datum(a.geboortedatum)},
-                {"label": "Adres", "value": a.adres},
-                {"label": "Postcode en plaats", "value": a.postcode_plaats},
-                {"label": "Telefoon", "value": a.telefoon},
-                {"label": "E-mail", "value": a.email},
-            ],
+            "rows": _persoon_rows(a),
         })
     else:
         # Stel: columns layout
@@ -94,28 +108,8 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         subsections.append({
             "subtitle": "Persoonsgegevens",
             "columns": [
-                {
-                    "title": a.naam,
-                    "rows": [
-                        {"label": "Naam", "value": a.voorletters_achternaam or a.naam},
-                        {"label": "Geboortedatum", "value": format_datum(a.geboortedatum)},
-                        {"label": "Adres", "value": a.adres},
-                        {"label": "Postcode en plaats", "value": a.postcode_plaats},
-                        {"label": "Telefoon", "value": a.telefoon},
-                        {"label": "E-mail", "value": a.email},
-                    ],
-                },
-                {
-                    "title": p.naam,
-                    "rows": [
-                        {"label": "Naam", "value": p.voorletters_achternaam or p.naam},
-                        {"label": "Geboortedatum", "value": format_datum(p.geboortedatum)},
-                        {"label": "Adres", "value": p.adres},
-                        {"label": "Postcode en plaats", "value": p.postcode_plaats},
-                        {"label": "Telefoon", "value": p.telefoon},
-                        {"label": "E-mail", "value": p.email},
-                    ],
-                },
+                {"title": a.naam, "rows": _persoon_rows(a)},
+                {"title": p.naam, "rows": _persoon_rows(p)},
             ],
         })
 
@@ -148,19 +142,32 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
                 wg_rows.append({"label": "Dienstverband", "value": wg.dienstverband})
             if wg.datum_in_dienst:
                 wg_rows.append({"label": "In dienst sinds", "value": format_datum(wg.datum_in_dienst)})
+            # #23: Flexibel inkomen (3 jaar)
+            if data.aanvrager.flexibel_inkomen_3j:
+                wg_rows.append({"label": "Flexibel inkomen (3 jaar)", "value": "Ja"})
+            # #24: Arbeidsmarktscan
+            if data.aanvrager.arbeidsmarktscan_fase:
+                wg_rows.append({"label": "Arbeidsmarktscan", "value": data.aanvrager.arbeidsmarktscan_fase})
             subsections.append({"subtitle": "Werkgever", "rows": wg_rows})
         elif not data.alleenstaand:
             cols = []
-            for naam, wg in [
-                (data.aanvrager.naam, data.werkgever_aanvrager),
-                (data.partner.naam if data.partner else "Partner", data.werkgever_partner),
+            for persoon, wg in [
+                (data.aanvrager, data.werkgever_aanvrager),
+                (data.partner if data.partner else None, data.werkgever_partner),
             ]:
+                naam = persoon.naam if persoon else "Partner"
                 if wg:
                     wg_rows = [{"label": "Werkgever", "value": wg.naam}]
                     if wg.dienstverband:
                         wg_rows.append({"label": "Dienstverband", "value": wg.dienstverband})
                     if wg.datum_in_dienst:
                         wg_rows.append({"label": "In dienst sinds", "value": format_datum(wg.datum_in_dienst)})
+                    # #23: Flexibel inkomen (3 jaar)
+                    if persoon and persoon.flexibel_inkomen_3j:
+                        wg_rows.append({"label": "Flexibel inkomen (3 jaar)", "value": "Ja"})
+                    # #24: Arbeidsmarktscan
+                    if persoon and persoon.arbeidsmarktscan_fase:
+                        wg_rows.append({"label": "Arbeidsmarktscan", "value": persoon.arbeidsmarktscan_fase})
                     cols.append({"title": naam, "rows": wg_rows})
                 else:
                     cols.append({"title": naam, "rows": [{"label": "Werkgever", "value": "-"}]})
@@ -209,6 +216,20 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             w_rows.append({"label": "Adres", "value": woning.adres})
         if woning.postcode_plaats:
             w_rows.append({"label": "Postcode en plaats", "value": woning.postcode_plaats})
+        # #37: Eigenaar woning
+        if woning.eigenaar:
+            eigenaar_display = woning.eigenaar.replace("_", " ").capitalize()
+            w_rows.append({"label": "Eigenaar", "value": eigenaar_display})
+        # #38: Eigendomsverhouding (alleen als gezamenlijk en niet 50/50)
+        if (woning.eigenaar.lower() in ("gezamenlijk", "beiden")
+                and woning.eigendom_aanvrager > 0
+                and woning.eigendom_partner > 0
+                and not (woning.eigendom_aanvrager == 50 and woning.eigendom_partner == 50)):
+            w_rows.append({"label": "Eigendomsverhouding",
+                           "value": f"{woning.eigendom_aanvrager:.0f}% / {woning.eigendom_partner:.0f}%"})
+        # #39: Woningtoepassing
+        if woning.woontoepassing:
+            w_rows.append({"label": "Woningtoepassing", "value": woning.woontoepassing.replace("_", " ").capitalize()})
         if woning.marktwaarde > 0:
             w_rows.append({"label": "Marktwaarde", "value": format_bedrag(woning.marktwaarde)})
         if woning.woz_waarde > 0:
@@ -222,6 +243,9 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
                 w_rows.append({"label": "Erfpacht", "value": f"Ja (canon {format_bedrag(woning.erfpachtcanon)} p/j)"})
             else:
                 w_rows.append({"label": "Erfpacht", "value": "Ja"})
+        # #42: Huur per maand
+        if woning.huur_per_maand > 0:
+            w_rows.append({"label": "Huur per maand", "value": format_bedrag(woning.huur_per_maand)})
         if w_rows:
             subsections.append({"subtitle": label, "rows": w_rows})
 
@@ -285,21 +309,35 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
 
     # --- Vermogen ---
     if data.vermogen:
+        # #62: Eigenaar kolom toevoegen als er eigenaar-info beschikbaar is
+        has_eigenaar = any(item.eigenaar for item in data.vermogen)
         v_rows = []
         totaal = 0
         for item in data.vermogen:
             label_parts = [item.type_display]
             if item.maatschappij:
                 label_parts.append(f"({item.maatschappij})")
-            v_rows.append([" ".join(label_parts), format_bedrag(item.saldo)])
+            omschrijving = " ".join(label_parts)
+            if has_eigenaar:
+                eigenaar_display = item.eigenaar.replace("_", " ").capitalize() if item.eigenaar else "-"
+                v_rows.append([omschrijving, eigenaar_display, format_bedrag(item.saldo)])
+            else:
+                v_rows.append([omschrijving, format_bedrag(item.saldo)])
             totaal += item.saldo
+
+        if has_eigenaar:
+            headers = ["Omschrijving", "Eigenaar", "Bedrag"]
+            totals = ["Totaal", "", format_bedrag(totaal)]
+        else:
+            headers = ["Omschrijving", "Bedrag"]
+            totals = ["Totaal", format_bedrag(totaal)]
 
         subsections.append({
             "subtitle": "Vermogen",
             "tables": [{
-                "headers": ["Omschrijving", "Bedrag"],
+                "headers": headers,
                 "rows": v_rows,
-                "totals": ["Totaal", format_bedrag(totaal)],
+                "totals": totals,
             }],
         })
 

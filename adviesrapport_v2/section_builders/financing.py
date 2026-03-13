@@ -20,9 +20,27 @@ def build_financing_section(
         onderpand_rows.append({"label": "Adres", "value": fin.adres})
     onderpand_rows.append({"label": "Type woning", "value": fin.type_woning})
     onderpand_rows.append({"label": "Marktwaarde", "value": format_bedrag(fin.woningwaarde)})
+    # #68: Marktwaarde na verbouwing (alleen als hoger dan gewone marktwaarde)
+    if fin.marktwaarde_na_verbouwing > fin.woningwaarde:
+        onderpand_rows.append({"label": "Marktwaarde na verbouwing", "value": format_bedrag(fin.marktwaarde_na_verbouwing)})
     if fin.woz_waarde > 0:
         onderpand_rows.append({"label": "WOZ-waarde", "value": format_bedrag(fin.woz_waarde)})
     onderpand_rows.append({"label": "Energielabel", "value": fin.energielabel})
+    # #66: Plannummer + bouwnummer (nieuwbouw)
+    if fin.plannummer:
+        onderpand_rows.append({"label": "Plannummer", "value": fin.plannummer})
+    if fin.bouwnummer:
+        onderpand_rows.append({"label": "Bouwnummer", "value": fin.bouwnummer})
+    # #67: Erfpacht details onderpand
+    if fin.erfpacht_onderpand:
+        if fin.erfpachtcanon_onderpand > 0:
+            onderpand_rows.append({"label": "Erfpacht", "value": f"Ja (canon {format_bedrag(fin.erfpachtcanon_onderpand)} p/j)"})
+        else:
+            onderpand_rows.append({"label": "Erfpacht", "value": "Ja"})
+    # #70: Eigendomsverdeling (alleen als niet 50/50)
+    if not (fin.eigendom_aanvrager == 50 and fin.eigendom_partner == 50):
+        onderpand_rows.append({"label": "Eigendomsverdeling",
+                               "value": f"{fin.eigendom_aanvrager:.0f}% / {fin.eigendom_partner:.0f}%"})
     subsections.append({"subtitle": "Onderpand", "rows": onderpand_rows})
 
     # --- Financieringsopzet ---
@@ -86,6 +104,18 @@ def build_financing_section(
         opzet_rows.append({"label": "Bankgarantie", "value": format_bedrag(fin.bankgarantie)})
     if fin.nhg_kosten > 0:
         opzet_rows.append({"label": "NHG-premie", "value": format_bedrag(fin.nhg_kosten)})
+    # #74: Boeterente
+    if fin.boeterente > 0:
+        opzet_rows.append({"label": "Boeterente", "value": format_bedrag(fin.boeterente)})
+    # #75: Uitkoop partner
+    if fin.uitkoop_partner > 0:
+        opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
+    # #76: Afkoop erfpacht
+    if fin.afkoop_erfpacht > 0:
+        opzet_rows.append({"label": "Afkoop erfpacht", "value": format_bedrag(fin.afkoop_erfpacht)})
+    # #77: Oversluiten leningen
+    if fin.oversluiten_leningen > 0:
+        opzet_rows.append({"label": "Oversluiten leningen", "value": format_bedrag(fin.oversluiten_leningen)})
 
     # Extra posten kosten (custom)
     for ep in fin.extra_posten_kosten:
@@ -99,6 +129,8 @@ def build_financing_section(
         + fin.consumptief + fin.meerwerk + fin.bouwrente
         + fin.koopsom_grond + fin.aanneemsom
         + fin.koopsom_kavel + fin.sloop_oude_woning + fin.bouw_woning
+        + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
+        + fin.oversluiten_leningen
         + extra_aankoop_totaal + extra_kosten_totaal
     )
     opzet_rows.append({"label": "Totaal", "value": format_bedrag(totale_investering), "bold": True})
