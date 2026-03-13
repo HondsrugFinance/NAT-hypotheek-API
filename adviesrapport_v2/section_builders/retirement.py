@@ -49,7 +49,7 @@ def build_retirement_section(
     for sc in aow_scenarios:
         _max_hyp = max(sc.get("max_hypotheek_annuitair", 0), sc.get("max_hypotheek_niet_annuitair", 0))
         _schuld = sc.get("restschuld_op_peildatum", hypotheek)
-        if _schuld > _max_hyp > 0:
+        if _schuld > 0 and _schuld > _max_hyp:
             _max_tekort_pensioen = max(_max_tekort_pensioen, _schuld - _max_hyp)
     buffer_dekt_alles = beschikbare_buffer > 0 and _max_tekort_pensioen > 0 and beschikbare_buffer >= _max_tekort_pensioen
     buffer_dekt_deels = beschikbare_buffer > 0 and _max_tekort_pensioen > 0 and not buffer_dekt_alles
@@ -108,6 +108,7 @@ def build_retirement_section(
                 })
             rows.append({"label": "", "value": ""})
             max_hyp = max(
+                0,
                 sc.get("max_hypotheek_annuitair", 0),
                 sc.get("max_hypotheek_niet_annuitair", 0),
             )
@@ -177,6 +178,7 @@ def build_retirement_section(
             })
             col_rows.append({"label": "", "value": ""})
             max_hyp = max(
+                0,
                 sc.get("max_hypotheek_annuitair", 0),
                 sc.get("max_hypotheek_niet_annuitair", 0),
             )

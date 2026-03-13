@@ -483,6 +483,7 @@ def _bereken_max_hypotheek(data: NormalizedDossierData) -> tuple[float, float]:
     toetsrente = debug.get("toets_rente", 0.05)
 
     max_hyp = max(
+        0,
         scenario1["annuitair"]["max_box1"],
         scenario1["niet_annuitair"]["max_box1"],
     )
@@ -517,7 +518,7 @@ def _bereken_max_hypotheek_alleenstaand(inkomen: float, energielabel: str) -> fl
     if not scenario1:
         return 0
 
-    return scenario1["annuitair"]["max_box1"]
+    return max(0, scenario1["annuitair"]["max_box1"])
 
 
 def _bereken_maandlasten(data: NormalizedDossierData) -> tuple[float, float]:
@@ -836,6 +837,7 @@ def _build_pensioen_chart_data(
                 s1 = result.get("scenario1")
                 if s1:
                     max_hyp = max(
+                        0,
                         s1["annuitair"]["max_box1"],
                         s1["niet_annuitair"]["max_box1"],
                     )

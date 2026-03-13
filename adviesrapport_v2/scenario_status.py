@@ -79,7 +79,8 @@ def derive_retirement_status(
         )
         # Vergelijk met restschuld op AOW-moment, niet het originele bedrag
         schuld = sc.get("restschuld_op_peildatum", hypotheek)
-        if schuld > max_hyp > 0:
+        max_hyp = max(0, max_hyp)
+        if schuld > 0 and schuld > max_hyp:
             tekort = schuld - max_hyp
             # Buffer kan tekort opvangen
             if buffer >= tekort:
@@ -96,9 +97,9 @@ def derive_retirement_status(
         if buffer > 0 and aow_scenarios:
             # Check of er überhaupt tekorten WAREN die door buffer gedekt zijn
             any_covered = any(
-                (sc.get("restschuld_op_peildatum", hypotheek) >
-                 max(sc.get("max_hypotheek_annuitair", 0),
-                     sc.get("max_hypotheek_niet_annuitair", 0)) > 0)
+                sc.get("restschuld_op_peildatum", hypotheek) >
+                max(sc.get("max_hypotheek_annuitair", 0),
+                    sc.get("max_hypotheek_niet_annuitair", 0))
                 for sc in aow_scenarios
             )
             if any_covered:
