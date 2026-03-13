@@ -194,6 +194,14 @@ DEATH_TEXT: StandardScenarioText = {
             "Bij deze berekening hebben wij rekening gehouden met een deel "
             "van het beschikbare spaargeld."
         ),
+        "buffer_covers_shortfall": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
+            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+        ),
+        "buffer_partial": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
+            "dit tekort opvangen, maar is niet volledig toereikend."
+        ),
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op de gegevens die bij ons "
@@ -258,6 +266,14 @@ RETIREMENT_TEXT: StandardScenarioText = {
             "Bij deze berekening hebben wij rekening gehouden met inkomen "
             "uit lijfrenteverzekeringen."
         ),
+        "buffer_covers_shortfall": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
+            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+        ),
+        "buffer_partial": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
+            "dit tekort opvangen, maar is niet volledig toereikend."
+        ),
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op de pensioeninformatie en "
@@ -311,6 +327,14 @@ DISABILITY_TEXT: StandardScenarioText = {
             "Bij deze berekening hebben wij rekening gehouden met de bestaande "
             "arbeidsongeschiktheidsverzekering."
         ),
+        "buffer_covers_shortfall": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
+            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+        ),
+        "buffer_partial": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
+            "dit tekort opvangen, maar is niet volledig toereikend."
+        ),
     },
     "disclaimer": (
         "Deze berekening is gebaseerd op een indicatief scenario "
@@ -363,6 +387,14 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
         "woonlastenverzekering_used": (
             "Bij deze berekening hebben wij rekening gehouden met de bestaande "
             "woonlastenverzekering."
+        ),
+        "buffer_covers_shortfall": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
+            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+        ),
+        "buffer_partial": (
+            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
+            "dit tekort opvangen, maar is niet volledig toereikend."
         ),
     },
     "disclaimer": (

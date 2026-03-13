@@ -11,6 +11,7 @@ def build_risk_relationship_section(
     max_hyp_aanvrager_alleen: float,
     max_hyp_partner_alleen: float,
     max_hypotheek_huidig: float,
+    beschikbare_buffer: float = 0,
 ) -> dict | None:
     """Bouw de relatiebeëindiging sectie (alleen bij stel)."""
     if data.alleenstaand or not data.partner:
@@ -23,6 +24,7 @@ def build_risk_relationship_section(
         max_hyp_aanvrager=max_hyp_aanvrager_alleen,
         max_hyp_partner=max_hyp_partner_alleen,
         hypotheek=hypotheek,
+        buffer=beschikbare_buffer,
     )
 
     # --- Narratives (intro) ---

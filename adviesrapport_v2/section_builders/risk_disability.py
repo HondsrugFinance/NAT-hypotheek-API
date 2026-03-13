@@ -19,6 +19,7 @@ def build_risk_disability_section(
     max_hypotheek_huidig: float,
     ao_percentage: float = 50,
     benutting_rvc: float = 50,
+    beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de arbeidsongeschiktheid sectie."""
     hypotheek = data.hypotheek_bedrag
@@ -37,6 +38,7 @@ def build_risk_disability_section(
 
     # --- Per-partner vergelijking ---
     per_partner_shortfall = []
+    shortfall_amounts = []
     partner_names = []
     for persoon_key, scenarios in personen.items():
         naam = data.aanvrager.korte_naam if persoon_key == "aanvrager" else (data.partner.korte_naam if data.partner else "Partner")
@@ -47,17 +49,27 @@ def build_risk_disability_section(
              if "loondoorbetaling" not in sc.get("naam", "").lower()),
             default=0,
         )
+        tekort = max(0, hypotheek - worst_max_hyp)
         per_partner_shortfall.append(worst_max_hyp < hypotheek)
+        shortfall_amounts.append(tekort)
 
     # --- Status derivatie (datagedreven) ---
     status_result = derive_disability_status(
         has_aov=has_aov,
         per_partner_shortfall=per_partner_shortfall,
+        buffer=beschikbare_buffer,
+        shortfall_amounts=shortfall_amounts,
     )
 
     # --- Nuance keys ---
+    max_tekort_ao = max(shortfall_amounts) if shortfall_amounts else 0
+    buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ao > 0 and beschikbare_buffer >= max_tekort_ao
+    buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_ao > 0 and not buffer_dekt_alles
+
     nuance_keys = compact_keys(
         ("aov_used", has_aov),
+        ("buffer_covers_shortfall", buffer_dekt_alles),
+        ("buffer_partial", buffer_dekt_deels),
     )
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---

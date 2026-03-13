@@ -18,6 +18,7 @@ def build_risk_death_section(
     data: NormalizedDossierData,
     overlijden_scenarios: list[dict],
     max_hypotheek_huidig: float,
+    beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de overlijden sectie."""
     hypotheek = data.hypotheek_bedrag
@@ -40,6 +41,7 @@ def build_risk_death_section(
 
     # --- Per-partner vergelijking ---
     partner_results = []  # (naam_overledene, nabestaande_naam, has_shortfall)
+    shortfall_amounts = []
     for sc in overlijden_scenarios:
         max_hyp = sc.get("max_hypotheek_annuitair", 0)
         vta = sc.get("van_toepassing_op", "")
@@ -49,7 +51,9 @@ def build_risk_death_section(
         else:
             naam_overledene = data.partner.korte_naam if data.partner else "Partner"
             naam_nabestaande = data.aanvrager.korte_naam
+        tekort = max(0, hypotheek - max_hyp)
         partner_results.append((naam_overledene, naam_nabestaande, max_hyp < hypotheek))
+        shortfall_amounts.append(tekort)
 
     per_partner_shortfall = [r[2] for r in partner_results]
 
@@ -58,12 +62,20 @@ def build_risk_death_section(
         has_partner=True,
         has_orv=has_orv,
         per_partner_shortfall=per_partner_shortfall,
+        buffer=beschikbare_buffer,
+        shortfall_amounts=shortfall_amounts,
     )
 
     # --- Nuance keys ---
+    max_tekort_dood = max(shortfall_amounts) if shortfall_amounts else 0
+    buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_dood > 0 and beschikbare_buffer >= max_tekort_dood
+    buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_dood > 0 and not buffer_dekt_alles
+
     nuance_keys = compact_keys(
         ("existing_orv", has_orv),
         ("existing_life_insurance", has_life_insurance),
+        ("buffer_covers_shortfall", buffer_dekt_alles),
+        ("buffer_partial", buffer_dekt_deels),
     )
 
     # --- Analysis sentences (alleen bij ongelijke uitkomst) ---

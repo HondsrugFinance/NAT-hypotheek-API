@@ -18,6 +18,7 @@ def build_retirement_section(
     aow_scenarios: list[dict],
     pensioen_chart_data: dict | None,
     max_hypotheek_huidig: float,
+    beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de pensioen sectie."""
     hypotheek = data.hypotheek_bedrag
@@ -26,6 +27,7 @@ def build_retirement_section(
     status_result = derive_retirement_status(
         aow_scenarios=aow_scenarios,
         hypotheek=hypotheek,
+        buffer=beschikbare_buffer,
     )
 
     # --- Nuance keys ---
@@ -41,10 +43,23 @@ def build_retirement_section(
         + (data.partner.inkomen.pensioen if data.partner else 0)
     )
 
+    # --- Buffer nuance ---
+    # Bereken max tekort over alle scenarios
+    _max_tekort_pensioen = 0
+    for sc in aow_scenarios:
+        _max_hyp = max(sc.get("max_hypotheek_annuitair", 0), sc.get("max_hypotheek_niet_annuitair", 0))
+        _schuld = sc.get("restschuld_op_peildatum", hypotheek)
+        if _schuld > _max_hyp > 0:
+            _max_tekort_pensioen = max(_max_tekort_pensioen, _schuld - _max_hyp)
+    buffer_dekt_alles = beschikbare_buffer > 0 and _max_tekort_pensioen > 0 and beschikbare_buffer >= _max_tekort_pensioen
+    buffer_dekt_deels = beschikbare_buffer > 0 and _max_tekort_pensioen > 0 and not buffer_dekt_alles
+
     nuance_keys = compact_keys(
         ("couple_two_aow", has_partner),
         ("income_decrease", pension_income_total < gross_income_total),
         ("annuity_income_used", has_annuity_income),
+        ("buffer_covers_shortfall", buffer_dekt_alles),
+        ("buffer_partial", buffer_dekt_deels),
     )
 
     # --- Render teksten ---

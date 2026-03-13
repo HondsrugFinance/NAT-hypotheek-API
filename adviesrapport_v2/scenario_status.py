@@ -3,6 +3,10 @@
 Bepaalt per scenario de status (affordable/resolved/attention/shortfall)
 en het bijbehorende adviestype.  Logica is overgenomen uit de Lovable
 frontend (src/report/builders.ts).
+
+Buffer-logica: als de klant voldoende beschikbaar vermogen (spaargeld +
+beleggingen - inbreng) heeft om een tekort op te vangen, wordt de status
+'resolved' — vergelijkbaar met een bestaande ORV bij overlijden.
 """
 
 from __future__ import annotations
@@ -16,14 +20,27 @@ def derive_death_status(
     has_orv: bool = False,
     customer_rejected_orv: bool = False,
     per_partner_shortfall: list[bool] | None = None,
+    buffer: float = 0,
+    shortfall_amounts: list[float] | None = None,
 ) -> dict:
-    """Overlijden status-derivatie."""
+    """Overlijden status-derivatie.
+
+    Args:
+        buffer: Beschikbaar vermogen (spaargeld + beleggingen - inbreng)
+        shortfall_amounts: Tekort per partner in EUR (parallel aan per_partner_shortfall)
+    """
     if not has_partner:
         return {"status": "affordable", "advice_type": "no_action"}
 
     # Datagedreven: als geen enkel scenario een tekort oplevert
     if per_partner_shortfall is not None and not any(per_partner_shortfall):
         return {"status": "affordable", "advice_type": "no_action"}
+
+    # Buffer dekt alle tekorten → resolved
+    if buffer > 0 and shortfall_amounts:
+        max_tekort = max((a for a in shortfall_amounts if a > 0), default=0)
+        if max_tekort > 0 and buffer >= max_tekort:
+            return {"status": "resolved", "advice_type": "no_action"}
 
     if has_orv:
         if per_partner_shortfall is not None:
@@ -41,6 +58,7 @@ def derive_retirement_status(
     *,
     aow_scenarios: list[dict],
     hypotheek: float,
+    buffer: float = 0,
 ) -> dict:
     """Pensioen status-derivatie op basis van AOW-scenario's.
 
@@ -48,8 +66,7 @@ def derive_retirement_status(
     met de maximale hypotheek. Bij aflossende hypotheken is de restschuld op
     AOW-leeftijd lager dan het originele bedrag.
 
-    Gebruikt de 5%-drempel: tekort ≤ 5% = limited (attention),
-    tekort > 5% = material (shortfall).
+    buffer: beschikbaar vermogen dat ingezet kan worden om tekort op te vangen.
     """
     if not aow_scenarios:
         return {"status": "affordable", "advice_type": "no_action"}
@@ -64,6 +81,9 @@ def derive_retirement_status(
         schuld = sc.get("restschuld_op_peildatum", hypotheek)
         if schuld > max_hyp > 0:
             tekort = schuld - max_hyp
+            # Buffer kan tekort opvangen
+            if buffer >= tekort:
+                continue  # Dit scenario is gedekt door buffer
             tekort_pct = (tekort / schuld * 100) if schuld > 0 else 0
             shortfalls.append({
                 "tekort": tekort,
@@ -72,6 +92,17 @@ def derive_retirement_status(
             })
 
     if not shortfalls:
+        # Alle tekorten gedekt (door buffer of gewoon geen tekort)
+        if buffer > 0 and aow_scenarios:
+            # Check of er überhaupt tekorten WAREN die door buffer gedekt zijn
+            any_covered = any(
+                (sc.get("restschuld_op_peildatum", hypotheek) >
+                 max(sc.get("max_hypotheek_annuitair", 0),
+                     sc.get("max_hypotheek_niet_annuitair", 0)) > 0)
+                for sc in aow_scenarios
+            )
+            if any_covered:
+                return {"status": "resolved", "advice_type": "no_action"}
         return {"status": "affordable", "advice_type": "no_action"}
 
     all_limited = all(s["severity"] == "limited" for s in shortfalls)
@@ -85,11 +116,24 @@ def derive_disability_status(
     *,
     has_aov: bool = False,
     per_partner_shortfall: list[bool] | None = None,
+    buffer: float = 0,
+    shortfall_amounts: list[float] | None = None,
 ) -> dict:
-    """Arbeidsongeschiktheid status-derivatie."""
+    """Arbeidsongeschiktheid status-derivatie.
+
+    Args:
+        buffer: Beschikbaar vermogen (spaargeld + beleggingen - inbreng)
+        shortfall_amounts: Tekort per partner in EUR
+    """
     # Datagedreven: als geen enkel scenario een tekort oplevert
     if per_partner_shortfall is not None and not any(per_partner_shortfall):
         return {"status": "affordable", "advice_type": "no_action"}
+
+    # Buffer dekt alle tekorten → resolved
+    if buffer > 0 and shortfall_amounts:
+        max_tekort = max((a for a in shortfall_amounts if a > 0), default=0)
+        if max_tekort > 0 and buffer >= max_tekort:
+            return {"status": "resolved", "advice_type": "no_action"}
 
     if has_aov:
         if per_partner_shortfall is not None:
@@ -104,6 +148,8 @@ def derive_unemployment_status(
     *,
     buffer_months: float | None = None,
     per_partner_shortfall: list[bool] | None = None,
+    buffer: float = 0,
+    shortfall_amounts: list[float] | None = None,
 ) -> dict:
     """Werkloosheid status-derivatie op basis van financiële buffer.
 
@@ -113,6 +159,12 @@ def derive_unemployment_status(
     # Datagedreven: als geen enkel scenario een tekort oplevert
     if per_partner_shortfall is not None and not any(per_partner_shortfall):
         return {"status": "affordable", "advice_type": "no_action"}
+
+    # Buffer dekt alle tekorten → resolved
+    if buffer > 0 and shortfall_amounts:
+        max_tekort = max((a for a in shortfall_amounts if a > 0), default=0)
+        if max_tekort > 0 and buffer >= max_tekort:
+            return {"status": "resolved", "advice_type": "no_action"}
 
     if buffer_months is not None and buffer_months >= 6:
         return {"status": "affordable", "advice_type": "no_action"}
@@ -129,13 +181,15 @@ def derive_relationship_status(
     max_hyp_aanvrager: float,
     max_hyp_partner: float,
     hypotheek: float,
+    buffer: float = 0,
 ) -> dict:
     """Relatiebeëindiging status-derivatie.
 
     Returns dict met overall_status + per-persoon status.
+    Buffer kan ingezet worden om tekort per persoon te dekken.
     """
-    aanvrager_ok = max_hyp_aanvrager >= hypotheek
-    partner_ok = max_hyp_partner >= hypotheek
+    aanvrager_ok = (max_hyp_aanvrager + buffer) >= hypotheek
+    partner_ok = (max_hyp_partner + buffer) >= hypotheek
 
     def _person_status(can_afford: bool) -> str:
         if can_afford:

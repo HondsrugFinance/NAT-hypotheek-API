@@ -238,6 +238,7 @@ class NormalizedFinanciering:
     koopsom: float = 0
     kosten_koper: float = 0
     eigen_middelen: float = 0
+    schenking_inbreng: float = 0  # Schenking ingezet voor financiering
     woningwaarde: float = 0
     woz_waarde: float = 0
     energielabel: str = "Geen (geldig) Label"
@@ -359,6 +360,18 @@ class NormalizedDossierData:
     def woonlastenverzekering_ww(self) -> float:
         """Woonlastenverzekering WW bruto jaardekking (alle personen)."""
         return sum(v.dekking_ww for v in self.verzekeringen)
+
+    @property
+    def beschikbare_buffer(self) -> float:
+        """Restant liquide middelen na inbreng financiering.
+
+        Buffer = (spaargeld + beleggingen + schenkingen) - eigen_middelen - schenking_inbreng.
+        Kan ingezet worden om hypotheektekorten in risicoscenario's op te vangen.
+        """
+        liquide_types = {"spaargeld", "belegging", "schenking"}
+        totaal = sum(v.saldo for v in self.vermogen if v.type.lower() in liquide_types)
+        inbreng = self.financiering.eigen_middelen + self.financiering.schenking_inbreng
+        return max(0, totaal - inbreng)
 
 
 # ─── Utility helpers ───
@@ -726,6 +739,7 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
 
     koopsom = _to_float(fin.get("aankoopsomWoning"))
     eigen_geld = _to_float(fin.get("eigenGeld"))
+    schenking_inbreng = _to_float(fin.get("schenkingLening") or fin.get("schenking"))
 
     # Individuele kostenposten
     overdrachtsbelasting = _to_float(fin.get("overdrachtsbelasting"))
@@ -781,6 +795,7 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
         koopsom=koopsom,
         kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
+        schenking_inbreng=schenking_inbreng,
         woningwaarde=woningwaarde,
         woz_waarde=woz_waarde,
         energielabel=energielabel,
@@ -1492,6 +1507,10 @@ def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
         or _get(fin, "eigenGeld", "eigenMiddelen")
         or _get(invoer, "eigenGeld", "eigenMiddelen")
     )
+    schenking_inbreng = _to_float(
+        _get(fin, "schenkingLening", "schenking")
+        or _get(ber, "schenkingLening", "schenking")
+    )
     woningwaarde = _to_float(
         _get(haalb_onderpand, "marktwaarde")
         or _get(ber, "woningwaarde", "marktwaarde")
@@ -1545,6 +1564,7 @@ def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
         koopsom=koopsom,
         kosten_koper=kosten_koper,
         eigen_middelen=eigen_geld,
+        schenking_inbreng=schenking_inbreng,
         woningwaarde=woningwaarde,
         woz_waarde=woz_waarde,
         energielabel=energielabel,

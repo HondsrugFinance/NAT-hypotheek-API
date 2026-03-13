@@ -263,10 +263,15 @@ def generate_report(
             data.partner.inkomen.hoofd_inkomen, data.financiering.energielabel,
         )
 
+    # --- Beschikbare buffer (spaargeld/beleggingen minus inbreng) ---
+    beschikbare_buffer = data.beschikbare_buffer
+    logger.info("Beschikbare buffer: %.0f", beschikbare_buffer)
+
     # --- Stap 7: Scenario checks ---
     scenario_checks = _bepaal_scenario_checks(
         data, max_hypotheek, aow_scenarios, overlijden_scenarios,
         ao_scenarios, ww_scenarios, max_hyp_aanvrager_alleen, max_hyp_partner_alleen,
+        beschikbare_buffer=beschikbare_buffer,
     )
 
     # --- Stap 8: Pensioen chart data ---
@@ -310,6 +315,7 @@ def generate_report(
         aow_scenarios=aow_scenarios,
         pensioen_chart_data=pensioen_chart_data,
         max_hypotheek_huidig=max_hypotheek,
+        beschikbare_buffer=beschikbare_buffer,
     ))
 
     # Overlijden
@@ -317,6 +323,7 @@ def generate_report(
         data=data,
         overlijden_scenarios=overlijden_scenarios,
         max_hypotheek_huidig=max_hypotheek,
+        beschikbare_buffer=beschikbare_buffer,
     ))
 
     # AO
@@ -327,6 +334,7 @@ def generate_report(
             max_hypotheek_huidig=max_hypotheek,
             ao_percentage=options.ao_percentage,
             benutting_rvc=options.benutting_rvc_percentage,
+            beschikbare_buffer=beschikbare_buffer,
         ))
 
     # WW
@@ -336,6 +344,7 @@ def generate_report(
             ww_scenarios=ww_scenarios,
             max_hypotheek_huidig=max_hypotheek,
             buffer_months=None,
+            beschikbare_buffer=beschikbare_buffer,
         ))
 
     # Relatiebeëindiging
@@ -344,6 +353,7 @@ def generate_report(
         max_hyp_aanvrager_alleen=max_hyp_aanvrager_alleen,
         max_hyp_partner_alleen=max_hyp_partner_alleen,
         max_hypotheek_huidig=max_hypotheek,
+        beschikbare_buffer=beschikbare_buffer,
     )
     if relatie_section:
         sections.append(relatie_section)
@@ -587,6 +597,7 @@ def _bepaal_scenario_checks(
     ww_scenarios: list,
     max_hyp_aanvrager_alleen: float,
     max_hyp_partner_alleen: float,
+    beschikbare_buffer: float = 0,
 ) -> list[dict]:
     """Bepaal scenario check statussen voor samenvatting.
 
@@ -619,7 +630,7 @@ def _bepaal_scenario_checks(
         return _check(label, "warning", "aandachtspunt")
 
     # Pensioen
-    ret_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek)
+    ret_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek, buffer=beschikbare_buffer)
     ret_key = ret_status["status"]
     checks.append(_check("Pensionering", _STATUS_CSS_CLASS.get(ret_key, "warning"), ADVICE_RISK_LABELS[ret_key]))
 
@@ -628,39 +639,63 @@ def _bepaal_scenario_checks(
         personen_ov: dict[str, list] = {}
         for sc in overlijden_scenarios:
             personen_ov.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
-        shortfalls = []
+        ov_shortfalls = []
+        ov_shortfall_amounts = []
         for persoon_key in ("aanvrager", "partner"):
             scs = personen_ov.get(persoon_key, [])
             worst = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0) if scs else 0
-            shortfalls.append(worst < hypotheek)
-        checks.append(_pair_check("Overlijden", shortfalls))
+            ov_shortfalls.append(worst < hypotheek)
+            ov_shortfall_amounts.append(max(0, hypotheek - worst))
+        ov_status = derive_death_status(
+            has_partner=True, has_orv=len(orv_list) > 0,
+            per_partner_shortfall=ov_shortfalls,
+            buffer=beschikbare_buffer, shortfall_amounts=ov_shortfall_amounts,
+        )
+        ov_key = ov_status["status"]
+        checks.append(_check("Overlijden", _STATUS_CSS_CLASS.get(ov_key, "warning"), ADVICE_RISK_LABELS[ov_key]))
 
     # AO
     if ao_scenarios:
         personen_ao: dict[str, list] = {}
         for sc in ao_scenarios:
             personen_ao.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
-        shortfalls = []
+        ao_shortfalls = []
+        ao_shortfall_amounts = []
         for persoon_key in ("aanvrager", "partner") if has_partner else ("aanvrager",):
             scs = personen_ao.get(persoon_key, [])
             worst = min(
                 (sc.get("max_hypotheek_annuitair", 0) for sc in scs
                  if "loondoorbetaling" not in sc.get("naam", "").lower()), default=0,
             ) if scs else 0
-            shortfalls.append(worst < hypotheek)
-        checks.append(_pair_check("Arbeidsongeschiktheid", shortfalls))
+            ao_shortfalls.append(worst < hypotheek)
+            ao_shortfall_amounts.append(max(0, hypotheek - worst))
+        ao_status = derive_disability_status(
+            has_aov=len(aov_list) > 0,
+            per_partner_shortfall=ao_shortfalls,
+            buffer=beschikbare_buffer, shortfall_amounts=ao_shortfall_amounts,
+        )
+        ao_key = ao_status["status"]
+        checks.append(_check("Arbeidsongeschiktheid", _STATUS_CSS_CLASS.get(ao_key, "warning"), ADVICE_RISK_LABELS[ao_key]))
 
     # WW
     if ww_scenarios:
         personen_ww: dict[str, list] = {}
         for sc in ww_scenarios:
             personen_ww.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
-        shortfalls = []
+        ww_shortfalls = []
+        ww_shortfall_amounts = []
         for persoon_key in ("aanvrager", "partner") if has_partner else ("aanvrager",):
             scs = personen_ww.get(persoon_key, [])
             worst = min((sc.get("max_hypotheek_annuitair", 0) for sc in scs), default=0) if scs else 0
-            shortfalls.append(worst < hypotheek)
-        checks.append(_pair_check("Werkloosheid", shortfalls))
+            ww_shortfalls.append(worst < hypotheek)
+            ww_shortfall_amounts.append(max(0, hypotheek - worst))
+        ww_status = derive_unemployment_status(
+            buffer_months=None,
+            per_partner_shortfall=ww_shortfalls,
+            buffer=beschikbare_buffer, shortfall_amounts=ww_shortfall_amounts,
+        )
+        ww_key = ww_status["status"]
+        checks.append(_check("Werkloosheid", _STATUS_CSS_CLASS.get(ww_key, "warning"), ADVICE_RISK_LABELS[ww_key]))
 
     # Relatiebeëindiging
     if has_partner:
@@ -668,12 +703,13 @@ def _bepaal_scenario_checks(
             max_hyp_aanvrager=max_hyp_aanvrager_alleen,
             max_hyp_partner=max_hyp_partner_alleen,
             hypotheek=hypotheek,
+            buffer=beschikbare_buffer,
         )
-        shortfalls = [
+        rel_shortfalls = [
             rel_status["applicant_status"] != "affordable",
             rel_status["partner_status"] != "affordable",
         ]
-        checks.append(_pair_check("Relatiebeëindiging", shortfalls))
+        checks.append(_pair_check("Relatiebeëindiging", rel_shortfalls))
 
     return checks
 

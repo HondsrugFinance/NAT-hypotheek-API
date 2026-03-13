@@ -8,6 +8,7 @@ from adviesrapport_v2.scenario_status import derive_unemployment_status
 from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 from adviesrapport_v2.texts import (
     UNEMPLOYMENT_TEXT,
+    compact_keys,
     render_standard_scenario,
 )
 
@@ -17,6 +18,7 @@ def build_risk_unemployment_section(
     ww_scenarios: list[dict],
     max_hypotheek_huidig: float,
     buffer_months: float | None = None,
+    beschikbare_buffer: float = 0,
 ) -> dict:
     """Bouw de werkloosheid sectie."""
     hypotheek = data.hypotheek_bedrag
@@ -45,6 +47,7 @@ def build_risk_unemployment_section(
 
     # --- Per-partner vergelijking ---
     per_partner_shortfall = []
+    shortfall_amounts = []
     partner_names = []
     per_partner_is_ondernemer = []
     for persoon_key, scenarios in personen.items():
@@ -57,16 +60,27 @@ def build_risk_unemployment_section(
             (sc.get("max_hypotheek_annuitair", 0) for sc in scenarios),
             default=0,
         )
+        tekort = max(0, hypotheek - worst_max_hyp)
         per_partner_shortfall.append(worst_max_hyp < hypotheek)
+        shortfall_amounts.append(tekort)
 
     # --- Status derivatie (datagedreven) ---
     status_result = derive_unemployment_status(
         buffer_months=buffer_months,
         per_partner_shortfall=per_partner_shortfall,
+        buffer=beschikbare_buffer,
+        shortfall_amounts=shortfall_amounts,
     )
 
     # --- Nuance keys ---
-    nuance_keys: list[str] = []
+    max_tekort_ww = max(shortfall_amounts) if shortfall_amounts else 0
+    buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ww > 0 and beschikbare_buffer >= max_tekort_ww
+    buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_ww > 0 and not buffer_dekt_alles
+
+    nuance_keys = compact_keys(
+        ("buffer_covers_shortfall", buffer_dekt_alles),
+        ("buffer_partial", buffer_dekt_deels),
+    )
 
     # --- Analysis sentences ---
     # Bij mixed inkomenstype (ondernemer + loondienst) altijd per-persoon zinnen
