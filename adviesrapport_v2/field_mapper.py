@@ -994,6 +994,142 @@ def _extract_financiering_from_aanvraag(aanvraag_data: dict) -> NormalizedFinanc
     )
 
 
+def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinanciering:
+    """Extraheer financiering uit aanvraag.data.wijzigingFinancieringsopzet + onderpand.
+
+    Wijziging-flows (verhogen, oversluiten, uitkopen) gebruiken een andere
+    data-structuur dan aankoop-flows.
+    """
+    wf = aanvraag_data.get("wijzigingFinancieringsopzet") or {}
+    onderpand = aanvraag_data.get("onderpand") or {}
+    samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
+
+    # Investering posten
+    huidige_hypotheek = _to_float(wf.get("huidigeHypotheek"))
+    verbouwing = _to_float(wf.get("verbouwing"))
+    ebv = _to_float(wf.get("ebv"))
+    ebb = _to_float(wf.get("ebb"))
+    ebv_ebb = ebv + ebb
+    afkoop_erfpacht = _to_float(wf.get("afkoopErfpacht"))
+    oversluiten_leningen = _to_float(wf.get("oversluitenLeningen"))
+    consumptief = _to_float(wf.get("consumptief"))
+    uitkoop_partner = _to_float(wf.get("uitkoopPartner"))
+    boeterente = _to_float(wf.get("boeterente"))
+
+    # Kosten
+    advies_bemiddeling = _to_float(wf.get("adviesBemiddeling"))
+    hypotheekakte = _to_float(wf.get("hypotheekakte"))
+    taxatiekosten = _to_float(wf.get("taxatiekosten"))
+    nhg_kosten = _to_float(wf.get("nhgKosten"))
+
+    extra_posten_aankoop = _extract_extra_posten(wf.get("extraPostenInvestering"))
+    extra_posten_kosten = _extract_extra_posten(wf.get("extraPostenKosten"))
+    extra_posten_eigen_middelen = _extract_extra_posten(wf.get("extraPostenEigenMiddelen"))
+
+    notariskosten = hypotheekakte  # geen transportakte bij wijziging
+    kosten_koper = (
+        advies_bemiddeling + notariskosten + taxatiekosten + nhg_kosten
+        + sum(ep["value"] for ep in extra_posten_kosten)
+    )
+
+    eigen_geld = _to_float(wf.get("eigenGeld"))
+
+    # Onderpand (zelfde structuur als aankoop)
+    woningwaarde = _to_float(onderpand.get("marktwaarde"))
+    woz_waarde = _to_float(wf.get("wozWaarde") or onderpand.get("wozWaarde") or onderpand.get("woz_waarde"))
+    energielabel = str(onderpand.get("energielabel") or "Geen (geldig) Label")
+
+    # Type woning — bij wijziging is het altijd bestaande bouw
+    type_woning = "Bestaande bouw"
+
+    # Adres uit onderpand
+    straat = str(onderpand.get("straat") or "").strip()
+    huisnr = str(onderpand.get("huisnummer") or "").strip()
+    toevoeging = str(onderpand.get("toevoeging") or onderpand.get("huisnummerToevoeging") or "").strip()
+    postcode = str(onderpand.get("postcode") or "").strip()
+    woonplaats = str(onderpand.get("woonplaats") or "").strip()
+    straat_deel = f"{straat} {huisnr}".strip()
+    if toevoeging:
+        straat_deel = f"{straat_deel}{toevoeging}"
+    postcode_deel = f"{postcode} {woonplaats}".strip()
+    adres = f"{straat_deel}, {postcode_deel}".strip(", ")
+
+    # Hypotheekverstrekker + NHG
+    hypotheekverstrekker = str(samenstellen.get("geldverstrekker") or "")
+    nhg = bool(samenstellen.get("nhg", True))
+
+    # Onderpand detail
+    plannummer = str(onderpand.get("plannummerProject") or onderpand.get("plannummer") or "").strip()
+    bouwnummer = str(onderpand.get("bouwnummerOnderpand") or onderpand.get("bouwnummer") or "").strip()
+    erfpacht_onderpand = bool(onderpand.get("erfpacht") or onderpand.get("heeftErfpacht"))
+    erfpachtcanon_onderpand = _to_float(
+        onderpand.get("jaarlijkseErfpacht") or onderpand.get("erfpachtcanon") or onderpand.get("canonPerJaar")
+    )
+    marktwaarde_na_verbouwing = _to_float(onderpand.get("marktwaardeNaVerbouwing"))
+    eigendom_aanvrager = _to_float(onderpand.get("eigendomAandeelAanvrager") or onderpand.get("eigendomAanvrager") or wf.get("eigendomAanvrager"))
+    eigendom_partner = _to_float(onderpand.get("eigendomAandeelPartner") or onderpand.get("eigendomPartner") or wf.get("eigendomPartner"))
+    if eigendom_aanvrager == 0 and eigendom_partner == 0:
+        eigendom_aanvrager = 50
+        eigendom_partner = 50
+
+    # Overbrugging: zoek in leningdelen
+    overbrugging = _to_float(wf.get("overbrugging"))
+
+    logger.debug(
+        "Financiering (wijziging): huidige_hyp=%.0f, verbouwing=%.0f, kosten=%.0f, "
+        "eigen_geld=%.0f, adres=%s, verstrekker=%s",
+        huidige_hypotheek, verbouwing, kosten_koper, eigen_geld,
+        adres or "(leeg)", hypotheekverstrekker,
+    )
+
+    return NormalizedFinanciering(
+        koopsom=huidige_hypotheek,  # bij wijziging fungeert huidigeHypotheek als "koopsom"
+        kosten_koper=kosten_koper,
+        eigen_middelen=eigen_geld,
+        schenking_inbreng=0,   # niet beschikbaar bij wijziging
+        overwaarde=0,          # niet beschikbaar bij wijziging
+        woningwaarde=woningwaarde,
+        woz_waarde=woz_waarde,
+        energielabel=energielabel,
+        type_woning=type_woning,
+        adres=adres,
+        nhg=nhg,
+        hypotheekverstrekker=hypotheekverstrekker,
+        overdrachtsbelasting=0,
+        notariskosten=notariskosten,
+        taxatiekosten=taxatiekosten,
+        advies_bemiddeling=advies_bemiddeling,
+        nhg_kosten=nhg_kosten,
+        bankgarantie=0,
+        verbouwing=verbouwing,
+        ebv_ebb=ebv_ebb,
+        overbrugging=overbrugging,
+        aankoopmakelaar=0,
+        consumptief=consumptief,
+        koopsom_grond=0,
+        aanneemsom=0,
+        meerwerk=0,
+        bouwrente=0,
+        koopsom_kavel=0,
+        sloop_oude_woning=0,
+        bouw_woning=0,
+        extra_posten_aankoop=extra_posten_aankoop,
+        extra_posten_kosten=extra_posten_kosten,
+        extra_posten_eigen_middelen=extra_posten_eigen_middelen,
+        plannummer=plannummer,
+        bouwnummer=bouwnummer,
+        erfpacht_onderpand=erfpacht_onderpand,
+        erfpachtcanon_onderpand=erfpachtcanon_onderpand,
+        marktwaarde_na_verbouwing=marktwaarde_na_verbouwing,
+        eigendom_aanvrager=eigendom_aanvrager,
+        eigendom_partner=eigendom_partner,
+        boeterente=boeterente,
+        uitkoop_partner=uitkoop_partner,
+        afkoop_erfpacht=afkoop_erfpacht,
+        oversluiten_leningen=oversluiten_leningen,
+    )
+
+
 def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLeningdeel]:
     """Extraheer leningdelen uit aanvraag.data.samenstellenHypotheek.
 
@@ -1877,6 +2013,8 @@ def extract_dossier_data(
     # ── Financiering ──
     if has_aanvraag and aanvraag_data.get("financieringsopzet"):
         financiering = _extract_financiering_from_aanvraag(aanvraag_data)
+    elif has_aanvraag and aanvraag_data.get("wijzigingFinancieringsopzet"):
+        financiering = _extract_financiering_from_wijziging(aanvraag_data)
     else:
         financiering = _extract_financiering_from_dossier(invoer)
 
