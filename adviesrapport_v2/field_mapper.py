@@ -1386,14 +1386,22 @@ def _extract_verplichtingen_details_from_aanvraag(aanvraag_data: dict) -> list[d
         )
         omschrijving = str(
             item.get("omschrijving") or item.get("naam")
-            or item.get("maatschappij") or ""
+            or item.get("maatschappij") or item.get("verstrekker") or ""
         ).strip()
+        # Aparte maatschappij: als omschrijving leeg is maar maatschappij gevuld
+        maatschappij = str(
+            item.get("maatschappij") or item.get("verstrekker") or ""
+        ).strip()
+        # Als omschrijving ontbreekt maar maatschappij bestaat, gebruik die
+        if not omschrijving and maatschappij:
+            omschrijving = maatschappij
 
         result.append({
             "type": TYPE_DISPLAY.get(vtype, vtype.replace("_", " ").capitalize()),
             "maandbedrag": maandbedrag,
             "saldo": saldo,
             "omschrijving": omschrijving,
+            "maatschappij": maatschappij,
         })
 
     return result

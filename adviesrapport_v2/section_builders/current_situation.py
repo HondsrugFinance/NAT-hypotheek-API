@@ -69,6 +69,20 @@ def _inkomen_aow_tabel(persoon, aow_jaar: str = "") -> dict:
     }
 
 
+def _resolve_eigenaar(eigenaar: str, data: "NormalizedDossierData") -> str:
+    """Map eigenaar-waarde naar echte naam (voornaam achternaam)."""
+    if not eigenaar:
+        return "-"
+    lower = eigenaar.lower().strip()
+    if lower == "aanvrager":
+        return data.aanvrager.naam or "Aanvrager"
+    if lower == "partner" and data.partner:
+        return data.partner.naam or "Partner"
+    if lower in ("gezamenlijk", "beiden"):
+        return "Gezamenlijk"
+    return eigenaar.replace("_", " ").capitalize()
+
+
 def _persoon_rows(persoon) -> list[dict]:
     """Bouw persoonsgegevens rijen voor één persoon, inclusief conditionele velden."""
     rows = [
@@ -218,8 +232,7 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             w_rows.append({"label": "Postcode en plaats", "value": woning.postcode_plaats})
         # #37: Eigenaar woning
         if woning.eigenaar:
-            eigenaar_display = woning.eigenaar.replace("_", " ").capitalize()
-            w_rows.append({"label": "Eigenaar", "value": eigenaar_display})
+            w_rows.append({"label": "Eigenaar", "value": _resolve_eigenaar(woning.eigenaar, data)})
         # #38: Eigendomsverhouding (alleen als gezamenlijk en niet 50/50)
         if (woning.eigenaar.lower() in ("gezamenlijk", "beiden")
                 and woning.eigendom_aanvrager > 0
@@ -319,8 +332,7 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
                 label_parts.append(f"({item.maatschappij})")
             omschrijving = " ".join(label_parts)
             if has_eigenaar:
-                eigenaar_display = item.eigenaar.replace("_", " ").capitalize() if item.eigenaar else "-"
-                v_rows.append([omschrijving, eigenaar_display, format_bedrag(item.saldo)])
+                v_rows.append([omschrijving, _resolve_eigenaar(item.eigenaar, data), format_bedrag(item.saldo)])
             else:
                 v_rows.append([omschrijving, format_bedrag(item.saldo)])
             totaal += item.saldo
@@ -346,8 +358,14 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         v_rows = []
         for vpl in data.verplichtingen_details:
             omschr = vpl["type"]
-            if vpl.get("omschrijving"):
-                omschr = f"{vpl['type']} ({vpl['omschrijving']})"
+            detail = vpl.get("omschrijving") or ""
+            if detail:
+                # Verwijder geneste haakjes: "DUO (Studieschuld)" → "DUO - Studieschuld"
+                clean = detail.replace("(", "- ").replace(")", "").strip().rstrip("- ").strip()
+                omschr = f"{vpl['type']} ({clean})"
+            elif vpl.get("maatschappij"):
+                # Fallback: gebruik maatschappij als omschrijving ontbreekt
+                omschr = f"{vpl['type']} ({vpl['maatschappij']})"
             maandbedrag = format_bedrag(vpl["maandbedrag"]) + " p/m" if vpl["maandbedrag"] > 0 else "-"
             saldo = format_bedrag(vpl["saldo"]) if vpl["saldo"] > 0 else "-"
             v_rows.append([omschr, saldo, maandbedrag])
