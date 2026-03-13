@@ -132,6 +132,8 @@ async def debug_dossier_data(
             "raw_scenario1_keys": list(scenario1.keys()) if isinstance(scenario1, dict) else str(type(scenario1)),
             "raw_scenario1": scenario1,
             "raw_aanvraag_keys": list((aanvraag.get("data") or {}).keys()) if isinstance(aanvraag, dict) else [],
+            "raw_onderpand": (aanvraag.get("data") or {}).get("onderpand"),
+            "raw_financieringsopzet": (aanvraag.get("data") or {}).get("financieringsopzet"),
             "raw_voorzieningen": (aanvraag.get("data") or {}).get("voorzieningen"),
             "raw_hypotheken": (aanvraag.get("data") or {}).get("hypotheken"),
             "normalized": {
