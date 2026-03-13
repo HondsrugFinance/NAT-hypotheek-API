@@ -107,6 +107,14 @@ def lookup_woonquote(toets_inkomen: float, toets_rente: float, ontvangt_aow: str
 
     return rate_value
 
+ENERGIELABEL_MAP = {
+    "geen_label": "Geen (geldig) Label",
+    "E": "E,F,G", "F": "E,F,G", "G": "E,F,G",
+    "C": "C,D", "D": "C,D",
+    "A": "A,B", "B": "A,B",
+    "A+": "A+,A++", "A++": "A+,A++",
+}
+
 def calculate_energielabel_bonus(energielabel: Optional[str], verduurzamings_maatregelen: float) -> float:
     """
     Calculate C33:C50 sum - Excel energielabel bonuses
@@ -115,6 +123,9 @@ def calculate_energielabel_bonus(energielabel: Optional[str], verduurzamings_maa
     """
     if energielabel is None:
         energielabel = ""
+
+    # Map individuele labels (frontend) naar gegroepeerde config keys
+    energielabel = ENERGIELABEL_MAP.get(energielabel, energielabel)
 
     base_bonus = ENERGIELABEL_CONFIG["base_bonus"].get(energielabel, 0)
     cap = ENERGIELABEL_CONFIG["verduurzaming_cap"].get(energielabel, 0)
