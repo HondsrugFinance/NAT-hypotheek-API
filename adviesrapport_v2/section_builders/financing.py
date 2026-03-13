@@ -65,6 +65,8 @@ def build_financing_section(
     # Eigen middelen (aftrekpost)
     if fin.eigen_middelen > 0:
         opzet_rows.append({"label": "Af: Eigen geld", "value": f"-/{format_bedrag(fin.eigen_middelen)}"})
+    if fin.schenking_inbreng > 0:
+        opzet_rows.append({"label": "Af: Schenking", "value": f"-/{format_bedrag(fin.schenking_inbreng)}"})
 
     opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
     subsections.append({"subtitle": "Financieringsopzet", "rows": opzet_rows})
