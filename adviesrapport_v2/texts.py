@@ -195,12 +195,12 @@ DEATH_TEXT: StandardScenarioText = {
             "van het beschikbare spaargeld."
         ),
         "buffer_covers_shortfall": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
-            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+            "De beschikbare eigen middelen zijn voldoende om dit tekort op te "
+            "vangen door extra af te lossen op de hypotheek."
         ),
         "buffer_partial": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
-            "dit tekort opvangen, maar is niet volledig toereikend."
+            "De beschikbare eigen middelen kunnen een deel van dit tekort "
+            "opvangen, maar zijn niet volledig toereikend."
         ),
     },
     "disclaimer": (
@@ -267,12 +267,12 @@ RETIREMENT_TEXT: StandardScenarioText = {
             "uit lijfrenteverzekeringen."
         ),
         "buffer_covers_shortfall": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
-            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+            "De beschikbare eigen middelen zijn voldoende om dit tekort op te "
+            "vangen door extra af te lossen op de hypotheek."
         ),
         "buffer_partial": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
-            "dit tekort opvangen, maar is niet volledig toereikend."
+            "De beschikbare eigen middelen kunnen een deel van dit tekort "
+            "opvangen, maar zijn niet volledig toereikend."
         ),
     },
     "disclaimer": (
@@ -328,12 +328,12 @@ DISABILITY_TEXT: StandardScenarioText = {
             "arbeidsongeschiktheidsverzekering."
         ),
         "buffer_covers_shortfall": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
-            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+            "De beschikbare eigen middelen zijn voldoende om dit tekort op te "
+            "vangen door extra af te lossen op de hypotheek."
         ),
         "buffer_partial": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
-            "dit tekort opvangen, maar is niet volledig toereikend."
+            "De beschikbare eigen middelen kunnen een deel van dit tekort "
+            "opvangen, maar zijn niet volledig toereikend."
         ),
     },
     "disclaimer": (
@@ -389,12 +389,12 @@ UNEMPLOYMENT_TEXT: StandardScenarioText = {
             "woonlastenverzekering."
         ),
         "buffer_covers_shortfall": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen is voldoende om "
-            "dit tekort op te vangen door extra af te lossen op de hypotheek."
+            "De beschikbare eigen middelen zijn voldoende om dit tekort op te "
+            "vangen door extra af te lossen op de hypotheek."
         ),
         "buffer_partial": (
-            "Het beschikbare spaargeld en/of beleggingsvermogen kan een deel van "
-            "dit tekort opvangen, maar is niet volledig toereikend."
+            "De beschikbare eigen middelen kunnen een deel van dit tekort "
+            "opvangen, maar zijn niet volledig toereikend."
         ),
     },
     "disclaimer": (

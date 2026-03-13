@@ -66,6 +66,32 @@ def build_risk_death_section(
         shortfall_amounts=shortfall_amounts,
     )
 
+    # --- Analysis sentences (alleen bij ongelijke uitkomst) ---
+    analysis_sentences = None
+    buffer_used_inline = False
+    has_mixed_outcomes = len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
+    if has_mixed_outcomes:
+        advice_key = "consider_solution_existing" if has_orv else "consider_solution"
+        analysis_sentences = []
+        for i, (naam_overledene, naam_nabestaande, has_shortfall) in enumerate(partner_results):
+            if has_shortfall:
+                analysis_sentences.append(
+                    f"Bij overlijden van {naam_overledene} ontstaat er op basis van deze berekening "
+                    f"een financieel tekort voor {naam_nabestaande}."
+                )
+                # Buffer dekt dit tekort → buffer-tekst vervangt verzekeringsadvies
+                if shortfall_amounts[i] > 0 and beschikbare_buffer >= shortfall_amounts[i]:
+                    analysis_sentences.append(DEATH_TEXT["nuance"]["buffer_covers_shortfall"])
+                    buffer_used_inline = True
+                else:
+                    analysis_sentences.append(DEATH_TEXT["advice"][advice_key])
+            else:
+                analysis_sentences.append(
+                    f"Bij overlijden van {naam_overledene} blijft de hypotheek "
+                    f"op basis van deze berekening betaalbaar."
+                )
+                analysis_sentences.append(DEATH_TEXT["advice"]["no_action"])
+
     # --- Nuance keys ---
     max_tekort_dood = max(shortfall_amounts) if shortfall_amounts else 0
     buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_dood > 0 and beschikbare_buffer >= max_tekort_dood
@@ -74,29 +100,9 @@ def build_risk_death_section(
     nuance_keys = compact_keys(
         ("existing_orv", has_orv),
         ("existing_life_insurance", has_life_insurance),
-        ("buffer_covers_shortfall", buffer_dekt_alles),
-        ("buffer_partial", buffer_dekt_deels),
+        ("buffer_covers_shortfall", buffer_dekt_alles and not buffer_used_inline),
+        ("buffer_partial", buffer_dekt_deels and not buffer_used_inline),
     )
-
-    # --- Analysis sentences (alleen bij ongelijke uitkomst) ---
-    analysis_sentences = None
-    has_mixed_outcomes = len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
-    if has_mixed_outcomes:
-        advice_key = "consider_solution_existing" if has_orv else "consider_solution"
-        analysis_sentences = []
-        for naam_overledene, naam_nabestaande, has_shortfall in partner_results:
-            if has_shortfall:
-                analysis_sentences.append(
-                    f"Bij overlijden van {naam_overledene} ontstaat er op basis van deze berekening "
-                    f"een financieel tekort voor {naam_nabestaande}."
-                )
-                analysis_sentences.append(DEATH_TEXT["advice"][advice_key])
-            else:
-                analysis_sentences.append(
-                    f"Bij overlijden van {naam_overledene} blijft de hypotheek "
-                    f"op basis van deze berekening betaalbaar."
-                )
-                analysis_sentences.append(DEATH_TEXT["advice"]["no_action"])
 
     # --- Render teksten ---
     all_paragraphs = render_standard_scenario(

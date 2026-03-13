@@ -72,16 +72,6 @@ def build_risk_unemployment_section(
         shortfall_amounts=shortfall_amounts,
     )
 
-    # --- Nuance keys ---
-    max_tekort_ww = max(shortfall_amounts) if shortfall_amounts else 0
-    buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ww > 0 and beschikbare_buffer >= max_tekort_ww
-    buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_ww > 0 and not buffer_dekt_alles
-
-    nuance_keys = compact_keys(
-        ("buffer_covers_shortfall", buffer_dekt_alles),
-        ("buffer_partial", buffer_dekt_deels),
-    )
-
     # --- Analysis sentences ---
     # Bij mixed inkomenstype (ondernemer + loondienst) altijd per-persoon zinnen
     has_mixed_income_type = (
@@ -97,17 +87,22 @@ def build_risk_unemployment_section(
     force_per_person = has_mixed_outcomes or has_mixed_income_type
 
     analysis_sentences = None
+    buffer_used_inline = False
     if force_per_person:
         analysis_sentences = []
-        for naam, has_shortfall, is_ond in zip(
+        for i, (naam, has_shortfall, is_ond) in enumerate(zip(
             partner_names, per_partner_shortfall, per_partner_is_ondernemer
-        ):
+        )):
             if has_shortfall:
                 analysis_sentences.append(
                     f"Bij werkloosheid van {naam} ontstaat er op basis van deze berekening "
                     f"een financieel tekort."
                 )
-                if is_ond:
+                # Buffer dekt dit tekort → buffer-tekst vervangt advies
+                if shortfall_amounts[i] > 0 and beschikbare_buffer >= shortfall_amounts[i]:
+                    analysis_sentences.append(UNEMPLOYMENT_TEXT["nuance"]["buffer_covers_shortfall"])
+                    buffer_used_inline = True
+                elif is_ond:
                     analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["no_provisions_entrepreneur"])
                 else:
                     analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["consider_solution"])
@@ -117,6 +112,16 @@ def build_risk_unemployment_section(
                     f"op basis van deze berekening betaalbaar."
                 )
                 analysis_sentences.append(UNEMPLOYMENT_TEXT["advice"]["no_action"])
+
+    # --- Nuance keys ---
+    max_tekort_ww = max(shortfall_amounts) if shortfall_amounts else 0
+    buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ww > 0 and beschikbare_buffer >= max_tekort_ww
+    buffer_dekt_deels = beschikbare_buffer > 0 and max_tekort_ww > 0 and not buffer_dekt_alles
+
+    nuance_keys = compact_keys(
+        ("buffer_covers_shortfall", buffer_dekt_alles and not buffer_used_inline),
+        ("buffer_partial", buffer_dekt_deels and not buffer_used_inline),
+    )
 
     # --- Render teksten ---
     # Bij alle ondernemers met tekort: gebruik ondernemer-advies i.p.v. standaard

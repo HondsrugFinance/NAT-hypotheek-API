@@ -61,6 +61,31 @@ def build_risk_disability_section(
         shortfall_amounts=shortfall_amounts,
     )
 
+    # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
+    analysis_sentences = None
+    buffer_used_inline = False
+    has_mixed_outcomes = not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
+    if has_mixed_outcomes:
+        advice_key = "refer_to_specialist_existing" if has_aov else "refer_to_specialist"
+        analysis_sentences = []
+        for i, (naam, has_shortfall) in enumerate(zip(partner_names, per_partner_shortfall)):
+            if has_shortfall:
+                analysis_sentences.append(
+                    f"Bij arbeidsongeschiktheid van {naam} ontstaat er op basis van deze berekening "
+                    f"een financieel tekort."
+                )
+                if shortfall_amounts[i] > 0 and beschikbare_buffer >= shortfall_amounts[i]:
+                    analysis_sentences.append(DISABILITY_TEXT["nuance"]["buffer_covers_shortfall"])
+                    buffer_used_inline = True
+                else:
+                    analysis_sentences.append(DISABILITY_TEXT["advice"][advice_key])
+            else:
+                analysis_sentences.append(
+                    f"Bij arbeidsongeschiktheid van {naam} blijft de hypotheek "
+                    f"op basis van deze berekening betaalbaar."
+                )
+                analysis_sentences.append(DISABILITY_TEXT["advice"]["no_action"])
+
     # --- Nuance keys ---
     max_tekort_ao = max(shortfall_amounts) if shortfall_amounts else 0
     buffer_dekt_alles = beschikbare_buffer > 0 and max_tekort_ao > 0 and beschikbare_buffer >= max_tekort_ao
@@ -68,29 +93,9 @@ def build_risk_disability_section(
 
     nuance_keys = compact_keys(
         ("aov_used", has_aov),
-        ("buffer_covers_shortfall", buffer_dekt_alles),
-        ("buffer_partial", buffer_dekt_deels),
+        ("buffer_covers_shortfall", buffer_dekt_alles and not buffer_used_inline),
+        ("buffer_partial", buffer_dekt_deels and not buffer_used_inline),
     )
-
-    # --- Analysis sentences (alleen bij ongelijke uitkomst bij stel) ---
-    analysis_sentences = None
-    has_mixed_outcomes = not data.alleenstaand and len(per_partner_shortfall) == 2 and per_partner_shortfall[0] != per_partner_shortfall[1]
-    if has_mixed_outcomes:
-        advice_key = "refer_to_specialist_existing" if has_aov else "refer_to_specialist"
-        analysis_sentences = []
-        for naam, has_shortfall in zip(partner_names, per_partner_shortfall):
-            if has_shortfall:
-                analysis_sentences.append(
-                    f"Bij arbeidsongeschiktheid van {naam} ontstaat er op basis van deze berekening "
-                    f"een financieel tekort."
-                )
-                analysis_sentences.append(DISABILITY_TEXT["advice"][advice_key])
-            else:
-                analysis_sentences.append(
-                    f"Bij arbeidsongeschiktheid van {naam} blijft de hypotheek "
-                    f"op basis van deze berekening betaalbaar."
-                )
-                analysis_sentences.append(DISABILITY_TEXT["advice"]["no_action"])
 
     # --- Render teksten ---
     all_paragraphs = render_standard_scenario(

@@ -496,21 +496,14 @@ def _get_einddatum(item: dict) -> date | None:
     return None
 
 
-def _eindigt_voor_aow(item: dict, aow_datum: date | None) -> bool:
-    """Check of een inkomen-item eindigt vóór de AOW-datum.
+def _heeft_einddatum(item: dict) -> bool:
+    """Check of een inkomen-item een einddatum heeft.
 
-    Regels:
-    - Geen einddatum → doorlopend → False (telt mee na AOW)
-    - Einddatum na of op AOW-datum → loopt nog door bij AOW → False
-    - Einddatum vóór AOW-datum → stopt vóór AOW → True (tijdelijk)
-    - Geen AOW-datum beschikbaar → fallback: einddatum aanwezig = tijdelijk
+    Inkomen met einddatum is per definitie tijdelijk en telt niet mee
+    als permanent pensioeninkomen, ongeacht of de einddatum vóór of na
+    de AOW-datum valt.
     """
-    einddatum = _get_einddatum(item)
-    if not einddatum:
-        return False
-    if not aow_datum:
-        return True  # Geen AOW-datum → voorzichtig: als er einddatum is, beschouw als tijdelijk
-    return einddatum < aow_datum
+    return _get_einddatum(item) is not None
 
 
 def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -> NormalizedInkomen:
@@ -603,7 +596,7 @@ def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -
             if not bedrag:
                 vd = item.get("vermogenData") or {}
                 bedrag = _to_float(vd.get("bedrag") or vd.get("jaarlijksBrutoInkomen"))
-            if _eindigt_voor_aow(item, aow_datum):
+            if _heeft_einddatum(item):
                 overig_tijdelijk += bedrag
             else:
                 overig += bedrag
@@ -613,7 +606,7 @@ def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -
             bedrag = jaarbedrag
             if not bedrag:
                 bedrag = _to_float(ai.get("jaarlijksBrutoInkomen"))
-            if _eindigt_voor_aow(item, aow_datum):
+            if _heeft_einddatum(item):
                 overig_tijdelijk += bedrag
             else:
                 overig += bedrag
