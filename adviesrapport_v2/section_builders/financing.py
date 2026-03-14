@@ -51,8 +51,8 @@ def build_financing_section(
 
     # Aankoopposten (afhankelijk van woningtype en flow)
     if fin.is_wijziging:
-        # Wijziging flow: "Huidige hypotheek" als eerste post
-        opzet_rows.append({"label": "Huidige hypotheek", "value": format_bedrag(fin.koopsom)})
+        # Wijziging flow: huidige hypotheek komt onderaan, niet bovenaan
+        pass
     elif is_nieuwbouw_project:
         if fin.koopsom_grond > 0:
             opzet_rows.append({"label": "Koopsom grond", "value": format_bedrag(fin.koopsom_grond)})
@@ -160,15 +160,25 @@ def build_financing_section(
     # Totaal investering
     extra_aankoop_totaal = sum(ep["value"] for ep in fin.extra_posten_aankoop)
     extra_kosten_totaal = sum(ep["value"] for ep in fin.extra_posten_kosten)
-    totale_investering = (
-        fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
-        + fin.consumptief + fin.meerwerk + fin.bouwrente
-        + fin.koopsom_grond + fin.aanneemsom
-        + fin.koopsom_kavel + fin.sloop_oude_woning + fin.bouw_woning
-        + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
-        + fin.oversluiten_leningen
-        + extra_aankoop_totaal + extra_kosten_totaal
-    )
+    if fin.is_wijziging:
+        # Wijziging: totaal ZONDER huidige hypotheek
+        totale_investering = (
+            fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+            + fin.consumptief + fin.meerwerk + fin.bouwrente
+            + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
+            + fin.oversluiten_leningen
+            + extra_aankoop_totaal + extra_kosten_totaal
+        )
+    else:
+        totale_investering = (
+            fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+            + fin.consumptief + fin.meerwerk + fin.bouwrente
+            + fin.koopsom_grond + fin.aanneemsom
+            + fin.koopsom_kavel + fin.sloop_oude_woning + fin.bouw_woning
+            + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
+            + fin.oversluiten_leningen
+            + extra_aankoop_totaal + extra_kosten_totaal
+        )
     opzet_rows.append({"label": "Totaal", "value": format_bedrag(totale_investering), "bold": True})
     opzet_rows.append({"label": "", "value": ""})  # Spacer
 
@@ -194,7 +204,13 @@ def build_financing_section(
     for ep in fin.extra_posten_eigen_middelen:
         opzet_rows.append({"label": f"Af: {ep['label']}", "value": f"-/{format_bedrag(ep['value'])}"})
 
-    opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.totale_hypotheekschuld), "bold": True})
+    if fin.is_wijziging:
+        # Wijziging: Nieuwe hypotheek → Huidige hypotheek → Totale hypotheek
+        opzet_rows.append({"label": "Nieuwe hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
+        opzet_rows.append({"label": "Huidige hypotheek", "value": format_bedrag(fin.koopsom)})
+        opzet_rows.append({"label": "Totale hypotheek", "value": format_bedrag(data.totale_hypotheekschuld), "bold": True})
+    else:
+        opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.totale_hypotheekschuld), "bold": True})
     subsections.append({"subtitle": "Financieringsopzet", "rows": opzet_rows})
 
     # --- Hypotheekconstructie ---
