@@ -169,6 +169,9 @@ def generate_report(
                     _restschuld_leningdeel(ld, elapsed)
                     for ld in data.leningdelen_voor_api
                 )
+                # Bij wijziging: bestaande hypotheek blijft staan
+                if data.financiering.is_wijziging:
+                    restschuld += data.financiering.koopsom
                 sc["restschuld_op_peildatum"] = round(restschuld)
             except (ValueError, TypeError):
                 pass
@@ -795,6 +798,9 @@ def _build_pensioen_chart_data(
             _restschuld_leningdeel(ld, elapsed_mnd)
             for ld in data.leningdelen_voor_api
         )
+        # Bij wijziging: bestaande hypotheek blijft staan
+        if data.financiering.is_wijziging:
+            restschuld += data.financiering.koopsom
 
         # Max hypotheek: projecteer leningen + bereken met juist inkomen
         if y == 0:
