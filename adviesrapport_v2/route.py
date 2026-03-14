@@ -132,6 +132,8 @@ async def debug_dossier_data(
             "raw_scenario1_keys": list(scenario1.keys()) if isinstance(scenario1, dict) else str(type(scenario1)),
             "raw_scenario1": scenario1,
             "raw_aanvraag_keys": list((aanvraag.get("data") or {}).keys()) if isinstance(aanvraag, dict) else [],
+            "raw_doelstelling": (aanvraag.get("data") or {}).get("doelstelling"),
+            "raw_doelstellingType": (aanvraag.get("data") or {}).get("doelstellingType"),
             "raw_onderpand": (aanvraag.get("data") or {}).get("onderpand"),
             "raw_financieringsopzet": (aanvraag.get("data") or {}).get("financieringsopzet"),
             "raw_voorzieningen": (aanvraag.get("data") or {}).get("voorzieningen"),
@@ -176,6 +178,8 @@ async def debug_dossier_data(
                 "hypotheek_bedrag": data.hypotheek_bedrag,
                 "totale_hypotheekschuld": data.totale_hypotheekschuld,
                 "is_wijziging": data.financiering.is_wijziging,
+                "doelstelling": data.financiering.doelstelling,
+                "is_oversluiten": data.financiering.is_oversluiten,
                 "leningdelen_count": len(data.leningdelen),
                 "leningdelen": [
                     {

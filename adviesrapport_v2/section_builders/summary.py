@@ -74,8 +74,20 @@ def build_summary_section(
     has_adres = bool(adres_tekst and adres_tekst.strip(", "))
     samen = "" if data.alleenstaand else " samen"
 
-    if fin.is_wijziging:
-        # Wijziging flow: verhoging/oversluiting/uitkoop
+    if fin.is_wijziging and fin.is_oversluiten:
+        # Oversluiten flow
+        if has_adres:
+            intro = f"U wilt{samen} uw hypotheek oversluiten op uw woning aan {adres_tekst}."
+        else:
+            intro = f"U wilt{samen} uw hypotheek oversluiten."
+    elif fin.is_wijziging and "uitkopen" in fin.doelstelling:
+        # Partner uitkopen flow
+        if has_adres:
+            intro = f"U wilt{samen} uw partner uitkopen uit de woning aan {adres_tekst}."
+        else:
+            intro = f"U wilt{samen} uw partner uitkopen."
+    elif fin.is_wijziging:
+        # Verhoging flow
         if has_adres:
             intro = f"U wilt{samen} een aanvullende hypotheek afsluiten op uw woning aan {adres_tekst}."
         else:

@@ -320,6 +320,12 @@ class NormalizedFinanciering:
     afkoop_erfpacht: float = 0
     oversluiten_leningen: float = 0
     is_wijziging: bool = False     # True bij verhogen/oversluiten/uitkopen flows
+    doelstelling: str = ""         # "hypotheek-oversluiten", "hypotheek-verhogen", etc.
+
+    @property
+    def is_oversluiten(self) -> bool:
+        """True als de doelstelling oversluiten is."""
+        return "oversluiten" in self.doelstelling.lower()
 
 
 @dataclass
@@ -372,13 +378,20 @@ class NormalizedDossierData:
     def totale_hypotheekschuld(self) -> float:
         """Totale hypotheekschuld incl. bestaande hypotheek bij wijziging.
 
-        Bij verhoging/oversluiten: nieuwe leningdelen + bestaande hypotheek
-        die in stand blijft (= fin.koopsom = huidigeHypotheek).
+        Bij verhoging: nieuwe leningdelen + bestaande hypotheek die BLIJFT.
+        Bij oversluiten: nieuwe leningdelen + BEHOUDEN hypotheken (excl. overgeslagen).
         Bij aankoop: zelfde als hypotheek_bedrag.
         """
         base = self.hypotheek_bedrag
         if self.financiering.is_wijziging:
-            base += self.financiering.koopsom
+            if self.financiering.is_oversluiten:
+                # Oversluiten: koopsom (huidigeHypotheek) wordt VERVANGEN
+                # door de nieuwe leningdelen. Behouden hypotheken erbij tellen.
+                totaal_bestaand = sum(h.hoofdsom for h in self.bestaande_hypotheken)
+                base += max(0, totaal_bestaand - self.financiering.koopsom)
+            else:
+                # Verhogen/uitkopen: bestaande hypotheek BLIJFT staan
+                base += self.financiering.koopsom
         return base
 
     @property
@@ -1020,6 +1033,13 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
     onderpand = aanvraag_data.get("onderpand") or {}
     samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
 
+    # Doelstelling: "hypotheek-oversluiten", "hypotheek-verhogen", "partner-uitkopen"
+    doelstelling = str(
+        aanvraag_data.get("doelstelling")
+        or aanvraag_data.get("doelstellingType")
+        or ""
+    ).strip()
+
     # Investering posten
     huidige_hypotheek = _to_float(wf.get("huidigeHypotheek"))
     verbouwing = _to_float(wf.get("verbouwing"))
@@ -1146,6 +1166,7 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
         afkoop_erfpacht=afkoop_erfpacht,
         oversluiten_leningen=oversluiten_leningen,
         is_wijziging=True,
+        doelstelling=doelstelling,
     )
 
 

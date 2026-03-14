@@ -50,8 +50,11 @@ def build_financing_section(
     is_nieuwbouw_eigen_beheer = "eigen beheer" in fin.type_woning.lower()
 
     # Aankoopposten (afhankelijk van woningtype en flow)
-    if fin.is_wijziging:
-        # Wijziging flow: huidige hypotheek komt onderaan, niet bovenaan
+    if fin.is_wijziging and fin.is_oversluiten:
+        # Oversluiten: "Huidige hypotheek" bovenaan als basis (matcht Lovable)
+        opzet_rows.append({"label": "Huidige hypotheek", "value": format_bedrag(fin.koopsom)})
+    elif fin.is_wijziging:
+        # Verhogen/uitkopen: huidige hypotheek komt onderaan
         pass
     elif is_nieuwbouw_project:
         if fin.koopsom_grond > 0:
@@ -160,15 +163,19 @@ def build_financing_section(
     # Totaal investering
     extra_aankoop_totaal = sum(ep["value"] for ep in fin.extra_posten_aankoop)
     extra_kosten_totaal = sum(ep["value"] for ep in fin.extra_posten_kosten)
-    if fin.is_wijziging:
-        # Wijziging: totaal ZONDER huidige hypotheek
-        totale_investering = (
-            fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
-            + fin.consumptief + fin.meerwerk + fin.bouwrente
-            + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
-            + fin.oversluiten_leningen
-            + extra_aankoop_totaal + extra_kosten_totaal
-        )
+    kosten_excl_koopsom = (
+        fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
+        + fin.consumptief + fin.meerwerk + fin.bouwrente
+        + fin.boeterente + fin.uitkoop_partner + fin.afkoop_erfpacht
+        + fin.oversluiten_leningen
+        + extra_aankoop_totaal + extra_kosten_totaal
+    )
+    if fin.is_wijziging and fin.is_oversluiten:
+        # Oversluiten: totaal INCLUSIEF huidige hypotheek (als basis)
+        totale_investering = fin.koopsom + kosten_excl_koopsom
+    elif fin.is_wijziging:
+        # Verhogen: totaal ZONDER huidige hypotheek
+        totale_investering = kosten_excl_koopsom
     else:
         totale_investering = (
             fin.koopsom + fin.kosten_koper + fin.verbouwing + fin.ebv_ebb
@@ -204,8 +211,11 @@ def build_financing_section(
     for ep in fin.extra_posten_eigen_middelen:
         opzet_rows.append({"label": f"Af: {ep['label']}", "value": f"-/{format_bedrag(ep['value'])}"})
 
-    if fin.is_wijziging:
-        # Wijziging: Nieuwe hypotheek → Huidige hypotheek → Totale hypotheek
+    if fin.is_wijziging and fin.is_oversluiten:
+        # Oversluiten: de nieuwe hypotheek vervangt de oude
+        opzet_rows.append({"label": "Hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
+    elif fin.is_wijziging:
+        # Verhogen: Nieuwe hypotheek → Huidige hypotheek → Totale hypotheek
         opzet_rows.append({"label": "Nieuwe hypotheek", "value": format_bedrag(data.hypotheek_bedrag), "bold": True})
         opzet_rows.append({"label": "Huidige hypotheek", "value": format_bedrag(fin.koopsom)})
         opzet_rows.append({"label": "Totale hypotheek", "value": format_bedrag(data.totale_hypotheekschuld), "bold": True})
