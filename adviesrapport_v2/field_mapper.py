@@ -1341,9 +1341,16 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
         restant_looptijd = None
         restant_aftrekbaar = None
         if herkomst in ("bestaand", "meenemen"):
-            ingangsdatum_str = str(deel.get("ingangsdatum") or "").strip()
-            if ingangsdatum_str and rvp_jaren:
-                restant_rvp = _bereken_restant_rvp(ingangsdatum_str, rvp_jaren, passeerdatum)
+            # Restant RVP: gebruik einddatumRvp direct (niet ingangsdatum + rvp_jaren,
+            # want ingangsdatum kan de nieuwe passeerdatum zijn terwijl RVP eerder begon)
+            einde_rvp_str = str(deel.get("einddatumRvp") or deel.get("einddatumrvp") or "").strip()
+            if einde_rvp_str:
+                restant_rvp = _bereken_restant_looptijd(einde_rvp_str, passeerdatum)
+            elif rvp_jaren:
+                # Fallback: ingangsdatumRvp + rvp_jaren (of ingangsdatum als die ontbreekt)
+                rvp_ingang = str(deel.get("ingangsdatumRvp") or deel.get("ingangsdatum") or "").strip()
+                if rvp_ingang:
+                    restant_rvp = _bereken_restant_rvp(rvp_ingang, rvp_jaren, passeerdatum)
             # Restant looptijd uit einddatum
             einddatum_str = str(deel.get("einddatum") or "").strip()
             if einddatum_str:
