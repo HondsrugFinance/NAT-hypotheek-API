@@ -234,8 +234,8 @@ def build_financing_section(
     constructie_rows.append({"label": "NHG", "value": "Ja" if fin.nhg else "Nee"})
 
     # Bepaal welke herkomst-types in de hoofdtabel getoond worden
-    # Aankoop: nieuw + meenemen | Verhogen/Oversluiten: nieuw | Uitkoop: nieuw + bestaand
-    toon_in_tabel: set[str] = {"nieuw"}
+    # Aankoop: nieuw + meenemen + elders | Verhogen/Oversluiten: nieuw + elders | Uitkoop: nieuw + bestaand + elders
+    toon_in_tabel: set[str] = {"nieuw", "elders"}
     if not fin.is_wijziging:
         toon_in_tabel.add("meenemen")
     elif fin.is_uitkopen:
