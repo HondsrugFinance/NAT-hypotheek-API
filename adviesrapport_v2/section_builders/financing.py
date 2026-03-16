@@ -241,15 +241,12 @@ def build_financing_section(
     elif fin.is_uitkopen:
         toon_in_tabel.add("bestaand")
 
-    # Split leningdelen: hoofd vs elders
+    # Split leningdelen: hoofd (excl. elders)
     hoofd_ld = [ld for ld in data.leningdelen
                 if not ld.is_overbrugging and ld.herkomst in toon_in_tabel]
-    elders_ld = [ld for ld in data.leningdelen
-                 if not ld.is_overbrugging and ld.herkomst == "elders"]
 
-    # Bepaal footnote-markers per flow
-    # Eerste speciale type → *, tweede → **
-    footnotes = _build_footnotes(fin, hoofd_ld, elders_ld)
+    # Footnote: alleen * voor meeneemhypotheek (bij aankoop)
+    has_meeneem = not fin.is_wijziging and any(ld.herkomst == "meenemen" for ld in hoofd_ld)
 
     # Leningdelen tabel (hoofdtabel)
     ld_headers = ["Leningdeel", "Bedrag", "Aflosvorm", "Looptijd",
@@ -265,8 +262,8 @@ def build_financing_section(
         totaal_bruto += bruto_pm
         aftrekbaar = format_looptijd_jaren(ld.org_lpt) if ld.bedrag_box1 > 0 else "n.v.t."
 
-        # Footnote-marker bij het nummer
-        marker = _footnote_marker(ld, footnotes)
+        # * marker bij meeneemhypotheek
+        marker = "*" if ld.herkomst == "meenemen" else ""
         ld_rows.append([
             f"{i}{marker}",
             format_bedrag(bedrag),
@@ -281,6 +278,8 @@ def build_financing_section(
     totals = ["", format_bedrag(totaal_bedrag), "", "", "", "", "",
               format_bedrag(totaal_bruto)]
 
+    footnotes = ["*betreft een meeneemhypotheek"] if has_meeneem else []
+
     constructie_sub = {
         "subtitle": "Hypotheekconstructie",
         "rows": constructie_rows,
@@ -289,44 +288,9 @@ def build_financing_section(
             "rows": ld_rows,
             "totals": totals,
         }],
-        "footnotes": [fn["text"] for fn in footnotes],
+        "footnotes": footnotes,
     }
     subsections.append(constructie_sub)
-
-    # --- Leningdeel elders (apart tonen) ---
-    if elders_ld:
-        elders_rows_data = []
-        elders_totaal_bedrag = 0
-        elders_totaal_bruto = 0
-        for i, ld in enumerate(elders_ld, 1):
-            bedrag = ld.totaal_bedrag
-            elders_totaal_bedrag += bedrag
-            bruto_pm = _bruto_maandlast_leningdeel(ld)
-            elders_totaal_bruto += bruto_pm
-            aftrekbaar = format_looptijd_jaren(ld.org_lpt) if ld.bedrag_box1 > 0 else "n.v.t."
-            toetsing_label = "Ja" if ld.meenemen_in_toetsing else "Nee"
-            elders_rows_data.append([
-                str(i),
-                format_bedrag(bedrag),
-                ld.aflosvorm_display,
-                format_looptijd_jaren(ld.org_lpt),
-                format_rvp_jaren(ld.rvp),
-                format_percentage(ld.werkelijke_rente),
-                aftrekbaar,
-                format_bedrag(bruto_pm),
-            ])
-        elders_totals = ["", format_bedrag(elders_totaal_bedrag), "", "", "", "", "",
-                         format_bedrag(elders_totaal_bruto)]
-        elders_sub = {
-            "subtitle": "Lening elders",
-            "rows": [],
-            "tables": [{
-                "headers": ld_headers,
-                "rows": elders_rows_data,
-                "totals": elders_totals if len(elders_ld) > 1 else None,
-            }],
-        }
-        subsections.append(elders_sub)
 
     return {
         "id": "financing",
@@ -335,54 +299,6 @@ def build_financing_section(
         "subsections": subsections,
     }
 
-
-def _build_footnotes(
-    fin: "NormalizedFinanciering",
-    hoofd_ld: list,
-    elders_ld: list,
-) -> list[dict]:
-    """Bouw footnote-definities op basis van flow type en aanwezige leningdelen.
-
-    Returns lijst van {herkomst, marker, text} dicts.
-    Eerste speciale type → *, tweede → **.
-    """
-    footnotes: list[dict] = []
-    marker_symbols = ["*", "**"]
-
-    if fin.is_wijziging and fin.is_uitkopen:
-        # Uitkoop: bestaand (aangepast) → *, elders → **
-        if any(ld.herkomst == "bestaand" for ld in hoofd_ld):
-            footnotes.append({
-                "herkomst": "bestaand",
-                "marker": marker_symbols[len(footnotes)],
-                "text": f"{marker_symbols[len(footnotes)]}betreft een aangepast leningdeel",
-            })
-    elif not fin.is_wijziging:
-        # Aankoop: meenemen → *, elders → **
-        if any(ld.herkomst == "meenemen" for ld in hoofd_ld):
-            footnotes.append({
-                "herkomst": "meenemen",
-                "marker": marker_symbols[len(footnotes)],
-                "text": f"{marker_symbols[len(footnotes)]}betreft een meeneemhypotheek",
-            })
-
-    # Elders (alle flows): * of ** (afhankelijk van of er al een footnote is)
-    if elders_ld:
-        footnotes.append({
-            "herkomst": "elders",
-            "marker": marker_symbols[min(len(footnotes), 1)],
-            "text": f"{marker_symbols[min(len(footnotes), 1)]}betreft een lening elders",
-        })
-
-    return footnotes
-
-
-def _footnote_marker(ld, footnotes: list[dict]) -> str:
-    """Geef het juiste footnote-symbool voor een leningdeel."""
-    for fn in footnotes:
-        if fn["herkomst"] == ld.herkomst:
-            return fn["marker"]
-    return ""
 
 
 def _bruto_maandlast_leningdeel(ld) -> float:
