@@ -84,6 +84,7 @@ class NormalizedLeningdeel:
     is_overbrugging: bool = False
     herkomst: str = "nieuw"          # "nieuw", "meenemen", "bestaand", "elders"
     meenemen_in_toetsing: bool = True  # Alleen relevant voor herkomst="elders"
+    verstrekker: str = ""             # Geldverstrekker (relevant voor herkomst="elders")
 
     @property
     def totaal_bedrag(self) -> float:
