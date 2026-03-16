@@ -80,12 +80,12 @@ LOAN_TYPE_MAP = {
 }
 
 
-def generate_report(
+def generate_sections(
     dossier: dict,
     aanvraag: dict,
     options: AdviesrapportOptions,
-) -> bytes:
-    """Genereer adviesrapport PDF vanuit Supabase data.
+) -> tuple[list[dict], dict]:
+    """Normaliseer data, bereken alles, bouw secties.
 
     Args:
         dossier: Volledige rij uit Supabase `dossiers` tabel
@@ -93,14 +93,12 @@ def generate_report(
         options: Adviesrapport opties (uit Lovable dialog)
 
     Returns:
-        PDF bytes
+        (sections, context) — context bevat tussenresultaten voor preview/PDF.
     """
     # --- Stap 1-2: Normaliseer data ---
     data = extract_dossier_data(dossier, aanvraag)
     logger.info("Data genormaliseerd: hypotheek=%.0f, leningdelen=%d",
                 data.hypotheek_bedrag, len(data.leningdelen))
-
-    # NHG en hypotheekverstrekker komen nu uit de database (niet meer uit options)
 
     # --- Stap 3: Max hypotheek ---
     max_hypotheek, toetsrente_start = _bereken_max_hypotheek(data)
@@ -114,7 +112,6 @@ def generate_report(
     hypotheek_delen_api = [ld.to_api_dict() for ld in data.leningdelen_voor_api]
     ingangsdatum = date.today().isoformat()
 
-    # Gemeenschappelijke parameters voor alle risk_scenarios calls
     common_risk_params = dict(
         toetsrente=toetsrente_start,
         energielabel=data.financiering.energielabel,
@@ -169,8 +166,6 @@ def generate_report(
                     _restschuld_leningdeel(ld, elapsed)
                     for ld in data.leningdelen_voor_api
                 )
-                # Bij wijziging: bestaande hypotheek(en) erbij tellen
-                # NIET als bestaande_in_leningdelen=True (dan zitten ze al in leningdelen)
                 if data.financiering.is_wijziging and not data.bestaande_in_leningdelen:
                     if data.financiering.is_oversluiten:
                         totaal_bestaand = sum(h.hoofdsom for h in data.bestaande_hypotheken)
@@ -296,7 +291,6 @@ def generate_report(
     # --- Stap 9: Bouw secties ---
     sections = []
 
-    # Samenvatting
     sections.append(build_summary_section(
         data=data,
         max_hypotheek=max_hypotheek,
@@ -305,19 +299,15 @@ def generate_report(
         scenario_checks=scenario_checks,
     ))
 
-    # Klantprofiel
     sections.append(build_client_profile_section(
         options=options,
         alleenstaand=data.alleenstaand,
     ))
 
-    # Huidige situatie
     sections.append(build_current_situation_section(data))
 
-    # Financiering
     sections.append(build_financing_section(data, bruto_maandlast))
 
-    # Pensioen
     sections.append(build_retirement_section(
         data=data,
         aow_scenarios=aow_scenarios,
@@ -326,7 +316,6 @@ def generate_report(
         beschikbare_buffer=beschikbare_buffer,
     ))
 
-    # Overlijden
     sections.append(build_risk_death_section(
         data=data,
         overlijden_scenarios=overlijden_scenarios,
@@ -334,7 +323,6 @@ def generate_report(
         beschikbare_buffer=beschikbare_buffer,
     ))
 
-    # AO
     if ao_scenarios:
         sections.append(build_risk_disability_section(
             data=data,
@@ -345,7 +333,6 @@ def generate_report(
             beschikbare_buffer=beschikbare_buffer,
         ))
 
-    # WW
     if ww_scenarios:
         sections.append(build_risk_unemployment_section(
             data=data,
@@ -355,7 +342,6 @@ def generate_report(
             beschikbare_buffer=beschikbare_buffer,
         ))
 
-    # Relatiebeëindiging
     relatie_section = build_risk_relationship_section(
         data=data,
         max_hyp_aanvrager_alleen=max_hyp_aanvrager_alleen,
@@ -366,16 +352,26 @@ def generate_report(
     if relatie_section:
         sections.append(relatie_section)
 
-    # Afsluiting (aandachtspunten + ondertekening)
     sections.append(build_closing_section())
 
-    # --- Stap 10: Assembleer rapport dict ---
+    # --- Context: tussenresultaten voor preview/PDF ---
     klantnaam = data.aanvrager.naam
     if data.partner:
         klantnaam = f"{data.aanvrager.naam} en {data.partner.naam}"
 
     rapport_datum = options.report_date or date.today().strftime("%d-%m-%Y")
-    rapport = {
+    context = {
+        "data": data,
+        "max_hypotheek": max_hypotheek,
+        "bruto_maandlast": bruto_maandlast,
+        "netto_maandlast": netto_maandlast,
+        "scenario_checks": scenario_checks,
+        "aow_scenarios": aow_scenarios,
+        "overlijden_scenarios": overlijden_scenarios,
+        "ao_scenarios": ao_scenarios,
+        "ww_scenarios": ww_scenarios,
+        "max_hyp_aanvrager_alleen": max_hyp_aanvrager_alleen,
+        "max_hyp_partner_alleen": max_hyp_partner_alleen,
         "meta": {
             "title": "Persoonlijk Hypotheekadvies",
             "date": rapport_datum,
@@ -385,14 +381,241 @@ def generate_report(
             "propertyAddress": data.financiering.adres,
         },
         "bedrijf": BEDRIJF,
+    }
+
+    return sections, context
+
+
+def generate_report(
+    dossier: dict,
+    aanvraag: dict,
+    options: AdviesrapportOptions,
+    text_overrides: dict | None = None,
+) -> bytes:
+    """Genereer adviesrapport PDF vanuit Supabase data.
+
+    Args:
+        dossier: Volledige rij uit Supabase `dossiers` tabel
+        aanvraag: Volledige rij uit Supabase `aanvragen` tabel
+        options: Adviesrapport opties (uit Lovable dialog)
+        text_overrides: Optioneel dict met aangepaste teksten per sectie-id
+
+    Returns:
+        PDF bytes
+    """
+    sections, ctx = generate_sections(dossier, aanvraag, options)
+
+    if text_overrides:
+        _apply_text_overrides(sections, text_overrides)
+
+    rapport = {
+        "meta": ctx["meta"],
+        "bedrijf": ctx["bedrijf"],
         "sections": sections,
     }
 
-    # --- Stap 11: Genereer PDF ---
     pdf_bytes = pdf_generator.genereer_adviesrapport_pdf(rapport)
     logger.info("PDF gegenereerd: %d bytes", len(pdf_bytes))
-
     return pdf_bytes
+
+
+def build_preview_response(sections: list[dict], ctx: dict) -> dict:
+    """Bouw preview JSON met bewerkbare teksten + per-persoon nummers.
+
+    Wordt gebruikt door het preview endpoint om de frontend van data te voorzien
+    zodat de adviseur teksten kan bekijken/bewerken vóór PDF-generatie.
+    """
+    data = ctx["data"]
+    hypotheek = data.totale_hypotheekschuld
+
+    EDITABLE_SECTIONS = {
+        "summary", "retirement", "risk-death", "risk-disability",
+        "risk-unemployment", "risk-relationship",
+    }
+
+    preview_sections = []
+    for section in sections:
+        sid = section.get("id", "")
+
+        # Bewerkbare teksten: alleen voor relevante secties
+        editable = None
+        if sid in EDITABLE_SECTIONS:
+            editable = {
+                "narratives": section.get("narratives") or [],
+                "conclusion": section.get("conclusion") or [],
+            }
+
+        # Per-persoon nummers uit raw scenario data
+        per_person = _extract_per_person(sid, ctx, hypotheek)
+
+        preview_sections.append({
+            "id": sid,
+            "title": section.get("title", ""),
+            "editable_texts": editable,
+            "per_person": per_person,
+        })
+
+    return {
+        "meta": ctx["meta"],
+        "geadviseerd_hypotheekbedrag": round(hypotheek),
+        "max_hypotheek": round(ctx["max_hypotheek"]),
+        "bruto_maandlast": round(ctx["bruto_maandlast"]),
+        "netto_maandlast": round(ctx["netto_maandlast"]),
+        "scenario_checks": ctx["scenario_checks"],
+        "sections": preview_sections,
+    }
+
+
+def _apply_text_overrides(sections: list[dict], overrides: dict) -> None:
+    """Vervang narratives/conclusion in sections met aangepaste teksten.
+
+    overrides format: { "retirement": { "narratives": [...], "conclusion": [...] } }
+    Alleen niet-None waarden worden vervangen.
+    """
+    for section in sections:
+        sid = section.get("id", "")
+        override = overrides.get(sid)
+        if not override:
+            continue
+        if isinstance(override, dict):
+            if override.get("narratives") is not None:
+                section["narratives"] = override["narratives"]
+            if override.get("conclusion") is not None:
+                section["conclusion"] = override["conclusion"]
+
+
+def _extract_per_person(
+    section_id: str, ctx: dict, hypotheek: float,
+) -> list[dict] | None:
+    """Extraheer per-persoon scenario-bedragen uit raw scenario data."""
+    data = ctx["data"]
+    naam_aanvrager = (data.aanvrager.naam or "Aanvrager").split()[0]
+    naam_partner = ((data.partner.naam if data.partner else None) or "Partner").split()[0]
+
+    def _naam_voor(wie: str) -> str:
+        return naam_partner if wie == "partner" else naam_aanvrager
+
+    if section_id == "retirement":
+        aow_scenarios = ctx.get("aow_scenarios") or []
+        if not aow_scenarios:
+            return None
+        result = []
+        for sc in aow_scenarios:
+            max_hyp = max(
+                sc.get("max_hypotheek_annuitair", 0),
+                sc.get("max_hypotheek_niet_annuitair", 0),
+            )
+            werkelijk = sc.get("restschuld_op_peildatum", round(hypotheek))
+            result.append({
+                "naam": _naam_voor(sc.get("van_toepassing_op", "aanvrager")),
+                "label": sc.get("naam", ""),
+                "max_hypotheek": round(max_hyp),
+                "werkelijke_hypotheek": round(werkelijk),
+                "verschil": round(max_hyp - werkelijk),
+            })
+        return result
+
+    if section_id == "risk-death":
+        scenarios = ctx.get("overlijden_scenarios") or []
+        if not scenarios:
+            return None
+        # Groepeer per van_toepassing_op, pak slechtste per persoon
+        personen: dict[str, list] = {}
+        for sc in scenarios:
+            personen.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        result = []
+        for wie in ("aanvrager", "partner"):
+            scs = personen.get(wie, [])
+            if not scs:
+                continue
+            worst = min(scs, key=lambda s: s.get("max_hypotheek_annuitair", 0))
+            max_hyp = worst.get("max_hypotheek_annuitair", 0)
+            # Naam = de nabestaande (de ander overlijdt)
+            nabestaande = naam_partner if wie == "aanvrager" else naam_aanvrager
+            result.append({
+                "naam": nabestaande,
+                "label": f"Bij overlijden {_naam_voor(wie)}",
+                "max_hypotheek": round(max_hyp),
+                "werkelijke_hypotheek": round(hypotheek),
+                "verschil": round(max_hyp - hypotheek),
+            })
+        return result or None
+
+    if section_id == "risk-disability":
+        scenarios = ctx.get("ao_scenarios") or []
+        if not scenarios:
+            return None
+        personen: dict[str, list] = {}
+        for sc in scenarios:
+            personen.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        result = []
+        for wie in ("aanvrager", "partner"):
+            scs = personen.get(wie, [])
+            if not scs:
+                continue
+            # Slechtste scenario excl. loondoorbetaling
+            non_ld = [s for s in scs if "loondoorbetaling" not in s.get("naam", "").lower()]
+            if not non_ld:
+                non_ld = scs
+            worst = min(non_ld, key=lambda s: s.get("max_hypotheek_annuitair", 0))
+            max_hyp = worst.get("max_hypotheek_annuitair", 0)
+            result.append({
+                "naam": _naam_voor(wie),
+                "label": worst.get("naam", f"AO {_naam_voor(wie)}"),
+                "max_hypotheek": round(max_hyp),
+                "werkelijke_hypotheek": round(hypotheek),
+                "verschil": round(max_hyp - hypotheek),
+            })
+        return result or None
+
+    if section_id == "risk-unemployment":
+        scenarios = ctx.get("ww_scenarios") or []
+        if not scenarios:
+            return None
+        personen: dict[str, list] = {}
+        for sc in scenarios:
+            personen.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
+        result = []
+        for wie in ("aanvrager", "partner"):
+            scs = personen.get(wie, [])
+            if not scs:
+                continue
+            worst = min(scs, key=lambda s: s.get("max_hypotheek_annuitair", 0))
+            max_hyp = worst.get("max_hypotheek_annuitair", 0)
+            result.append({
+                "naam": _naam_voor(wie),
+                "label": worst.get("naam", f"WW {_naam_voor(wie)}"),
+                "max_hypotheek": round(max_hyp),
+                "werkelijke_hypotheek": round(hypotheek),
+                "verschil": round(max_hyp - hypotheek),
+            })
+        return result or None
+
+    if section_id == "risk-relationship":
+        max_a = ctx.get("max_hyp_aanvrager_alleen", 0)
+        max_p = ctx.get("max_hyp_partner_alleen", 0)
+        if max_a == 0 and max_p == 0:
+            return None
+        result = []
+        if max_a > 0:
+            result.append({
+                "naam": naam_aanvrager,
+                "label": f"{naam_aanvrager} alleen",
+                "max_hypotheek": round(max_a),
+                "werkelijke_hypotheek": round(hypotheek),
+                "verschil": round(max_a - hypotheek),
+            })
+        if max_p > 0:
+            result.append({
+                "naam": naam_partner,
+                "label": f"{naam_partner} alleen",
+                "max_hypotheek": round(max_p),
+                "werkelijke_hypotheek": round(hypotheek),
+                "verschil": round(max_p - hypotheek),
+            })
+        return result or None
+
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════

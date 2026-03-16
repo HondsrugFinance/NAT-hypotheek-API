@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse, Response
 
 from adviesrapport_v2.schemas import AdviesrapportV2Request
 from adviesrapport_v2.supabase_client import lees_dossier, lees_aanvraag
-from adviesrapport_v2.report_orchestrator import generate_report
+from adviesrapport_v2.report_orchestrator import (
+    generate_report, generate_sections, build_preview_response,
+)
 from adviesrapport_v2.field_mapper import extract_dossier_data
 
 logger = logging.getLogger("nat-api.adviesrapport_v2.route")
@@ -56,10 +58,18 @@ async def adviesrapport_pdf_v2(
         aanvraag = await lees_aanvraag(request_body.aanvraag_id, access_token)
 
         # 2. Genereer rapport (sync — alle berekeningen + PDF)
+        # text_overrides omzetten van Pydantic naar dict
+        overrides = None
+        if request_body.text_overrides:
+            overrides = {
+                k: v.model_dump(exclude_none=True)
+                for k, v in request_body.text_overrides.items()
+            }
         pdf_bytes = generate_report(
             dossier=dossier,
             aanvraag=aanvraag,
             options=request_body.options,
+            text_overrides=overrides,
         )
 
         # 3. Return PDF
@@ -80,6 +90,52 @@ async def adviesrapport_pdf_v2(
         raise HTTPException(
             status_code=500,
             detail=f"Adviesrapport V2 generatie mislukt: {str(e)}",
+        )
+
+
+@router.post("/adviesrapport-preview-v2")
+async def adviesrapport_preview_v2(
+    request_body: AdviesrapportV2Request,
+    request: Request,
+):
+    """
+    Genereer preview JSON met teksten en per-persoon scenario-bedragen.
+
+    Gebruikt dezelfde berekeningen als de PDF endpoint, maar retourneert
+    JSON i.p.v. een PDF. De frontend kan hiermee:
+    - Adviesteksten tonen in bewerkbare velden
+    - Per-persoon bedragen tonen (max hypotheek, werkelijk, verschil)
+    """
+    origin = request.headers.get("origin", "onbekend")
+    access_token = _extract_supabase_token(request)
+
+    logger.info(
+        "Adviesrapport preview gestart: origin=%s, dossier=%s, aanvraag=%s",
+        origin, request_body.dossier_id, request_body.aanvraag_id,
+    )
+
+    try:
+        dossier = await lees_dossier(request_body.dossier_id, access_token)
+        aanvraag = await lees_aanvraag(request_body.aanvraag_id, access_token)
+
+        sections, ctx = generate_sections(
+            dossier=dossier,
+            aanvraag=aanvraag,
+            options=request_body.options,
+        )
+
+        preview = build_preview_response(sections, ctx)
+        logger.info("Preview gegenereerd: %d secties", len(preview.get("sections", [])))
+        return JSONResponse(preview)
+
+    except ValueError as e:
+        logger.warning("Preview data niet gevonden: %s", e)
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("Preview mislukt: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Adviesrapport preview mislukt: {str(e)}",
         )
 
 

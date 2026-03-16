@@ -264,12 +264,14 @@ def build_financing_section(
 
         # * marker bij meeneemhypotheek
         marker = "*" if ld.herkomst == "meenemen" else ""
+        # Restant RVP tonen voor bestaand/meenemen, anders originele RVP
+        rvp_display = format_rvp_jaren(ld.restant_rvp) if ld.restant_rvp is not None else format_rvp_jaren(ld.rvp)
         ld_rows.append([
             f"{i}{marker}",
             format_bedrag(bedrag),
             ld.aflosvorm_display,
             format_looptijd_jaren(ld.org_lpt),
-            format_rvp_jaren(ld.rvp),
+            rvp_display,
             format_percentage(ld.werkelijke_rente),
             aftrekbaar,
             format_bedrag(bruto_pm),

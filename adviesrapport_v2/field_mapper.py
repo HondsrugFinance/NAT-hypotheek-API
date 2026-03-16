@@ -79,6 +79,7 @@ class NormalizedLeningdeel:
     org_lpt: int = 360              # Maanden
     rest_lpt: int = 360
     rvp: int = 120                  # Rentevaste periode in maanden
+    restant_rvp: Optional[int] = None  # Restant RVP in maanden (berekend uit ingangsdatum + rvp)
     inleg_overig: float = 0
     is_overbrugging: bool = False
     herkomst: str = "nieuw"          # "nieuw", "meenemen", "bestaand", "elders"
@@ -1193,6 +1194,46 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
     )
 
 
+def _bereken_restant_rvp(ingangsdatum_str: str, rvp_jaren: float) -> Optional[int]:
+    """Bereken restant rentevaste periode in maanden.
+
+    ingangsdatum + rvp_jaren = einddatum RVP.
+    restant = einddatum - vandaag (in maanden, minimaal 0).
+    """
+    try:
+        # Probeer YYYY-MM-DD of DD-MM-YYYY
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                ingang = date.fromisoformat(ingangsdatum_str) if fmt == "%Y-%m-%d" else None
+                if ingang is None:
+                    from datetime import datetime
+                    ingang = datetime.strptime(ingangsdatum_str, fmt).date()
+                break
+            except (ValueError, TypeError):
+                continue
+        else:
+            return None
+
+        # Einddatum RVP = ingangsdatum + rvp_jaren
+        rvp_maanden_totaal = int(rvp_jaren * 12)
+        eind_jaar = ingang.year + rvp_maanden_totaal // 12
+        eind_maand = ingang.month + rvp_maanden_totaal % 12
+        if eind_maand > 12:
+            eind_jaar += 1
+            eind_maand -= 12
+        eind_dag = min(ingang.day, 28)  # Veilige dag
+        eind_rvp = date(eind_jaar, eind_maand, eind_dag)
+
+        # Restant = verschil in maanden t.o.v. vandaag
+        vandaag = date.today()
+        if eind_rvp <= vandaag:
+            return 0
+        restant = (eind_rvp.year - vandaag.year) * 12 + (eind_rvp.month - vandaag.month)
+        return max(0, restant)
+    except Exception:
+        return None
+
+
 def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["NormalizedLeningdeel"], bool]:
     """Extraheer leningdelen uit aanvraag.data.samenstellenHypotheek.
 
@@ -1252,6 +1293,13 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
         rvp_jaren = _to_float(deel.get("renteVastPeriode") or deel.get("rentevastePeriode"))
         rvp_maanden = int(rvp_jaren * 12) if rvp_jaren else 120
 
+        # Restant RVP berekenen voor bestaand/meenemen leningdelen
+        restant_rvp = None
+        if herkomst in ("bestaand", "meenemen") and rvp_jaren:
+            ingangsdatum_str = str(deel.get("ingangsdatum") or "").strip()
+            if ingangsdatum_str:
+                restant_rvp = _bereken_restant_rvp(ingangsdatum_str, rvp_jaren)
+
         # Box: "box1" of "box3"
         box_raw = str(deel.get("box") or "box1").lower()
         is_box3 = "3" in box_raw
@@ -1270,6 +1318,7 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
             org_lpt=looptijd,
             rest_lpt=looptijd,
             rvp=rvp_maanden,
+            restant_rvp=restant_rvp,
             is_overbrugging=False,
             herkomst=herkomst,
             meenemen_in_toetsing=meenemen_in_toetsing,

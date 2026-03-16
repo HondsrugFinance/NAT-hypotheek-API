@@ -56,9 +56,16 @@ class AdviesrapportOptions(BaseModel):
     dossier_nummer: Optional[str] = None
 
 
+class SectionTextOverride(BaseModel):
+    """Aangepaste teksten voor een enkele sectie."""
+    narratives: Optional[list[str]] = None
+    conclusion: Optional[list[str]] = None
+
+
 class AdviesrapportV2Request(BaseModel):
     """Request voor backend-driven adviesrapport generatie."""
 
     dossier_id: str = Field(..., description="UUID van het dossier")
     aanvraag_id: str = Field(..., description="UUID van de aanvraag")
     options: AdviesrapportOptions = Field(default_factory=AdviesrapportOptions)
+    text_overrides: Optional[dict[str, SectionTextOverride]] = None
