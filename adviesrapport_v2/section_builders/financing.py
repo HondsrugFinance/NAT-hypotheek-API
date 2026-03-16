@@ -250,8 +250,6 @@ def build_financing_section(
 
     # Footnotes tracking
     has_meeneem = not fin.is_wijziging and any(ld.herkomst == "meenemen" for ld in hoofd_ld)
-    has_restant = any(ld.herkomst in ("bestaand", "meenemen") for ld in hoofd_ld)
-
     # Leningdelen tabel (hoofdtabel)
     ld_headers = ["Leningdeel", "Bedrag", "Aflosvorm", "Looptijd",
                   "Rentevast", "Rente %", "Aftrekbaar", "Bruto p/m"]
@@ -306,8 +304,6 @@ def build_financing_section(
     footnotes = []
     if has_meeneem:
         footnotes.append("*betreft een meeneemhypotheek")
-    if has_restant:
-        footnotes.append("Looptijd, rentevast en aftrekbaar betreffen restant vanaf passeerdatum")
 
     constructie_sub = {
         "subtitle": "Hypotheekconstructie",
