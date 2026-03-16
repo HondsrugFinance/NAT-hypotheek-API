@@ -234,16 +234,19 @@ def build_financing_section(
     constructie_rows.append({"label": "NHG", "value": "Ja" if fin.nhg else "Nee"})
 
     # Bepaal welke herkomst-types in de hoofdtabel getoond worden
-    # Aankoop: nieuw + meenemen + elders | Verhogen/Oversluiten: nieuw + elders | Uitkoop: nieuw + bestaand + elders
-    toon_in_tabel: set[str] = {"nieuw", "elders"}
+    # Aankoop: nieuw + meenemen | Verhogen/Oversluiten: nieuw | Uitkoop: nieuw + bestaand
+    # "elders" altijd apart (andere geldverstrekker)
+    toon_in_tabel: set[str] = {"nieuw"}
     if not fin.is_wijziging:
         toon_in_tabel.add("meenemen")
     elif fin.is_uitkopen:
         toon_in_tabel.add("bestaand")
 
-    # Split leningdelen: hoofd (excl. elders)
+    # Split leningdelen: hoofd vs elders
     hoofd_ld = [ld for ld in data.leningdelen
                 if not ld.is_overbrugging and ld.herkomst in toon_in_tabel]
+    elders_ld = [ld for ld in data.leningdelen
+                 if not ld.is_overbrugging and ld.herkomst == "elders"]
 
     # Footnote: alleen * voor meeneemhypotheek (bij aankoop)
     has_meeneem = not fin.is_wijziging and any(ld.herkomst == "meenemen" for ld in hoofd_ld)
@@ -293,6 +296,36 @@ def build_financing_section(
         "footnotes": footnotes,
     }
     subsections.append(constructie_sub)
+
+    # --- Leningdeel elders (aparte geldverstrekker) ---
+    if elders_ld:
+        for ld in elders_ld:
+            bedrag = ld.totaal_bedrag
+            bruto_pm = _bruto_maandlast_leningdeel(ld)
+            aftrekbaar = format_looptijd_jaren(ld.org_lpt) if ld.bedrag_box1 > 0 else "n.v.t."
+            rvp_display = format_rvp_jaren(ld.restant_rvp) if ld.restant_rvp is not None else format_rvp_jaren(ld.rvp)
+
+            elders_rows = [
+                {"label": "Hypotheekverstrekker", "value": ld.verstrekker or "Elders"},
+            ]
+            elders_table = {
+                "headers": ld_headers,
+                "rows": [[
+                    "1",
+                    format_bedrag(bedrag),
+                    ld.aflosvorm_display,
+                    format_looptijd_jaren(ld.org_lpt),
+                    rvp_display,
+                    format_percentage(ld.werkelijke_rente),
+                    aftrekbaar,
+                    format_bedrag(bruto_pm),
+                ]],
+            }
+            subsections.append({
+                "subtitle": "Leningdeel elders",
+                "rows": elders_rows,
+                "tables": [elders_table],
+            })
 
     return {
         "id": "financing",
