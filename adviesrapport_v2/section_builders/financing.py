@@ -248,8 +248,9 @@ def build_financing_section(
     elders_ld = [ld for ld in data.leningdelen
                  if not ld.is_overbrugging and ld.herkomst == "elders"]
 
-    # Footnote: alleen * voor meeneemhypotheek (bij aankoop)
+    # Footnotes tracking
     has_meeneem = not fin.is_wijziging and any(ld.herkomst == "meenemen" for ld in hoofd_ld)
+    has_restant = any(ld.herkomst in ("bestaand", "meenemen") for ld in hoofd_ld)
 
     # Leningdelen tabel (hoofdtabel)
     ld_headers = ["Leningdeel", "Bedrag", "Aflosvorm", "Looptijd",
@@ -263,17 +264,36 @@ def build_financing_section(
         totaal_bedrag += bedrag
         bruto_pm = _bruto_maandlast_leningdeel(ld)
         totaal_bruto += bruto_pm
-        aftrekbaar = format_looptijd_jaren(ld.org_lpt) if ld.bedrag_box1 > 0 else "n.v.t."
+        is_bestaand = ld.herkomst in ("bestaand", "meenemen")
 
         # * marker bij meeneemhypotheek
         marker = "*" if ld.herkomst == "meenemen" else ""
-        # Restant RVP tonen voor bestaand/meenemen, anders originele RVP
-        rvp_display = format_rvp_jaren(ld.restant_rvp) if ld.restant_rvp is not None else format_rvp_jaren(ld.rvp)
+
+        # Looptijd: restant voor bestaand/meenemen, anders origineel
+        if is_bestaand and ld.restant_looptijd is not None:
+            looptijd_display = format_looptijd_jaren(ld.restant_looptijd)
+        else:
+            looptijd_display = format_looptijd_jaren(ld.org_lpt)
+
+        # RVP: restant voor bestaand/meenemen, anders origineel
+        if is_bestaand and ld.restant_rvp is not None:
+            rvp_display = format_rvp_jaren(ld.restant_rvp)
+        else:
+            rvp_display = format_rvp_jaren(ld.rvp)
+
+        # Aftrekbaar: restant voor bestaand/meenemen, anders originele looptijd
+        if ld.bedrag_box1 <= 0:
+            aftrekbaar = "n.v.t."
+        elif is_bestaand and ld.restant_aftrekbaar is not None:
+            aftrekbaar = format_looptijd_jaren(ld.restant_aftrekbaar)
+        else:
+            aftrekbaar = format_looptijd_jaren(ld.org_lpt)
+
         ld_rows.append([
             f"{i}{marker}",
             format_bedrag(bedrag),
             ld.aflosvorm_display,
-            format_looptijd_jaren(ld.org_lpt),
+            looptijd_display,
             rvp_display,
             format_percentage(ld.werkelijke_rente),
             aftrekbaar,
@@ -283,7 +303,11 @@ def build_financing_section(
     totals = ["", format_bedrag(totaal_bedrag), "", "", "", "", "",
               format_bedrag(totaal_bruto)]
 
-    footnotes = ["*betreft een meeneemhypotheek"] if has_meeneem else []
+    footnotes = []
+    if has_meeneem:
+        footnotes.append("*betreft een meeneemhypotheek")
+    if has_restant:
+        footnotes.append("Looptijd, rentevast en aftrekbaar betreffen restant vanaf heden")
 
     constructie_sub = {
         "subtitle": "Hypotheekconstructie",
