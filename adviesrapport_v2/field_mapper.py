@@ -1217,24 +1217,21 @@ def _parse_datum(datum_str: str) -> Optional[date]:
     return None
 
 
-def _restant_maanden_tot(einddatum: date) -> int:
-    """Bereken restant maanden van vandaag tot einddatum (minimaal 0)."""
-    vandaag = date.today()
-    if einddatum <= vandaag:
+def _restant_maanden(einddatum: date, vanaf: date) -> int:
+    """Bereken restant maanden van 'vanaf' tot einddatum (minimaal 0)."""
+    if einddatum <= vanaf:
         return 0
-    return max(0, (einddatum.year - vandaag.year) * 12 + (einddatum.month - vandaag.month))
+    return max(0, (einddatum.year - vanaf.year) * 12 + (einddatum.month - vanaf.month))
 
 
-def _bereken_restant_rvp(ingangsdatum_str: str, rvp_jaren: float) -> Optional[int]:
-    """Bereken restant rentevaste periode in maanden.
-
-    ingangsdatum + rvp_jaren = einddatum RVP.
-    restant = einddatum - vandaag (in maanden, minimaal 0).
-    """
+def _bereken_restant_rvp(ingangsdatum_str: str, rvp_jaren: float, vanaf: date = None) -> Optional[int]:
+    """Bereken restant rentevaste periode in maanden vanaf referentiedatum."""
     try:
         ingang = _parse_datum(ingangsdatum_str)
         if not ingang:
             return None
+        if vanaf is None:
+            vanaf = date.today()
 
         # Einddatum RVP = ingangsdatum + rvp_jaren
         rvp_maanden_totaal = int(rvp_jaren * 12)
@@ -1246,29 +1243,29 @@ def _bereken_restant_rvp(ingangsdatum_str: str, rvp_jaren: float) -> Optional[in
         eind_dag = min(ingang.day, 28)  # Veilige dag
         eind_rvp = date(eind_jaar, eind_maand, eind_dag)
 
-        return _restant_maanden_tot(eind_rvp)
+        return _restant_maanden(eind_rvp, vanaf)
     except Exception:
         return None
 
 
-def _bereken_restant_looptijd(einddatum_str: str) -> Optional[int]:
+def _bereken_restant_looptijd(einddatum_str: str, vanaf: date = None) -> Optional[int]:
     """Bereken restant looptijd in maanden vanuit einddatum."""
     try:
         eind = _parse_datum(einddatum_str)
         if not eind:
             return None
-        return _restant_maanden_tot(eind)
+        return _restant_maanden(eind, vanaf or date.today())
     except Exception:
         return None
 
 
-def _bereken_restant_aftrekbaar(rente_aftrek_tot_str: str) -> Optional[int]:
+def _bereken_restant_aftrekbaar(rente_aftrek_tot_str: str, vanaf: date = None) -> Optional[int]:
     """Bereken restant duur renteaftrek in maanden vanuit renteAftrekTot."""
     try:
         eind = _parse_datum(rente_aftrek_tot_str)
         if not eind:
             return None
-        return _restant_maanden_tot(eind)
+        return _restant_maanden(eind, vanaf or date.today())
     except Exception:
         return None
 
@@ -1291,6 +1288,12 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
     meenemen = samenstellen.get("meenemenLeningdelen") or []
     nieuw = samenstellen.get("nieuweLeningdelen") or []
     all_elders = samenstellen.get("leningdelenElders") or []
+
+    # Passeerdatum als referentie voor restant-berekeningen
+    passeerdatum_str = str(samenstellen.get("passeerdatum") or "").strip()
+    passeerdatum = _parse_datum(passeerdatum_str)
+    if passeerdatum:
+        logger.info("Passeerdatum voor restant-berekeningen: %s", passeerdatum)
 
     had_bestaande = len(bestaande) > 0
 
@@ -1333,21 +1336,22 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
         rvp_maanden = int(rvp_jaren * 12) if rvp_jaren else 120
 
         # Restant waarden berekenen voor bestaand/meenemen leningdelen
+        # Referentiedatum = passeerdatum (of vandaag als fallback)
         restant_rvp = None
         restant_looptijd = None
         restant_aftrekbaar = None
         if herkomst in ("bestaand", "meenemen"):
             ingangsdatum_str = str(deel.get("ingangsdatum") or "").strip()
             if ingangsdatum_str and rvp_jaren:
-                restant_rvp = _bereken_restant_rvp(ingangsdatum_str, rvp_jaren)
+                restant_rvp = _bereken_restant_rvp(ingangsdatum_str, rvp_jaren, passeerdatum)
             # Restant looptijd uit einddatum
             einddatum_str = str(deel.get("einddatum") or "").strip()
             if einddatum_str:
-                restant_looptijd = _bereken_restant_looptijd(einddatum_str)
+                restant_looptijd = _bereken_restant_looptijd(einddatum_str, passeerdatum)
             # Restant renteaftrek uit renteAftrekTot
             aftrek_tot_str = str(deel.get("renteAftrekTot") or deel.get("renteaftrekTot") or "").strip()
             if aftrek_tot_str:
-                restant_aftrekbaar = _bereken_restant_aftrekbaar(aftrek_tot_str)
+                restant_aftrekbaar = _bereken_restant_aftrekbaar(aftrek_tot_str, passeerdatum)
 
         # Box: "box1" of "box3"
         box_raw = str(deel.get("box") or "box1").lower()

@@ -307,7 +307,7 @@ def build_financing_section(
     if has_meeneem:
         footnotes.append("*betreft een meeneemhypotheek")
     if has_restant:
-        footnotes.append("Looptijd, rentevast en aftrekbaar betreffen restant vanaf heden")
+        footnotes.append("Looptijd, rentevast en aftrekbaar betreffen restant vanaf passeerdatum")
 
     constructie_sub = {
         "subtitle": "Hypotheekconstructie",
