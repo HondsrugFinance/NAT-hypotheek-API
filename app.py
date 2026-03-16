@@ -22,6 +22,12 @@ import pdf_generator
 import graph_client
 import email_templates
 
+# --- Fiscale defaults laden uit config (centraal beheer voor jaarwisseling) ---
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(_BASE_DIR, 'config', 'fiscaal.json'), 'r', encoding='utf-8') as _f:
+    _FISCAAL_CONFIG = json.load(_f)
+_FISCAAL_DEFAULTS = _FISCAAL_CONFIG["defaults"]
+
 # --- Logging ---
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -133,13 +139,13 @@ VALID_AFLOS_TYPES = ["Annuïteit", "Lineair", "Aflosvrij", "Spaarhypotheek"]
 class HypotheekDeel(BaseModel):
     """Hypotheek deel input met invoercontrole"""
     aflos_type: str = "Annuïteit"
-    org_lpt: int = Field(default=360, ge=1, le=600)
-    rest_lpt: int = Field(default=360, ge=1, le=600)
+    org_lpt: int = Field(default=_FISCAAL_DEFAULTS.get("c_lpt", 360), ge=1, le=600)
+    rest_lpt: int = Field(default=_FISCAAL_DEFAULTS.get("c_lpt", 360), ge=1, le=600)
     hoofdsom_box1: float = Field(default=0, ge=0)
     hoofdsom_box3: float = Field(default=0, ge=0)
-    rvp: int = Field(default=120, ge=0, le=600)
+    rvp: int = Field(default=_FISCAAL_DEFAULTS.get("c_rvp_toets_rente", 120), ge=0, le=600)
     inleg_overig: float = Field(default=0, ge=0)
-    werkelijke_rente: float = Field(default=0.05, ge=0, le=0.20)
+    werkelijke_rente: float = Field(default=_FISCAAL_DEFAULTS.get("c_toets_rente", 0.05), ge=0, le=0.20)
 
     @field_validator("aflos_type")
     @classmethod
@@ -192,15 +198,15 @@ class CalculateRequest(BaseModel):
     gewijzigd_hoofd_inkomen_aow2: Optional[str] = None
     inkomen_overige_aanvragers_min2: float = Field(default=0, ge=0, le=10_000_000)
 
-    # Constanten (optioneel overschrijven)
-    c_toets_rente: float = Field(default=0.05, ge=0, le=0.20)
-    c_actuele_10jr_rente: float = Field(default=0.05, ge=0, le=0.20)
-    c_rvp_toets_rente: int = Field(default=120, ge=0, le=600)
-    c_factor_2e_inkomen: float = Field(default=1.0, ge=0, le=2.0)
-    c_lpt: int = Field(default=360, ge=1, le=600)
-    c_alleen_grens_o: float = Field(default=30000, ge=0)
-    c_alleen_grens_b: float = Field(default=29000, ge=0)
-    c_alleen_factor: float = Field(default=17000, ge=0)
+    # Constanten (optioneel overschrijven — defaults uit config/fiscaal.json)
+    c_toets_rente: float = Field(default=_FISCAAL_DEFAULTS.get("c_toets_rente", 0.05), ge=0, le=0.20)
+    c_actuele_10jr_rente: float = Field(default=_FISCAAL_DEFAULTS.get("c_actuele_10jr_rente", 0.05), ge=0, le=0.20)
+    c_rvp_toets_rente: int = Field(default=_FISCAAL_DEFAULTS.get("c_rvp_toets_rente", 120), ge=0, le=600)
+    c_factor_2e_inkomen: float = Field(default=_FISCAAL_DEFAULTS.get("c_factor_2e_inkomen", 1.0), ge=0, le=2.0)
+    c_lpt: int = Field(default=_FISCAAL_DEFAULTS.get("c_lpt", 360), ge=1, le=600)
+    c_alleen_grens_o: float = Field(default=_FISCAAL_DEFAULTS.get("c_alleen_grens_o", 30000), ge=0)
+    c_alleen_grens_b: float = Field(default=_FISCAAL_DEFAULTS.get("c_alleen_grens_b", 29000), ge=0)
+    c_alleen_factor: float = Field(default=_FISCAAL_DEFAULTS.get("c_alleen_factor", 17000), ge=0)
 
     @field_validator("alleenstaande")
     @classmethod
@@ -888,13 +894,13 @@ import risk_scenarios
 class RiskHypotheekDeel(BaseModel):
     """Hypotheekdeel met rente_aftrekbaar_tot voor risk scenarios."""
     aflos_type: str = "Annuïteit"
-    org_lpt: int = Field(default=360, ge=1, le=600)
-    rest_lpt: int = Field(default=360, ge=1, le=600)
+    org_lpt: int = Field(default=_FISCAAL_DEFAULTS.get("c_lpt", 360), ge=1, le=600)
+    rest_lpt: int = Field(default=_FISCAAL_DEFAULTS.get("c_lpt", 360), ge=1, le=600)
     hoofdsom_box1: float = Field(default=0, ge=0)
     hoofdsom_box3: float = Field(default=0, ge=0)
-    rvp: int = Field(default=120, ge=0, le=600)
+    rvp: int = Field(default=_FISCAAL_DEFAULTS.get("c_rvp_toets_rente", 120), ge=0, le=600)
     inleg_overig: float = Field(default=0, ge=0)
-    werkelijke_rente: float = Field(default=0.05, ge=0, le=0.20)
+    werkelijke_rente: float = Field(default=_FISCAAL_DEFAULTS.get("c_toets_rente", 0.05), ge=0, le=0.20)
     rente_aftrekbaar_tot: Optional[str] = None  # YYYY-MM-DD
 
     @field_validator("aflos_type")
@@ -984,7 +990,7 @@ class RiskScenariosRequest(BaseModel):
     arbeidsverleden_vanaf2016_boven10_partner: int = Field(default=0, ge=0, le=20)
 
     # Berekening parameters
-    toetsrente: float = Field(default=0.05, ge=0, le=0.20)
+    toetsrente: float = Field(default=_FISCAAL_DEFAULTS.get("c_toets_rente", 0.05), ge=0, le=0.20)
     geadviseerd_hypotheekbedrag: float = Field(default=0, ge=0)
 
     # Woning / verplichtingen

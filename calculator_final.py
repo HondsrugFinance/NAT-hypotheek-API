@@ -26,6 +26,9 @@ with open(os.path.join(BASE_DIR, 'config', 'energielabel.json'), 'r', encoding='
 with open(os.path.join(BASE_DIR, 'config', 'studielening.json'), 'r', encoding='utf-8') as f:
     STUDIELENING_CONFIG = json.load(f)
 
+with open(os.path.join(BASE_DIR, 'config', 'fiscaal.json'), 'r', encoding='utf-8') as f:
+    _FISCAAL_DEFAULTS = json.load(f)["defaults"]
+
 @dataclass
 class Annuitair:
     max_box1: float
@@ -182,15 +185,15 @@ def calculate_c73(toets_rente: float, studievoorschot: float) -> float:
 def calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
     """Main calculation - Excel exact"""
 
-    # Constanten
-    c_toets_rente = inputs.get('c_toets_rente', 0.05)
-    c_actuele_10jr_rente = inputs.get('c_actuele_10jr_rente', 0.05)
-    c_rvp_toets_rente = inputs.get('c_rvp_toets_rente', 120)
-    c_factor_2e_inkomen = inputs.get('c_factor_2e_inkomen', 1.0)
-    c_lpt = inputs.get('c_lpt', 360)
-    c_alleen_grens_o = inputs.get('c_alleen_grens_o', 30000)
-    c_alleen_grens_b = inputs.get('c_alleen_grens_b', 29000)
-    c_alleen_factor = inputs.get('c_alleen_factor', 17000)
+    # Constanten (defaults uit config/fiscaal.json)
+    c_toets_rente = inputs.get('c_toets_rente', _FISCAAL_DEFAULTS["c_toets_rente"])
+    c_actuele_10jr_rente = inputs.get('c_actuele_10jr_rente', _FISCAAL_DEFAULTS["c_actuele_10jr_rente"])
+    c_rvp_toets_rente = inputs.get('c_rvp_toets_rente', _FISCAAL_DEFAULTS["c_rvp_toets_rente"])
+    c_factor_2e_inkomen = inputs.get('c_factor_2e_inkomen', _FISCAAL_DEFAULTS["c_factor_2e_inkomen"])
+    c_lpt = inputs.get('c_lpt', _FISCAAL_DEFAULTS["c_lpt"])
+    c_alleen_grens_o = inputs.get('c_alleen_grens_o', _FISCAAL_DEFAULTS["c_alleen_grens_o"])
+    c_alleen_grens_b = inputs.get('c_alleen_grens_b', _FISCAAL_DEFAULTS["c_alleen_grens_b"])
+    c_alleen_factor = inputs.get('c_alleen_factor', _FISCAAL_DEFAULTS["c_alleen_factor"])
 
     # Inputs
     hoofd_inkomen_aanvrager = inputs.get('hoofd_inkomen_aanvrager', 0)

@@ -72,6 +72,8 @@ NAT-hypotheek-API/
 │   ├── lovable-prompt-g3-dialog-fix.md     # Dialog vereenvoudigen (vervangen door G4)
 │   ├── lovable-prompt-g4-rapport-generatie.md  # Resultaten opslaan + rapportgeneratie flow
 │   ├── lovable-prompt-g5-rapport-compleet.md   # Ontbrekende secties + risicoscenario's verplicht
+│   ├── lovable-prompt-h1-backend-adviesrapport.md  # V2: backend-driven adviesrapport
+│   ├── lovable-prompt-i1-advies-pagina.md      # Adviesrapport als pagina met preview + text editing
 │   ├── lovable-prompt-stap3.md
 │   ├── lovable-prompt-stap4.md
 │   ├── lovable-prompt-stap6-2fa.md
@@ -94,6 +96,27 @@ NAT-hypotheek-API/
 │   ├── Rapport-Advies-hypotheeknormen-2026.pdf
 │   ├── Bijlage-financieringslastnormen-2026.xlsx
 │   └── NAT-sheet 2026.xlsm
+│
+├── adviesrapport_v2/           # Backend-driven adviesrapport (V2)
+│   ├── __init__.py
+│   ├── route.py                # POST /adviesrapport-pdf-v2, POST /adviesrapport-preview-v2
+│   ├── schemas.py              # AdviesrapportV2Request, AdviesrapportOptions, SectionTextOverride
+│   ├── supabase_client.py      # Supabase data lezen (dossiers, aanvragen)
+│   ├── field_mapper.py         # Invoer JSONB → genormaliseerde dataclasses
+│   ├── report_orchestrator.py  # Orkestratie: normaliseer → bereken → bouw secties → PDF
+│   ├── formatters.py           # Bedrag/percentage/datum formatting
+│   ├── risk_scenarios.py       # Pensioen, overlijden, AO, WW, relatiebeëindiging berekeningen
+│   └── section_builders/       # Per-sectie bouwers
+│       ├── summary.py          # Samenvatting + scenario checks
+│       ├── client_profile.py   # Klantprofiel + risicobereidheid
+│       ├── current_situation.py # Huidige situatie
+│       ├── financing.py        # Financieringsopzet + hypotheekconstructie + elders
+│       ├── retirement.py       # Pensioen
+│       ├── risk_death.py       # Overlijden
+│       ├── risk_disability.py  # Arbeidsongeschiktheid
+│       ├── risk_unemployment.py # Werkloosheid
+│       ├── risk_relationship.py # Relatiebeëindiging
+│       └── closing.py          # Aandachtspunten + disclaimer
 │
 ├── monthly_costs/              # Netto maandlasten calculator (package)
 │   ├── config.py               # RULES_DIR, DEFAULT_FISCAL_YEAR
@@ -175,7 +198,9 @@ Bewerkbare configs: `fiscaal-frontend`, `fiscaal`, `geldverstrekkers`
 ### PDF Generatie
 ```
 POST /samenvatting-pdf
-POST /adviesrapport-pdf  (geen API-key vereist)
+POST /adviesrapport-pdf       (V1: frontend-driven, Lovable bouwt secties)
+POST /adviesrapport-pdf-v2    (V2: backend-driven, alleen dossier_id + aanvraag_id)
+POST /adviesrapport-preview-v2  (JSON preview: bewerkbare teksten + per-persoon scenario-bedragen)
 ```
 
 ### E-mail Draft (API-key vereist)
@@ -202,6 +227,8 @@ GET /health/deep
 | `PUT /config/*` | 5/minuut |
 | `POST /samenvatting-pdf` | 30/minuut |
 | `POST /adviesrapport-pdf` | 10/minuut |
+| `POST /adviesrapport-pdf-v2` | 30/minuut |
+| `POST /adviesrapport-preview-v2` | 30/minuut |
 | `POST /email/draft-samenvatting` | 10/minuut |
 
 ---
@@ -690,12 +717,14 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 | # | Item | Waar | Status |
 |---|------|------|--------|
 | C4 | Hypotheekrentes handmatig beheren | Supabase + Lovable | Te doen |
-| D2 | Adviesrapport PDF — backend endpoint | NAT API | Gereed (POST /adviesrapport-pdf) |
+| D2 | Adviesrapport PDF — backend endpoint V1 | NAT API | Gereed (POST /adviesrapport-pdf) |
 | D2b | Adviesrapport PDF — SVG grafieken + risico-secties | NAT API | Gereed (chart_generator.py) |
 | D2c | Adviesrapport PDF — klantprofiel (kennis/ervaring/risicobereidheid) | NAT API | Gereed |
-| G1 | Adviesrapport PDF — Lovable frontend | Lovable | Toegepast |
+| H1 | Adviesrapport V2 — backend-driven (dossier_id + aanvraag_id) | NAT API | Gereed (POST /adviesrapport-pdf-v2) |
+| I1 | Adviesrapport — preview endpoint + text_overrides | NAT API | Gereed (POST /adviesrapport-preview-v2) |
+| I1 | Adviesrapport — pagina met uitgangspunten + adviesuitkomsten | Lovable | Prompt geschreven (lovable-prompt-i1) |
+| G1 | Adviesrapport PDF — Lovable frontend V1 | Lovable | Toegepast |
 | G4 | Adviesrapport — resultaten opslaan + rapportgeneratie | Lovable | Toegepast |
-| G5 | Adviesrapport — ontbrekende secties + risicoscenario's | Lovable | Prompt geschreven, nog niet toegepast |
 | C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
 | — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
 

@@ -7,3 +7,12 @@ __pycache__/
 dist/
 build/
 reference/
+
+# Test artefacten (gegenereerde PDF's, HTML's, screenshots)
+test-*.pdf
+test-*.html
+test_*.pdf
+_input_page_*.png
+_ul
+Adviesrapporten/
+templates/test-template-render.html
