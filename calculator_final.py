@@ -275,6 +275,20 @@ def calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         )
         gewogen_rente = numerator / denominator if denominator > 0 else c_toets_rente
 
+    # Gewogen werkelijke rente (voor UI weergave, gewogen op bedrag × rest_lpt)
+    if som_box1 == 0 and som_box3 == 0:
+        gewogen_werkelijke_rente = 0.0
+    else:
+        num_werk = sum(
+            d['werkelijke_rente'] * (d['hoofdsom_box1'] + d['hoofdsom_box3']) * d['rest_lpt']
+            for d in delen_processed
+        )
+        den_werk = sum(
+            (d['hoofdsom_box1'] + d['hoofdsom_box3']) * d['rest_lpt']
+            for d in delen_processed
+        )
+        gewogen_werkelijke_rente = num_werk / den_werk if den_werk > 0 else 0.0
+
     # T-Y kolommen - Rente lasten
     rente_betalingen = []
     for d in delen_processed:
@@ -365,6 +379,11 @@ def calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         )
         scenario2 = scenario2_result['scenario']
         debug2 = scenario2_result['debug']
+
+    # Voeg gewogen werkelijke rente toe aan debug (zelfde voor beide scenario's)
+    debug1['gewogen_werkelijke_rente'] = gewogen_werkelijke_rente
+    if debug2:
+        debug2['gewogen_werkelijke_rente'] = gewogen_werkelijke_rente
 
     return {
         'scenario1': asdict(scenario1) if isinstance(scenario1, Scenario) else scenario1,

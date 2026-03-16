@@ -15,6 +15,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import date
+from decimal import Decimal
 import calculator_final
 import aow_calculator
 import pdf_generator
@@ -322,6 +323,76 @@ async def calculate(
 # Rate limit decorator alleen als slowapi beschikbaar is
 if RATE_LIMITING_ENABLED:
     calculate = limiter.limit("30/minute")(calculate)
+
+
+# --- Aflosschema endpoint ---
+
+class AflosschemaLoanPart(BaseModel):
+    id: str = Field(..., description="Uniek ID van het leningdeel")
+    principal: float = Field(..., gt=0, description="Hoofdsom in euro's")
+    interest_rate: float = Field(..., ge=0, le=20, description="Jaarrente als percentage (bijv. 4.5)")
+    term_years: int = Field(..., ge=1, le=50, description="Looptijd in jaren")
+    loan_type: Literal["annuity", "linear", "interest_only"] = Field(..., description="Aflosvorm")
+
+
+class AflosschemaRequest(BaseModel):
+    loan_parts: List[AflosschemaLoanPart] = Field(..., min_length=1, max_length=10)
+
+
+@app.post("/aflosschema")
+async def aflosschema(request_body: AflosschemaRequest):
+    """
+    Genereer een volledig aflosschema per leningdeel.
+
+    Retourneert per leningdeel een maandelijks schema (rente, aflossing, restschuld)
+    en totalen over de gehele looptijd.
+    """
+    from monthly_costs.domain.loan_calc import get_calculator
+
+    result_parts = []
+
+    for part in request_body.loan_parts:
+        calc = get_calculator(part.loan_type)
+        principal = Decimal(str(part.principal))
+        annual_rate = Decimal(str(part.interest_rate)) / 100
+        total_months = part.term_years * 12
+
+        schedule = []
+        total_interest = Decimal("0")
+        total_principal_paid = Decimal("0")
+
+        for month in range(1, total_months + 1):
+            payment = calc.calculate_month(principal, annual_rate, part.term_years, month)
+            schedule.append({
+                "month": month,
+                "interest": float(payment.interest_payment),
+                "principal_payment": float(payment.principal_payment),
+                "gross_payment": float(payment.gross_payment),
+                "remaining_principal": float(payment.remaining_principal),
+            })
+            total_interest += payment.interest_payment
+            total_principal_paid += payment.principal_payment
+
+        result_parts.append({
+            "id": part.id,
+            "loan_type": part.loan_type,
+            "principal": part.principal,
+            "interest_rate": part.interest_rate,
+            "term_years": part.term_years,
+            "total_months": total_months,
+            "schedule": schedule,
+            "totals": {
+                "total_interest": float(total_interest),
+                "total_principal": float(total_principal_paid),
+                "total_payments": float(total_interest + total_principal_paid),
+            },
+        })
+
+    return {"loan_parts": result_parts}
+
+
+if RATE_LIMITING_ENABLED:
+    aflosschema = limiter.limit("30/minute")(aflosschema)
 
 
 @app.get("/health")
