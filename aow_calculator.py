@@ -74,16 +74,21 @@ def bepaal_aow_categorie(geboortedatum: date, peildatum: date = None) -> dict:
         peildatum = date.today()
 
     aow_datum = bereken_aow_datum(geboortedatum)
-    verschil = relativedelta(aow_datum, peildatum)
-    jaren_tot_aow = verschil.years + verschil.months / 12
+
+    # Exacte datumvergelijking (niet float-benadering)
+    grens_10_jaar = peildatum + relativedelta(years=10)
 
     if aow_datum <= peildatum:
         categorie = "AOW_BEREIKT"
         jaren_tot_aow = 0
-    elif jaren_tot_aow <= 10:
+    elif aow_datum <= grens_10_jaar:
         categorie = "BINNEN_10_JAAR"
+        verschil = relativedelta(aow_datum, peildatum)
+        jaren_tot_aow = verschil.years + verschil.months / 12 + verschil.days / 365.25
     else:
         categorie = "MEER_DAN_10_JAAR"
+        verschil = relativedelta(aow_datum, peildatum)
+        jaren_tot_aow = verschil.years + verschil.months / 12 + verschil.days / 365.25
 
     return {
         "categorie": categorie,
