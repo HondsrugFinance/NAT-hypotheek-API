@@ -88,6 +88,9 @@ def build_financing_section(
 
     if fin.is_wijziging:
         # Wijziging volgorde: investering → kosten → custom (matcht Lovable)
+        # Bij uitkoop: "Uitkoop partner" altijd als eerste post
+        if fin.is_uitkopen and fin.uitkoop_partner > 0:
+            opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
         # Investering items
         if fin.verbouwing > 0:
             opzet_rows.append({"label": "Verbouwing", "value": format_bedrag(fin.verbouwing)})
@@ -104,7 +107,8 @@ def build_financing_section(
             opzet_rows.append({"label": "Consumptief", "value": format_bedrag(fin.consumptief)})
         if fin.boeterente > 0:
             opzet_rows.append({"label": "Boeterente", "value": format_bedrag(fin.boeterente)})
-        if fin.uitkoop_partner > 0:
+        # Uitkoop partner (niet-uitkoop flows: normaal in de lijst)
+        if not fin.is_uitkopen and fin.uitkoop_partner > 0:
             opzet_rows.append({"label": "Uitkoop partner", "value": format_bedrag(fin.uitkoop_partner)})
         # Extra posten aankoop/investering (custom)
         for ep in fin.extra_posten_aankoop:

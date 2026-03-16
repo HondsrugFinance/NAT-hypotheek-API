@@ -327,6 +327,11 @@ class NormalizedFinanciering:
         """True als de doelstelling oversluiten is."""
         return "oversluiten" in self.doelstelling.lower()
 
+    @property
+    def is_uitkopen(self) -> bool:
+        """True als de doelstelling partner uitkopen is."""
+        return "uitkop" in self.doelstelling.lower()
+
 
 @dataclass
 class NormalizedDossierData:
@@ -1173,20 +1178,34 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
 def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLeningdeel]:
     """Extraheer leningdelen uit aanvraag.data.samenstellenHypotheek.
 
-    Combineert meenemenLeningdelen (bestaande) + nieuweLeningdelen.
+    Combineert bestaandeLeningdelen + meenemenLeningdelen + nieuweLeningdelen
+    + leningdelenElders (als meenemenInToetsing=true).
+    Deduplicatie op basis van `id` veld (bestaande heeft prioriteit boven meenemen).
     Structuur per deel: { bedrag, aflosvorm, rentePercentage, looptijd, box, renteVastPeriode }
     """
     samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
+    bestaande = samenstellen.get("bestaandeLeningdelen") or []
     meenemen = samenstellen.get("meenemenLeningdelen") or []
     nieuw = samenstellen.get("nieuweLeningdelen") or []
+    elders = [d for d in (samenstellen.get("leningdelenElders") or [])
+              if d.get("meenemenInToetsing")]
 
-    alle_delen = meenemen + nieuw
+    # Dedup op id: bestaande > meenemen > nieuw > elders
+    seen_ids: set[str] = set()
+    alle_delen = []
+    for deel in bestaande + meenemen + nieuw + elders:
+        deel_id = deel.get("id", "")
+        if deel_id and deel_id in seen_ids:
+            continue
+        if deel_id:
+            seen_ids.add(deel_id)
+        alle_delen.append(deel)
 
     if not alle_delen:
         return []
 
-    logger.info("Leningdelen (aanvraag): %d meenemen + %d nieuw = %d",
-                len(meenemen), len(nieuw), len(alle_delen))
+    logger.info("Leningdelen (aanvraag): %d bestaande + %d meenemen + %d nieuw + %d elders = %d (na dedup)",
+                len(bestaande), len(meenemen), len(nieuw), len(elders), len(alle_delen))
 
     result = []
     for deel in alle_delen:
