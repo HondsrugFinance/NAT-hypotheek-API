@@ -779,6 +779,15 @@
       {% endfor %}
       {% endif %}
 
+      {# Voetnoten onder tabel #}
+      {% if sub.footnotes %}
+      <div style="margin-top:4px; font-size:7.5pt; color:#5C4A6E; font-style:italic;">
+        {% for fn in sub.footnotes %}
+        <div>{{ fn }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
     </div>
     {% endfor %}
   </div>

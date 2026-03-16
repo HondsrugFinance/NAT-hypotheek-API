@@ -81,6 +81,8 @@ class NormalizedLeningdeel:
     rvp: int = 120                  # Rentevaste periode in maanden
     inleg_overig: float = 0
     is_overbrugging: bool = False
+    herkomst: str = "nieuw"          # "nieuw", "meenemen", "bestaand", "elders"
+    meenemen_in_toetsing: bool = True  # Alleen relevant voor herkomst="elders"
 
     @property
     def totaal_bedrag(self) -> float:
@@ -379,19 +381,30 @@ class NormalizedDossierData:
     # Berekende waarden (afgeleid)
     @property
     def hypotheek_bedrag(self) -> float:
-        """Som van alle leningdelen (excl. overbrugging)."""
+        """Som van leningdelen bij de hypotheekverstrekker (excl. overbrugging en elders)."""
         return sum(
-            d.totaal_bedrag for d in self.leningdelen if not d.is_overbrugging
+            d.totaal_bedrag for d in self.leningdelen
+            if not d.is_overbrugging and d.herkomst != "elders"
         )
 
     @property
+    def hypotheek_bedrag_incl_elders(self) -> float:
+        """Hypotheekbedrag inclusief leningdeel elders (meenemen_in_toetsing=True)."""
+        base = self.hypotheek_bedrag
+        base += sum(
+            d.totaal_bedrag for d in self.leningdelen
+            if d.herkomst == "elders" and d.meenemen_in_toetsing
+        )
+        return base
+
+    @property
     def totale_hypotheekschuld(self) -> float:
-        """Totale hypotheekschuld.
+        """Totale hypotheekschuld inclusief elders (meenemen_in_toetsing=True).
 
         Als bestaande_in_leningdelen=True: hypotheek_bedrag is al compleet.
         Anders bij wijziging: bestaande hypotheek apart erbij tellen.
         """
-        base = self.hypotheek_bedrag
+        base = self.hypotheek_bedrag_incl_elders
         if self.financiering.is_wijziging and not self.bestaande_in_leningdelen:
             if self.financiering.is_oversluiten:
                 totaal_bestaand = sum(h.hoofdsom for h in self.bestaande_hypotheken)
@@ -406,8 +419,12 @@ class NormalizedDossierData:
 
     @property
     def leningdelen_voor_api(self) -> list[NormalizedLeningdeel]:
-        """Leningdelen zonder overbrugging — geldig voor API calls."""
-        return [d for d in self.leningdelen if not d.is_overbrugging]
+        """Leningdelen voor API calls: excl. overbrugging en elders met meenemen=False."""
+        return [
+            d for d in self.leningdelen
+            if not d.is_overbrugging
+            and (d.herkomst != "elders" or d.meenemen_in_toetsing)
+        ]
 
     @property
     def inkomen_aanvrager_huidig(self) -> float:
@@ -1193,30 +1210,40 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
     bestaande = samenstellen.get("bestaandeLeningdelen") or []
     meenemen = samenstellen.get("meenemenLeningdelen") or []
     nieuw = samenstellen.get("nieuweLeningdelen") or []
-    elders = [d for d in (samenstellen.get("leningdelenElders") or [])
-              if d.get("meenemenInToetsing")]
+    all_elders = samenstellen.get("leningdelenElders") or []
 
     had_bestaande = len(bestaande) > 0
 
+    # Bouw geordende lijst met herkomst per deel
+    ordered: list[tuple[dict, str]] = []
+    for d in bestaande:
+        ordered.append((d, "bestaand"))
+    for d in meenemen:
+        ordered.append((d, "meenemen"))
+    for d in nieuw:
+        ordered.append((d, "nieuw"))
+    for d in all_elders:
+        ordered.append((d, "elders"))
+
     # Dedup op id: bestaande > meenemen > nieuw > elders
     seen_ids: set[str] = set()
-    alle_delen = []
-    for deel in bestaande + meenemen + nieuw + elders:
+    alle_delen: list[tuple[dict, str]] = []
+    for deel, herkomst in ordered:
         deel_id = deel.get("id", "")
         if deel_id and deel_id in seen_ids:
             continue
         if deel_id:
             seen_ids.add(deel_id)
-        alle_delen.append(deel)
+        alle_delen.append((deel, herkomst))
 
     if not alle_delen:
         return [], had_bestaande
 
     logger.info("Leningdelen (aanvraag): %d bestaande + %d meenemen + %d nieuw + %d elders = %d (na dedup)",
-                len(bestaande), len(meenemen), len(nieuw), len(elders), len(alle_delen))
+                len(bestaande), len(meenemen), len(nieuw), len(all_elders), len(alle_delen))
 
     result = []
-    for deel in alle_delen:
+    for deel, herkomst in alle_delen:
         raw_aflosvorm = str(deel.get("aflosvorm") or "annuiteit")
         rente_raw = deel.get("rentePercentage") or deel.get("rentepercentage")
         looptijd = int(_to_float(deel.get("looptijd"), 360))
@@ -1230,6 +1257,11 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
         is_box3 = "3" in box_raw
         bedrag = _to_float(deel.get("bedrag"))
 
+        # meenemenInToetsing toggle (alleen relevant voor elders)
+        meenemen_in_toetsing = True
+        if herkomst == "elders":
+            meenemen_in_toetsing = bool(deel.get("meenemenInToetsing", False))
+
         ld = NormalizedLeningdeel(
             aflos_type=_map_aflosvorm(raw_aflosvorm),
             bedrag_box1=0 if is_box3 else bedrag,
@@ -1238,7 +1270,9 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
             org_lpt=looptijd,
             rest_lpt=looptijd,
             rvp=rvp_maanden,
-            is_overbrugging=False,  # Aanvraag leningdelen zijn nooit overbrugging
+            is_overbrugging=False,
+            herkomst=herkomst,
+            meenemen_in_toetsing=meenemen_in_toetsing,
         )
         result.append(ld)
 

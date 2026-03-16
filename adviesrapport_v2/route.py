@@ -189,6 +189,8 @@ async def debug_dossier_data(
                         "aflosvorm": ld.aflosvorm_display,
                         "rente": ld.werkelijke_rente,
                         "looptijd_mnd": ld.org_lpt,
+                        "herkomst": ld.herkomst,
+                        "meenemen_in_toetsing": ld.meenemen_in_toetsing,
                     }
                     for ld in data.leningdelen
                 ],
