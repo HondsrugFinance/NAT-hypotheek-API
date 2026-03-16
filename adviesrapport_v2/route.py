@@ -180,6 +180,8 @@ async def debug_dossier_data(
                 "is_wijziging": data.financiering.is_wijziging,
                 "doelstelling": data.financiering.doelstelling,
                 "is_oversluiten": data.financiering.is_oversluiten,
+                "is_uitkopen": data.financiering.is_uitkopen,
+                "bestaande_in_leningdelen": data.bestaande_in_leningdelen,
                 "leningdelen_count": len(data.leningdelen),
                 "leningdelen": [
                     {

@@ -371,6 +371,11 @@ class NormalizedDossierData:
     werkgever_aanvrager: Optional[NormalizedWerkgever] = None
     werkgever_partner: Optional[NormalizedWerkgever] = None
 
+    # Flag: bestaande leningdelen zitten al IN data.leningdelen
+    # (d.w.z. bestaandeLeningdelen waren aanwezig in samenstellenHypotheek).
+    # Als True → NIET apart fin.koopsom optellen bij totale schuld/pensioen.
+    bestaande_in_leningdelen: bool = False
+
     # Berekende waarden (afgeleid)
     @property
     def hypotheek_bedrag(self) -> float:
@@ -381,21 +386,17 @@ class NormalizedDossierData:
 
     @property
     def totale_hypotheekschuld(self) -> float:
-        """Totale hypotheekschuld incl. bestaande hypotheek bij wijziging.
+        """Totale hypotheekschuld.
 
-        Bij verhoging: nieuwe leningdelen + bestaande hypotheek die BLIJFT.
-        Bij oversluiten: nieuwe leningdelen + BEHOUDEN hypotheken (excl. overgeslagen).
-        Bij aankoop: zelfde als hypotheek_bedrag.
+        Als bestaande_in_leningdelen=True: hypotheek_bedrag is al compleet.
+        Anders bij wijziging: bestaande hypotheek apart erbij tellen.
         """
         base = self.hypotheek_bedrag
-        if self.financiering.is_wijziging:
+        if self.financiering.is_wijziging and not self.bestaande_in_leningdelen:
             if self.financiering.is_oversluiten:
-                # Oversluiten: koopsom (huidigeHypotheek) wordt VERVANGEN
-                # door de nieuwe leningdelen. Behouden hypotheken erbij tellen.
                 totaal_bestaand = sum(h.hoofdsom for h in self.bestaande_hypotheken)
                 base += max(0, totaal_bestaand - self.financiering.koopsom)
             else:
-                # Verhogen/uitkopen: bestaande hypotheek BLIJFT staan
                 base += self.financiering.koopsom
         return base
 
@@ -1175,13 +1176,18 @@ def _extract_financiering_from_wijziging(aanvraag_data: dict) -> NormalizedFinan
     )
 
 
-def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLeningdeel]:
+def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["NormalizedLeningdeel"], bool]:
     """Extraheer leningdelen uit aanvraag.data.samenstellenHypotheek.
 
     Combineert bestaandeLeningdelen + meenemenLeningdelen + nieuweLeningdelen
     + leningdelenElders (als meenemenInToetsing=true).
     Deduplicatie op basis van `id` veld (bestaande heeft prioriteit boven meenemen).
     Structuur per deel: { bedrag, aflosvorm, rentePercentage, looptijd, box, renteVastPeriode }
+
+    Returns:
+        (leningdelen, had_bestaande): tuple met de lijst EN een flag die aangeeft
+        of bestaandeLeningdelen aanwezig waren (= bestaande hypotheek zit al IN de
+        leningdelen, dus NIET apart optellen via fin.koopsom).
     """
     samenstellen = aanvraag_data.get("samenstellenHypotheek") or {}
     bestaande = samenstellen.get("bestaandeLeningdelen") or []
@@ -1189,6 +1195,8 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLe
     nieuw = samenstellen.get("nieuweLeningdelen") or []
     elders = [d for d in (samenstellen.get("leningdelenElders") or [])
               if d.get("meenemenInToetsing")]
+
+    had_bestaande = len(bestaande) > 0
 
     # Dedup op id: bestaande > meenemen > nieuw > elders
     seen_ids: set[str] = set()
@@ -1202,7 +1210,7 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLe
         alle_delen.append(deel)
 
     if not alle_delen:
-        return []
+        return [], had_bestaande
 
     logger.info("Leningdelen (aanvraag): %d bestaande + %d meenemen + %d nieuw + %d elders = %d (na dedup)",
                 len(bestaande), len(meenemen), len(nieuw), len(elders), len(alle_delen))
@@ -1234,7 +1242,7 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> list[NormalizedLe
         )
         result.append(ld)
 
-    return result
+    return result, had_bestaande
 
 
 def _extract_verplichtingen_from_aanvraag(aanvraag_data: dict) -> dict:
@@ -2056,10 +2064,12 @@ def extract_dossier_data(
             partner = _extract_persoon_from_dossier(invoer, "Partner", contact_gegevens)
 
     # ── Leningdelen ──
+    had_bestaande = False
     if has_aanvraag:
-        leningdelen = _extract_leningdelen_from_aanvraag(aanvraag_data)
+        leningdelen, had_bestaande = _extract_leningdelen_from_aanvraag(aanvraag_data)
     if not has_aanvraag or not leningdelen:
         # Fallback naar dossier scenario1
+        had_bestaande = False
         scenario_kolom = dossier.get("scenario1")
         if isinstance(scenario_kolom, str):
             try:
@@ -2246,13 +2256,14 @@ def extract_dossier_data(
         bestaande_hypotheken=bestaande_hypotheken,
         werkgever_aanvrager=werkgever_aanvrager,
         werkgever_partner=werkgever_partner,
+        bestaande_in_leningdelen=had_bestaande,
     )
 
     logger.info(
         "Dossier genormaliseerd: alleenstaand=%s, leningdelen=%d, hypotheek=%.0f, "
-        "bron=%s",
+        "bestaande_in_ld=%s, bron=%s",
         alleenstaand, len(leningdelen), data.hypotheek_bedrag,
-        "aanvraag" if has_aanvraag else "dossier",
+        had_bestaande, "aanvraag" if has_aanvraag else "dossier",
     )
 
     return data

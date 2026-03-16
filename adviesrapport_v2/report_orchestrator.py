@@ -170,9 +170,9 @@ def generate_report(
                     for ld in data.leningdelen_voor_api
                 )
                 # Bij wijziging: bestaande hypotheek(en) erbij tellen
-                if data.financiering.is_wijziging:
+                # NIET als bestaande_in_leningdelen=True (dan zitten ze al in leningdelen)
+                if data.financiering.is_wijziging and not data.bestaande_in_leningdelen:
                     if data.financiering.is_oversluiten:
-                        # Oversluiten: koopsom wordt vervangen; behouden hyp erbij
                         totaal_bestaand = sum(h.hoofdsom for h in data.bestaande_hypotheken)
                         restschuld += max(0, totaal_bestaand - data.financiering.koopsom)
                     else:
@@ -804,7 +804,8 @@ def _build_pensioen_chart_data(
             for ld in data.leningdelen_voor_api
         )
         # Bij wijziging: bestaande hypotheek(en) erbij tellen
-        if data.financiering.is_wijziging:
+        # NIET als bestaande_in_leningdelen=True (dan zitten ze al in leningdelen)
+        if data.financiering.is_wijziging and not data.bestaande_in_leningdelen:
             if data.financiering.is_oversluiten:
                 totaal_bestaand = sum(h.hoofdsom for h in data.bestaande_hypotheken)
                 restschuld += max(0, totaal_bestaand - data.financiering.koopsom)
