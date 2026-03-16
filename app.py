@@ -340,7 +340,7 @@ class AflosschemaRequest(BaseModel):
 
 
 @app.post("/aflosschema")
-async def aflosschema(request_body: AflosschemaRequest):
+async def aflosschema(request_body: AflosschemaRequest, request: Request):
     """
     Genereer een volledig aflosschema per leningdeel.
 
