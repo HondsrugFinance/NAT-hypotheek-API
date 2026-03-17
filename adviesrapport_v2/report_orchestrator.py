@@ -776,7 +776,7 @@ def _bereken_maandlasten(data: NormalizedDossierData) -> tuple[float, float]:
                 id=f"deel_{i+1}",
                 principal=principal,
                 interest_rate=ld.werkelijke_rente * 100,  # Module verwacht percentage
-                term_years=ld.org_lpt // 12,
+                term_years=ld.org_lpt / 12,
                 loan_type=loan_type,
                 box=box,
             ))
