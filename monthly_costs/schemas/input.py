@@ -43,7 +43,7 @@ class LoanPart(BaseModel):
         le=20,
         description="Annual interest rate as percentage (e.g., 4.5 for 4.5%)",
     )
-    term_years: int = Field(..., gt=0, le=50, description="Loan term in years")
+    term_years: Decimal = Field(..., gt=0, le=50, description="Loan term in years (e.g., 21.6667 for 260 months)")
     loan_type: LoanType = Field(..., description="Type of loan repayment")
     box: Box = Field(default=Box.BOX1, description="Fiscal box (1 or 3)")
 

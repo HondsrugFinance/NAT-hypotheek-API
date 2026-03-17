@@ -22,7 +22,7 @@ class LoanCalculator(Protocol):
         self,
         principal: Decimal,
         annual_rate: Decimal,
-        term_years: int,
+        term_years: Decimal,
         month_number: int,
     ) -> MonthlyPayment:
         """Calculate payment for a specific month."""
@@ -41,11 +41,11 @@ class AnnuityCalculator:
         self,
         principal: Decimal,
         annual_rate: Decimal,
-        term_years: int,
+        term_years: Decimal,
         month_number: int,
     ) -> MonthlyPayment:
         """Calculate annuity payment for a specific month."""
-        n = term_years * 12
+        n = int(term_years * 12)
         r = annual_rate / 12
 
         # Calculate annuity (fixed monthly payment)
@@ -99,11 +99,11 @@ class LinearCalculator:
         self,
         principal: Decimal,
         annual_rate: Decimal,
-        term_years: int,
+        term_years: Decimal,
         month_number: int,
     ) -> MonthlyPayment:
         """Calculate linear payment for a specific month."""
-        n = term_years * 12
+        n = int(term_years * 12)
         monthly_principal = _round_currency(principal / n)
 
         # Remaining principal at start of this month
@@ -128,7 +128,7 @@ class InterestOnlyCalculator:
         self,
         principal: Decimal,
         annual_rate: Decimal,
-        term_years: int,
+        term_years: Decimal,
         month_number: int,
     ) -> MonthlyPayment:
         """Calculate interest-only payment."""
