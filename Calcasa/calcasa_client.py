@@ -41,12 +41,18 @@ BILLING_HOST = "https://billing.01.c.calcasa.nl"
 CLIENT_ID = "52e60157-29f3-5fc3-943f-10f081087a64"
 TOKEN_URL = f"{AUTH_HOST}/oauth2/v2.0/token"
 
+# Supabase (optioneel, voor token-persistentie)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+
 
 class CalcasaClient:
     """Client voor Calcasa Desktop Taxatie API (gRPC-Web)."""
 
     def __init__(self):
-        self.refresh_token = os.getenv("CALCASA_REFRESH_TOKEN", "")
+        # Probeer eerst Supabase, dan env var
+        self.refresh_token = self._load_token_from_supabase() or os.getenv("CALCASA_REFRESH_TOKEN", "")
         self.access_token = os.getenv("CALCASA_BEARER_TOKEN", "")
         self._client = httpx.Client(timeout=30.0, follow_redirects=True)
 
@@ -218,22 +224,87 @@ class CalcasaClient:
         return self.access_token
 
     def _save_new_refresh_token(self, token: str):
-        """Sla nieuw refresh token op in .env (roteert bij elke refresh)."""
+        """Sla nieuw refresh token op in .env + Supabase."""
+        # Lokaal: .env bestand
         env_path = Path(__file__).parent / ".env"
-        if env_path.exists():
-            content = env_path.read_text(encoding="utf-8")
-            lines = content.splitlines()
-            new_lines = []
-            found = False
-            for line in lines:
-                if line.startswith("CALCASA_REFRESH_TOKEN="):
+        try:
+            if env_path.exists():
+                content = env_path.read_text(encoding="utf-8")
+                lines = content.splitlines()
+                new_lines = []
+                found = False
+                for line in lines:
+                    if line.startswith("CALCASA_REFRESH_TOKEN="):
+                        new_lines.append(f"CALCASA_REFRESH_TOKEN={token}")
+                        found = True
+                    else:
+                        new_lines.append(line)
+                if not found:
                     new_lines.append(f"CALCASA_REFRESH_TOKEN={token}")
-                    found = True
-                else:
-                    new_lines.append(line)
-            if not found:
-                new_lines.append(f"CALCASA_REFRESH_TOKEN={token}")
-            env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        except OSError:
+            pass  # Read-only filesystem (Render)
+
+        # Supabase: persistent over redeploys
+        self._save_token_to_supabase(token)
+
+    # ─── Supabase Token Persistentie ────────────────────────────
+
+    @staticmethod
+    def _supabase_headers() -> dict | None:
+        """Supabase headers met service key. None als niet geconfigureerd."""
+        if not SUPABASE_URL or not (SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY):
+            return None
+        key = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
+        return {
+            "apikey": SUPABASE_ANON_KEY or key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+    @staticmethod
+    def _load_token_from_supabase() -> str:
+        """Lees de laatst opgeslagen refresh token uit Supabase."""
+        headers = CalcasaClient._supabase_headers()
+        if not headers:
+            return ""
+        try:
+            r = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?id=eq.1&select=refresh_token",
+                headers=headers,
+                timeout=5.0,
+            )
+            if r.status_code == 200:
+                rows = r.json()
+                if rows and rows[0].get("refresh_token"):
+                    token = rows[0]["refresh_token"]
+                    if token != "placeholder":
+                        logger.info("Calcasa refresh token geladen uit Supabase")
+                        return token
+        except Exception as e:
+            logger.debug("Supabase token laden mislukt: %s", e)
+        return ""
+
+    @staticmethod
+    def _save_token_to_supabase(token: str):
+        """Sla refresh token op in Supabase (upsert op id=1)."""
+        headers = CalcasaClient._supabase_headers()
+        if not headers:
+            return
+        try:
+            r = httpx.patch(
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?id=eq.1",
+                headers=headers,
+                json={"refresh_token": token, "updated_at": "now()"},
+                timeout=5.0,
+            )
+            if r.status_code in (200, 204):
+                logger.info("Calcasa refresh token opgeslagen in Supabase")
+            else:
+                logger.warning("Supabase token opslaan: %s %s", r.status_code, r.text[:100])
+        except Exception as e:
+            logger.debug("Supabase token opslaan mislukt: %s", e)
 
     def _grpc_headers(self) -> dict:
         """Standaard headers voor gRPC-Web calls."""
