@@ -118,6 +118,10 @@ NAT-hypotheek-API/
 │       ├── risk_relationship.py # Relatiebeëindiging
 │       └── closing.py          # Aandachtspunten + disclaimer
 │
+├── energielabel/               # EP-Online energielabel opvragen
+│   ├── __init__.py
+│   └── ep_online_client.py     # EP-Online API v5 client (RVO)
+│
 ├── monthly_costs/              # Netto maandlasten calculator (package)
 │   ├── config.py               # RULES_DIR, DEFAULT_FISCAL_YEAR
 │   ├── domain/
@@ -213,6 +217,13 @@ Maakt een concept e-mail aan in het Outlook-postvak van de adviseur met de samen
 Handtekening wordt automatisch geselecteerd op basis van `sender_email` (zie `ADVISORS` dict in `email_templates.py`).
 Vereist: Azure Entra ID app-registratie met `Mail.ReadWrite` (Application) + `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` env vars.
 
+### Energielabel (EP-Online)
+```
+GET /energielabel?postcode=9472VM&huisnummer=33
+```
+Haalt energielabel op via EP-Online (RVO). Gratis, vereist `EP_ONLINE_API_KEY`.
+Retourneert `labelklasse` (A t/m G) + `labelklasse_config` (mapping naar `config/energielabel.json`).
+
 ### Health Checks
 ```
 GET /
@@ -230,6 +241,7 @@ GET /health/deep
 | `POST /adviesrapport-pdf-v2` | 30/minuut |
 | `POST /adviesrapport-preview-v2` | 30/minuut |
 | `POST /email/draft-samenvatting` | 10/minuut |
+| `GET /energielabel` | 30/minuut |
 
 ---
 
@@ -671,6 +683,7 @@ pytest tests/ -v
 | `AZURE_TENANT_ID` | Azure Entra ID tenant |
 | `AZURE_CLIENT_ID` | Azure app registration client ID |
 | `AZURE_CLIENT_SECRET` | Azure app registration secret |
+| `EP_ONLINE_API_KEY` | EP-Online API key (energielabel, gratis via apikey.ep-online.nl) |
 
 ### Dependencies
 
@@ -716,13 +729,16 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 
 | # | Item | Waar | Status |
 |---|------|------|--------|
+| J2 | Maandlasten uit API i.p.v. lokale berekening | Lovable | Gereed (fallback behouden) |
+| J3 | AOW centraliseren via useAOWData hook | Lovable | Gereed |
+| J4 | Dead code cleanup berekeningen.ts | Lovable | Vervallen (fallback bewust behouden) |
 | C4 | Hypotheekrentes handmatig beheren | Supabase + Lovable | Te doen |
 | D2 | Adviesrapport PDF — backend endpoint V1 | NAT API | Gereed (POST /adviesrapport-pdf) |
 | D2b | Adviesrapport PDF — SVG grafieken + risico-secties | NAT API | Gereed (chart_generator.py) |
 | D2c | Adviesrapport PDF — klantprofiel (kennis/ervaring/risicobereidheid) | NAT API | Gereed |
 | H1 | Adviesrapport V2 — backend-driven (dossier_id + aanvraag_id) | NAT API | Gereed (POST /adviesrapport-pdf-v2) |
 | I1 | Adviesrapport — preview endpoint + text_overrides | NAT API | Gereed (POST /adviesrapport-preview-v2) |
-| I1 | Adviesrapport — pagina met uitgangspunten + adviesuitkomsten | Lovable | Prompt geschreven (lovable-prompt-i1) |
+| I1 | Adviesrapport — pagina met uitgangspunten + adviesuitkomsten | Lovable | Gereed (AdviesPage.tsx) |
 | G1 | Adviesrapport PDF — Lovable frontend V1 | Lovable | Toegepast |
 | G4 | Adviesrapport — resultaten opslaan + rapportgeneratie | Lovable | Toegepast |
 | C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
@@ -739,6 +755,15 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 
 - API-versioning (`/v1/calculate` voor NAT 2026)
 - Sentry monitoring voor foutmeldingen
+
+### Te doen — Code refactoring (niet urgent)
+
+| Bestand | Regels | Actie | Inspanning |
+|---------|--------|-------|-----------|
+| `adviesrapport_v2/field_mapper.py` | 2.414 | Splitsen in schemas + extractors + converters | Halve dag |
+| `app.py` | 1.289 | Routes extraheren naar `routes/` submap | Halve dag |
+| `risk_scenarios.py` | 1.012 | Splitsen per scenario-type (aow, overlijden, ao, ww) | 2 uur |
+| `adviesrapport_v2/report_orchestrator.py` | 1.124 | Berekeningshelpers extraheren | Halve dag |
 
 ### Toekomst — Integraties
 
