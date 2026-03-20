@@ -1454,6 +1454,130 @@ async def taxatie_adressen(
         raise HTTPException(status_code=500, detail=f"Adressen zoeken mislukt: {str(e)}")
 
 
+# ── WOZ Waardeloket ───────────────────────────────────────
+
+from WOZ.woz_client import WOZClient as _WOZClient
+
+
+class WOZRequest(BaseModel):
+    """Request voor WOZ-waarde opvragen."""
+    postcode: str = Field(..., min_length=6, max_length=7, description="Postcode (bijv. 9472VM)")
+    huisnummer: int = Field(..., ge=1, le=99999, description="Huisnummer")
+    toevoeging: Optional[str] = Field(default=None, description="Huisnummer toevoeging (bijv. A)")
+
+
+@app.post("/woz/waarde")
+async def woz_waarde(
+    request_body: WOZRequest,
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Haal WOZ-waarden op voor een adres via het WOZ Waardeloket (Kadaster).
+
+    Gratis, geen API key nodig. Retourneert alle beschikbare WOZ-waarden
+    (peildatum 2014 t/m heden).
+    """
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "WOZ opvragen: origin=%s, postcode=%s, huisnummer=%s, toevoeging=%s",
+        origin, request_body.postcode, request_body.huisnummer, request_body.toevoeging,
+    )
+
+    try:
+        client = _WOZClient()
+        result = client.opvragen(
+            request_body.postcode,
+            request_body.huisnummer,
+            request_body.toevoeging,
+        )
+
+        if "error" in result:
+            logger.warning("WOZ niet gevonden: %s", result["error"])
+            raise HTTPException(status_code=404, detail=result["error"])
+
+        logger.info(
+            "WOZ geslaagd: %s %s, %s = EUR %s (peildatum %s)",
+            result["adres"].get("straat"),
+            result["adres"].get("huisnummer"),
+            result["adres"].get("woonplaats"),
+            result.get("meest_recente_waarde"),
+            result.get("meest_recente_peildatum"),
+        )
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("WOZ opvragen mislukt: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"WOZ opvragen mislukt: {str(e)}")
+
+
+# ── EP-Online Energielabel ────────────────────────────────
+
+from energielabel.ep_online_client import EPOnlineClient as _EPOnlineClient
+
+
+class EnergielabelRequest(BaseModel):
+    """Request voor energielabel opvragen via EP-Online."""
+    postcode: str = Field(..., min_length=6, max_length=7, description="Postcode (bijv. 9472VM)")
+    huisnummer: int = Field(..., ge=1, le=99999, description="Huisnummer")
+    huisletter: Optional[str] = Field(default=None, description="Huisletter (bijv. A)")
+    toevoeging: Optional[str] = Field(default=None, description="Huisnummer toevoeging (bijv. 02)")
+
+
+@app.get("/energielabel")
+async def energielabel_opvragen(
+    postcode: str,
+    huisnummer: int,
+    huisletter: Optional[str] = None,
+    toevoeging: Optional[str] = None,
+    request: Request = None,
+) -> Dict[str, Any]:
+    """
+    Haal het energielabel op voor een adres via EP-Online (RVO).
+
+    Gratis API — vereist EP_ONLINE_API_KEY env var.
+    Retourneert labelklasse (A t/m G) + mapping naar config-waarde.
+    """
+    origin = request.headers.get("origin", "onbekend") if request else "onbekend"
+    logger.info(
+        "Energielabel opvragen: origin=%s, postcode=%s, huisnummer=%s",
+        origin, postcode, huisnummer,
+    )
+
+    client = _EPOnlineClient()
+    if not client.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="EP-Online service niet beschikbaar. Controleer EP_ONLINE_API_KEY.",
+        )
+
+    try:
+        result = client.opvragen(postcode, huisnummer, huisletter, toevoeging)
+
+        if "error" in result:
+            logger.warning("Energielabel niet gevonden: %s", result["error"])
+            raise HTTPException(status_code=404, detail=result["error"])
+
+        logger.info(
+            "Energielabel geslaagd: %s %s, %s = %s (config: %s)",
+            result["adres"].get("straat"),
+            result["adres"].get("huisnummer"),
+            result["adres"].get("plaats"),
+            result.get("labelklasse"),
+            result.get("labelklasse_config"),
+        )
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Energielabel opvragen mislukt: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Energielabel opvragen mislukt: {str(e)}")
+
+
 if RATE_LIMITING_ENABLED:
     taxatie_modelwaarde = limiter.limit("30/minute")(taxatie_modelwaarde)
     taxatie_adressen = limiter.limit("30/minute")(taxatie_adressen)
+    woz_waarde = limiter.limit("30/minute")(woz_waarde)
+    energielabel_opvragen = limiter.limit("30/minute")(energielabel_opvragen)
