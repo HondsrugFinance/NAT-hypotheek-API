@@ -8,6 +8,7 @@ import sys
 import time
 import json
 import logging
+import asyncio
 from fastapi import FastAPI, HTTPException, Request, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -1575,3 +1576,175 @@ if RATE_LIMITING_ENABLED:
     taxatie_adressen = limiter.limit("30/minute")(taxatie_adressen)
     woz_waarde = limiter.limit("30/minute")(woz_waarde)
     energielabel_opvragen = limiter.limit("30/minute")(energielabel_opvragen)
+
+
+# ── Onderpand Lookup (gecombineerd) ──────────────────────
+
+
+class OnderpandLookupRequest(BaseModel):
+    """Request voor gecombineerde onderpand-lookup (Calcasa + WOZ + Energielabel)."""
+    postcode: str = Field(..., min_length=6, max_length=7, description="Postcode (bijv. 9472VM)")
+    huisnummer: int = Field(..., ge=1, le=99999, description="Huisnummer")
+    toevoeging: Optional[str] = Field(default=None, description="Huisnummer toevoeging (bijv. A of 02)")
+
+
+async def _lookup_calcasa(postcode: str, huisnummer: int, toevoeging: Optional[str]) -> Dict[str, Any]:
+    """Calcasa modelwaarde opvragen. Retourneert dict met resultaat of error."""
+    try:
+        client = _get_calcasa_client()
+        if client is None:
+            return {"modelwaarde": None, "error": "Calcasa service niet beschikbaar"}
+
+        adressen = client.zoek_adressen(postcode)
+        if not adressen:
+            return {"modelwaarde": None, "error": f"Geen adressen gevonden voor {postcode}"}
+
+        adres = None
+        for a in adressen:
+            if a.get("huisnummer") == huisnummer:
+                if toevoeging:
+                    if (a.get("toevoeging") or "").upper() == toevoeging.upper():
+                        adres = a
+                        break
+                elif not a.get("toevoeging"):
+                    adres = a
+                    break
+
+        if not adres:
+            return {"modelwaarde": None, "error": f"Huisnummer {huisnummer}{toevoeging or ''} niet gevonden"}
+
+        result = client.bepaal_modelwaarde("ing", adres["id"])
+
+        if result.get("modelwaarde"):
+            return {
+                "modelwaarde": result["modelwaarde"],
+                "adres": {
+                    "straat": adres.get("straat"),
+                    "huisnummer": adres.get("huisnummer"),
+                    "toevoeging": adres.get("toevoeging"),
+                    "postcode": adres.get("postcode"),
+                    "plaats": adres.get("plaats"),
+                },
+            }
+        else:
+            return {"modelwaarde": None, "error": result.get("error", "Modelwaarde niet bepaald")}
+    except Exception as e:
+        logger.warning("Onderpand lookup — Calcasa mislukt: %s", e)
+        return {"modelwaarde": None, "error": str(e)}
+
+
+async def _lookup_woz(postcode: str, huisnummer: int, toevoeging: Optional[str]) -> Dict[str, Any]:
+    """WOZ-waarde opvragen. Retourneert dict met resultaat of error."""
+    try:
+        client = _WOZClient()
+        result = client.opvragen(postcode, huisnummer, toevoeging)
+
+        if "error" in result:
+            return {"woz_waarde": None, "error": result["error"]}
+
+        return {
+            "woz_waarde": result.get("meest_recente_waarde"),
+            "woz_peildatum": result.get("meest_recente_peildatum"),
+            "adres": result.get("adres"),
+        }
+    except Exception as e:
+        logger.warning("Onderpand lookup — WOZ mislukt: %s", e)
+        return {"woz_waarde": None, "error": str(e)}
+
+
+async def _lookup_energielabel(
+    postcode: str, huisnummer: int, toevoeging: Optional[str],
+) -> Dict[str, Any]:
+    """Energielabel opvragen. Retourneert dict met resultaat of error."""
+    try:
+        client = _EPOnlineClient()
+        if not client.is_configured:
+            return {"labelklasse": None, "error": "EP-Online niet geconfigureerd"}
+
+        result = client.opvragen(postcode, huisnummer, huisletter=None, toevoeging=toevoeging)
+
+        if "error" in result:
+            return {"labelklasse": None, "error": result["error"]}
+
+        return {
+            "labelklasse": result.get("labelklasse"),
+            "labelklasse_config": result.get("labelklasse_config"),
+            "registratiedatum": result.get("registratiedatum"),
+            "geldig_tot": result.get("geldig_tot"),
+            "bouwjaar": result.get("bouwjaar"),
+        }
+    except Exception as e:
+        logger.warning("Onderpand lookup — Energielabel mislukt: %s", e)
+        return {"labelklasse": None, "error": str(e)}
+
+
+@app.post("/onderpand/lookup")
+async def onderpand_lookup(
+    request_body: OnderpandLookupRequest,
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Gecombineerde onderpand-lookup: haalt Calcasa modelwaarde, WOZ-waarde
+    en energielabel parallel op voor één adres.
+
+    Elke bron die faalt retourneert null + error — de andere bronnen
+    worden gewoon geleverd.
+    """
+    origin = request.headers.get("origin", "onbekend")
+    postcode = request_body.postcode.upper().replace(" ", "")
+    huisnummer = request_body.huisnummer
+    toevoeging = request_body.toevoeging
+
+    logger.info(
+        "Onderpand lookup: origin=%s, postcode=%s, huisnummer=%s, toevoeging=%s",
+        origin, postcode, huisnummer, toevoeging,
+    )
+
+    # Alle drie parallel ophalen
+    calcasa_result, woz_result, energie_result = await asyncio.gather(
+        _lookup_calcasa(postcode, huisnummer, toevoeging),
+        _lookup_woz(postcode, huisnummer, toevoeging),
+        _lookup_energielabel(postcode, huisnummer, toevoeging),
+    )
+
+    # Adres samenstellen uit eerste beschikbare bron
+    adres = (
+        calcasa_result.get("adres")
+        or woz_result.get("adres")
+        or {"postcode": postcode, "huisnummer": huisnummer, "toevoeging": toevoeging}
+    )
+
+    response = {
+        "adres": adres,
+        "calcasa": {
+            "modelwaarde": calcasa_result.get("modelwaarde"),
+            "error": calcasa_result.get("error"),
+        },
+        "woz": {
+            "waarde": woz_result.get("woz_waarde"),
+            "peildatum": woz_result.get("woz_peildatum"),
+            "error": woz_result.get("error"),
+        },
+        "energielabel": {
+            "labelklasse": energie_result.get("labelklasse"),
+            "labelklasse_config": energie_result.get("labelklasse_config"),
+            "registratiedatum": energie_result.get("registratiedatum"),
+            "geldig_tot": energie_result.get("geldig_tot"),
+            "bouwjaar": energie_result.get("bouwjaar"),
+            "error": energie_result.get("error"),
+        },
+    }
+
+    logger.info(
+        "Onderpand lookup klaar: %s %s %s — calcasa=%s, woz=%s, label=%s",
+        adres.get("straat", "?"), huisnummer, adres.get("plaats", "?"),
+        calcasa_result.get("modelwaarde", "FOUT"),
+        woz_result.get("woz_waarde", "FOUT"),
+        energie_result.get("labelklasse", "FOUT"),
+    )
+
+    return response
+
+
+if RATE_LIMITING_ENABLED:
+    onderpand_lookup = limiter.limit("30/minute")(onderpand_lookup)
