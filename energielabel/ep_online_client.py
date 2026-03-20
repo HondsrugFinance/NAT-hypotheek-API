@@ -115,48 +115,49 @@ class EPOnlineClient:
         else:
             label = labels
 
-        # Log raw keys voor debug (tijdelijk)
-        logger.info("EP-Online raw keys: %s", list(label.keys()))
-        logger.info("EP-Online raw sample: %s", {k: label[k] for k in list(label.keys())[:15]})
-
         return self._format_response(label)
 
     def _format_response(self, label: dict) -> dict:
-        """Formateer EP-Online response naar gestandaardiseerd formaat."""
-        labelklasse = label.get("labelLetter") or label.get("energieklasse") or ""
-        labelklasse = labelklasse.strip()
+        """Formateer EP-Online response naar gestandaardiseerd formaat.
+
+        EP-Online API v5 gebruikt PascalCase veldnamen:
+        Energieklasse, Registratiedatum, Opnamedatum, Geldig_tot,
+        Gebouwtype, Bouwjaar, Postcode, Huisnummer, etc.
+        Geen straatnaam/plaatsnaam in de response.
+        """
+        labelklasse = label.get("Energieklasse", "")
+        if isinstance(labelklasse, str):
+            labelklasse = labelklasse.strip()
 
         # Mapping naar onze config-waarden
         labelklasse_config = LABEL_MAPPING.get(labelklasse, "Geen (geldig) Label")
 
+        # Datums: strip timestamp (bijv. "2023-11-17T14:44:26.523" → "2023-11-17")
+        def _date_only(val):
+            if not val or not isinstance(val, str):
+                return None
+            return val[:10] if "T" in val else val
+
         result = {
             "labelklasse": labelklasse,
             "labelklasse_config": labelklasse_config,
-            "registratiedatum": label.get("registratiedatum"),
-            "geldig_tot": label.get("geldigTot"),
-            "opnamedatum": label.get("opnamedatum"),
-            "gebouwtype": label.get("gebouwtype"),
-            "bouwjaar": label.get("bouwjaar"),
+            "registratiedatum": _date_only(label.get("Registratiedatum")),
+            "geldig_tot": _date_only(label.get("Geldig_tot")),
+            "opnamedatum": _date_only(label.get("Opnamedatum")),
+            "gebouwtype": label.get("Gebouwtype"),
+            "gebouwklasse": label.get("Gebouwklasse"),
+            "bouwjaar": label.get("Bouwjaar"),
             "adres": {
-                "straat": label.get("straatnaam", ""),
-                "huisnummer": label.get("huisnummer"),
-                "huisletter": label.get("huisletter"),
-                "toevoeging": label.get("huisnummertoevoeging"),
-                "postcode": label.get("postcode", ""),
-                "plaats": label.get("plaatsnaam", ""),
+                "postcode": label.get("Postcode", ""),
+                "huisnummer": label.get("Huisnummer"),
+                "huisletter": label.get("Huisletter"),
+                "toevoeging": label.get("Huisnummertoevoeging"),
             },
         }
 
-        # Optionele velden
-        energie_index = label.get("energieIndex")
-        if energie_index is not None:
-            try:
-                result["energie_index"] = float(energie_index)
-            except (ValueError, TypeError):
-                pass
-
-        energieprestatie = label.get("energieprestatie")
-        if energieprestatie is not None:
-            result["energieprestatie"] = energieprestatie
+        # Optionele energie-velden
+        energiebehoefte = label.get("Energiebehoefte")
+        if energiebehoefte is not None:
+            result["energiebehoefte"] = energiebehoefte
 
         return result
