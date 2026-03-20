@@ -1310,20 +1310,14 @@ _calcasa_client = None
 
 
 def _get_calcasa_client():
-    """Lazy-load Calcasa client (singleton)."""
+    """Lazy-load Calcasa client (singleton). Herautht automatisch bij verlopen token."""
     global _calcasa_client
     if _calcasa_client is None:
         try:
             from Calcasa.calcasa_client import CalcasaClient
             _calcasa_client = CalcasaClient()
-            if _calcasa_client.refresh_token:
-                _calcasa_client.refresh_access_token()
-                logger.info("Calcasa client geinitialiseerd en token vernieuwd")
-            elif _calcasa_client.access_token:
-                logger.info("Calcasa client geinitialiseerd met bestaande token")
-            else:
-                logger.warning("Calcasa client: geen token beschikbaar")
-                _calcasa_client = None
+            _calcasa_client.refresh_access_token()
+            logger.info("Calcasa client geinitialiseerd en token vernieuwd")
         except Exception as e:
             logger.error("Calcasa client init mislukt: %s", e)
             _calcasa_client = None

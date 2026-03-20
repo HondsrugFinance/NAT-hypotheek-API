@@ -92,7 +92,8 @@ class CalcasaClient:
         return self.access_token
 
     def _login_via_playwright(self) -> str:
-        """Login via headless browser (Playwright) en haal tokens op."""
+        """Login via headless browser (Playwright) en haal tokens op.
+        Werkt zowel in sync als async (FastAPI) context."""
         username = os.getenv("CALCASA_USERNAME", "")
         password = os.getenv("CALCASA_PASSWORD", "")
         if not username or not password:
@@ -101,6 +102,39 @@ class CalcasaClient:
                 "CALCASA_PASSWORD beschikbaar voor automatische login."
             )
 
+        logger.info("Playwright login gestart voor %s", username)
+
+        # Detecteer of we in een async event loop zitten (FastAPI/uvicorn)
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            in_async = True
+        except RuntimeError:
+            in_async = False
+
+        if in_async:
+            # In async context: draai Playwright in een aparte thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self._playwright_sync_login, username, password)
+                tokens = future.result(timeout=60)
+        else:
+            tokens = self._playwright_sync_login(username, password)
+
+        if not tokens or "access_token" not in tokens:
+            raise RuntimeError("Playwright login gelukt maar geen tokens gevonden")
+
+        self.access_token = tokens["access_token"]
+        new_refresh = tokens.get("refresh_token", "")
+        if new_refresh:
+            self.refresh_token = new_refresh
+            self._save_new_refresh_token(new_refresh)
+
+        logger.info("Playwright login geslaagd, tokens vernieuwd")
+        return self.access_token
+
+    def _playwright_sync_login(self, username: str, password: str) -> dict:
+        """Sync Playwright login (draait altijd in een eigen thread)."""
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
@@ -108,8 +142,6 @@ class CalcasaClient:
                 "Playwright niet geïnstalleerd. Installeer met: "
                 "pip install playwright && python -m playwright install chromium"
             )
-
-        logger.info("Playwright login gestart voor %s", username)
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -174,8 +206,7 @@ class CalcasaClient:
 
             browser.close()
 
-        if not tokens or "access_token" not in tokens:
-            raise RuntimeError("Playwright login gelukt maar geen tokens gevonden")
+        return tokens
 
         self.access_token = tokens["access_token"]
         new_refresh = tokens.get("refresh_token", "")
