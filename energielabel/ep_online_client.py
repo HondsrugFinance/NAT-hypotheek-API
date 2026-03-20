@@ -19,6 +19,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 EP_ONLINE_BASE = "https://public.ep-online.nl/api/v5"
+PDOK_LOCATIE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free"
 
 # Mapping van EP-Online labelklasse naar config/energielabel.json waarden
 LABEL_MAPPING = {
@@ -115,7 +116,12 @@ class EPOnlineClient:
         else:
             label = labels
 
-        return self._format_response(label)
+        result = self._format_response(label)
+
+        # Verrijk adres met straatnaam/plaatsnaam via PDOK (EP-Online geeft deze niet)
+        self._enrich_adres_pdok(result)
+
+        return result
 
     def _format_response(self, label: dict) -> dict:
         """Formateer EP-Online response naar gestandaardiseerd formaat.
@@ -161,3 +167,35 @@ class EPOnlineClient:
             result["energiebehoefte"] = energiebehoefte
 
         return result
+
+    def _enrich_adres_pdok(self, result: dict) -> None:
+        """Verrijk adres met straatnaam en plaatsnaam via PDOK Locatieserver.
+
+        EP-Online retourneert geen straat/plaats, dus we doen een snelle
+        PDOK lookup (gratis, geen API key). Bij falen: adres blijft zoals het is.
+        """
+        adres = result.get("adres", {})
+        postcode = adres.get("postcode", "")
+        huisnummer = adres.get("huisnummer")
+        if not postcode or not huisnummer:
+            return
+
+        try:
+            resp = httpx.get(
+                PDOK_LOCATIE_URL,
+                params={
+                    "q": f"postcode:{postcode} AND huisnummer:{huisnummer}",
+                    "fq": "type:adres",
+                    "rows": 1,
+                    "fl": "straatnaam,woonplaatsnaam",
+                },
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            docs = resp.json().get("response", {}).get("docs", [])
+            if docs:
+                adres["straat"] = docs[0].get("straatnaam", "")
+                adres["plaats"] = docs[0].get("woonplaatsnaam", "")
+        except Exception:
+            # PDOK is best-effort — niet fataal als het faalt
+            pass
