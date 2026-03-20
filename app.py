@@ -1293,3 +1293,167 @@ async def email_draft_samenvatting(
 # Rate limit op email draft endpoint
 if RATE_LIMITING_ENABLED:
     email_draft_samenvatting = limiter.limit("10/minute")(email_draft_samenvatting)
+
+
+# ───────────────────────────────────────────────────────────────
+# Calcasa Desktop Taxatie — Modelwaarde endpoint
+# ───────────────────────────────────────────────────────────────
+
+class TaxatieModelwaardeRequest(BaseModel):
+    """Request voor Calcasa modelwaarde bepaling."""
+    postcode: str = Field(..., min_length=6, max_length=7, description="Postcode (bijv. 9472VM)")
+    huisnummer: int = Field(..., ge=1, le=99999, description="Huisnummer")
+    toevoeging: Optional[str] = Field(default=None, description="Huisnummer toevoeging (bijv. A)")
+
+
+_calcasa_client = None
+
+
+def _get_calcasa_client():
+    """Lazy-load Calcasa client (singleton)."""
+    global _calcasa_client
+    if _calcasa_client is None:
+        try:
+            from Calcasa.calcasa_client import CalcasaClient
+            _calcasa_client = CalcasaClient()
+            if _calcasa_client.refresh_token:
+                _calcasa_client.refresh_access_token()
+                logger.info("Calcasa client geinitialiseerd en token vernieuwd")
+            elif _calcasa_client.access_token:
+                logger.info("Calcasa client geinitialiseerd met bestaande token")
+            else:
+                logger.warning("Calcasa client: geen token beschikbaar")
+                _calcasa_client = None
+        except Exception as e:
+            logger.error("Calcasa client init mislukt: %s", e)
+            _calcasa_client = None
+    return _calcasa_client
+
+
+@app.post("/taxatie/modelwaarde")
+async def taxatie_modelwaarde(
+    request_body: TaxatieModelwaardeRequest,
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Bepaal de Calcasa modelmatige woningwaarde voor een adres.
+
+    Gebruikt de Calcasa Desktop Taxatie API om de modelwaarde te achterhalen.
+    Gratis — er wordt geen taxatie uitgevoerd.
+    """
+    origin = request.headers.get("origin", "onbekend")
+    logger.info(
+        "Modelwaarde gestart: origin=%s, postcode=%s, huisnummer=%s",
+        origin, request_body.postcode, request_body.huisnummer,
+    )
+
+    client = _get_calcasa_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Calcasa service niet beschikbaar. Controleer CALCASA_REFRESH_TOKEN.",
+        )
+
+    try:
+        # Adres zoeken
+        postcode = request_body.postcode.upper().replace(" ", "")
+        adressen = client.zoek_adressen(postcode)
+        if not adressen:
+            raise HTTPException(status_code=404, detail=f"Geen adressen gevonden voor postcode {postcode}")
+
+        # Huisnummer matchen
+        adres = None
+        for a in adressen:
+            if a.get("huisnummer") == request_body.huisnummer:
+                if request_body.toevoeging:
+                    if a.get("toevoeging", "").upper() == request_body.toevoeging.upper():
+                        adres = a
+                        break
+                elif not a.get("toevoeging"):
+                    adres = a
+                    break
+
+        if not adres:
+            beschikbaar = sorted(set(
+                f"{a.get('huisnummer', '?')}{a.get('toevoeging', '')}"
+                for a in adressen
+            ))
+            raise HTTPException(
+                status_code=404,
+                detail=f"Huisnummer {request_body.huisnummer}{request_body.toevoeging or ''} niet gevonden. "
+                       f"Beschikbaar: {', '.join(beschikbaar[:20])}",
+            )
+
+        # Modelwaarde bepalen
+        result = client.bepaal_modelwaarde("ing", adres["id"])
+
+        response = {
+            "adres": {
+                "straat": adres.get("straat"),
+                "huisnummer": adres.get("huisnummer"),
+                "toevoeging": adres.get("toevoeging"),
+                "postcode": adres.get("postcode"),
+                "plaats": adres.get("plaats"),
+            },
+        }
+
+        if result.get("modelwaarde"):
+            response["modelwaarde"] = result["modelwaarde"]
+            response["max_hypotheek_90"] = round(result["modelwaarde"] * result.get("max_ltv", 0.9))
+            response["ltv_percentage"] = result.get("ltv_percentage")
+            response["max_ltv"] = result.get("max_ltv")
+            logger.info(
+                "Modelwaarde geslaagd: %s %s = EUR %s",
+                adres.get("straat"), adres.get("huisnummer"), result["modelwaarde"],
+            )
+        else:
+            response["modelwaarde"] = None
+            response["error"] = result.get("error", "Modelwaarde kon niet worden bepaald")
+            logger.warning(
+                "Modelwaarde niet beschikbaar: %s %s - %s",
+                adres.get("straat"), adres.get("huisnummer"), result.get("error"),
+            )
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Modelwaarde mislukt: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Modelwaarde bepaling mislukt: {str(e)}")
+
+
+# Adres zoeken endpoint (voor autocomplete)
+@app.get("/taxatie/adressen")
+async def taxatie_adressen(
+    postcode: str,
+    request: Request,
+) -> Dict[str, Any]:
+    """Zoek adressen op postcode voor de taxatie module."""
+    client = _get_calcasa_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Calcasa service niet beschikbaar")
+
+    try:
+        adressen = client.zoek_adressen(postcode.upper().replace(" ", ""))
+        return {
+            "postcode": postcode.upper().replace(" ", ""),
+            "adressen": [
+                {
+                    "straat": a.get("straat"),
+                    "huisnummer": a.get("huisnummer"),
+                    "toevoeging": a.get("toevoeging"),
+                    "postcode": a.get("postcode"),
+                    "plaats": a.get("plaats"),
+                }
+                for a in adressen
+            ],
+        }
+    except Exception as e:
+        logger.error("Adressen zoeken mislukt: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Adressen zoeken mislukt: {str(e)}")
+
+
+if RATE_LIMITING_ENABLED:
+    taxatie_modelwaarde = limiter.limit("30/minute")(taxatie_modelwaarde)
+    taxatie_adressen = limiter.limit("30/minute")(taxatie_adressen)

@@ -1,0 +1,4 @@
+.env
+*.har
+discovery_results.json
+__pycache__/
