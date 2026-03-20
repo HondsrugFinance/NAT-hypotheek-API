@@ -1664,7 +1664,12 @@ async def _lookup_energielabel(
         result = client.opvragen(postcode, huisnummer, huisletter=None, toevoeging=toevoeging)
 
         if "error" in result:
-            return {"labelklasse": None, "error": result["error"]}
+            # Geen label gevonden → "geen_label" zodat frontend dropdown juiste waarde toont
+            return {
+                "labelklasse": "geen_label",
+                "labelklasse_config": "Geen (geldig) Label",
+                "error": result["error"],
+            }
 
         return {
             "labelklasse": result.get("labelklasse"),

@@ -47,7 +47,7 @@ Elke bron kan onafhankelijk falen — dan bevat die bron `null` waarden + een `e
 {
   "calcasa": { "modelwaarde": null, "error": "Confidence Level te laag" },
   "woz": { "waarde": 425000, "peildatum": "2024-01-01", "error": null },
-  "energielabel": { "labelklasse": null, "error": "Geen energielabel gevonden" }
+  "energielabel": { "labelklasse": "geen_label", "labelklasse_config": "Geen (geldig) Label", "error": "Geen energielabel gevonden voor ..." }
 }
 ```
 
@@ -121,17 +121,26 @@ Dialog content (max-w-md):
 │  [Overnemen]                                    │
 └─────────────────────────────────────────────────┘
 
-Bij fouten per bron:
+Bij geen energielabel gevonden:
 ┌─────────────────────────────────────────────────┐
 │  ...                                            │
 │  ── Resultaten ──                               │
-│  de Langakkers 33, Zuidlaren                    │
+│  Hofakkers 14, Zuidlaren                        │
 │                                                 │
+│  ☑ Marktwaarde (Calcasa)      € 588.000         │
+│  ☑ WOZ-waarde (2025)          € 536.000         │
+│  ☑ Energielabel               Geen (geldig) label│
+│                                                 │
+│  [Overnemen]                                    │
+└─────────────────────────────────────────────────┘
+
+Bij Calcasa fout:
+┌─────────────────────────────────────────────────┐
+│  ...                                            │
 │  ☐ Marktwaarde (Calcasa)      ⚠ Niet beschikbaar│
 │     "Confidence Level te laag"                  │
 │  ☑ WOZ-waarde (2024)          € 425.000         │
-│  ☐ Energielabel               ⚠ Niet gevonden   │
-│     "Geen energielabel gevonden"                │
+│  ☑ Energielabel               Geen (geldig) label│
 │                                                 │
 │  [Overnemen]                                    │
 └─────────────────────────────────────────────────┘
@@ -164,6 +173,7 @@ useEffect(() => {
   if (result) {
     setSelectCalcasa(result.calcasa.modelwaarde !== null);
     setSelectWoz(result.woz.waarde !== null);
+    // labelklasse is altijd gevuld (ook 'geen_label' bij niet-gevonden) → altijd overnemen
     setSelectEnergie(result.energielabel.labelklasse !== null);
   }
 }, [result]);
@@ -243,8 +253,9 @@ const handleOvernemen = () => {
     waarden.wozWaarde = result.woz.waarde;
   }
 
-  if (selectEnergie && result.energielabel.labelklasse_config) {
-    waarden.energielabel = result.energielabel.labelklasse_config;
+  if (selectEnergie && result.energielabel.labelklasse) {
+    // labelklasse bevat de dropdown-value: 'A', 'B', ..., 'geen_label'
+    waarden.energielabel = result.energielabel.labelklasse;
     if (result.energielabel.registratiedatum) {
       waarden.afgiftedatumEnergielabel = result.energielabel.registratiedatum;
     }
@@ -345,16 +356,18 @@ Elke bron als een rij met checkbox + label + waarde of foutmelding:
           <span className="text-sm font-medium">Energielabel</span>
           {result.energielabel.labelklasse !== null ? (
             <span className="text-sm font-semibold text-primary">
-              {result.energielabel.labelklasse}
+              {result.energielabel.labelklasse === 'geen_label'
+                ? 'Geen (geldig) label'
+                : result.energielabel.labelklasse}
               {result.energielabel.bouwjaar ? ` (bouwjaar ${result.energielabel.bouwjaar})` : ''}
             </span>
           ) : (
             <span className="text-sm text-muted-foreground flex items-center gap-1">
-              <AlertTriangle className="h-3.5 w-3.5" /> Niet gevonden
+              <AlertTriangle className="h-3.5 w-3.5" /> Niet beschikbaar
             </span>
           )}
         </div>
-        {result.energielabel.error && (
+        {result.energielabel.error && result.energielabel.labelklasse !== 'geen_label' && (
           <p className="text-xs text-muted-foreground mt-0.5">{result.energielabel.error}</p>
         )}
       </div>
@@ -563,7 +576,8 @@ export function OnderpandLookupDialog({ onOvernemen, defaultPostcode, defaultHui
 | 4 | Vul 9472VM + 33 in, klik Opzoeken | Alle drie de resultaten verschijnen met waarden |
 | 5 | Alle checkboxes staan default aan | ✅ |
 | 6 | Vink "Marktwaarde" uit, klik Overnemen | Alleen WOZ en energielabel worden overgenomen |
-| 7 | Bij fout (bijv. geen energielabel) | Checkbox is disabled, foutmelding getoond |
+| 7 | Bij geen energielabel gevonden | Checkbox staat AAN, toont "Geen (geldig) label" — wordt overgenomen in dropdown |
+| 7b | Bij Calcasa fout (bijv. confidence te laag) | Checkbox is disabled, foutmelding getoond |
 | 8 | Klik Overnemen | Dialog sluit, waarden in formulier, toast "marktwaarde, WOZ, energielabel overgenomen" |
 | 9 | Marktwaarde overgenomen | `marktwaardeVastgesteldMet` = 'desktoptaxatie' |
 | 10 | Energielabel overgenomen | Dropdown toont juiste label (via `labelklasse_config`), afgiftedatum ingevuld |
