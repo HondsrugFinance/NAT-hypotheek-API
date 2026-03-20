@@ -115,6 +115,10 @@ class EPOnlineClient:
         else:
             label = labels
 
+        # Log raw keys voor debug (tijdelijk)
+        logger.info("EP-Online raw keys: %s", list(label.keys()))
+        logger.info("EP-Online raw sample: %s", {k: label[k] for k in list(label.keys())[:15]})
+
         return self._format_response(label)
 
     def _format_response(self, label: dict) -> dict:
