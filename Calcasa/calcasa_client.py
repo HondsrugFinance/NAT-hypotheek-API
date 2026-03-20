@@ -7,9 +7,12 @@ Gebruikt OAuth2 refresh_token voor authenticatie.
 
 import os
 import json
+import logging
 import httpx
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 try:
     from Calcasa.protobuf_utils import (
@@ -59,10 +62,18 @@ class CalcasaClient:
     # ─── Auth ─────────────────────────────────────────────────
 
     def refresh_access_token(self) -> str:
-        """Vernieuw access token via refresh_token."""
-        if not self.refresh_token:
-            raise ValueError("Geen CALCASA_REFRESH_TOKEN in .env")
+        """Vernieuw access token via refresh_token, met Playwright fallback."""
+        if self.refresh_token:
+            try:
+                return self._refresh_via_token()
+            except Exception as e:
+                logger.warning("Refresh token mislukt (%s), probeer Playwright login...", e)
 
+        # Fallback: Playwright browser login
+        return self._login_via_playwright()
+
+    def _refresh_via_token(self) -> str:
+        """Vernieuw access token via refresh_token."""
         r = self._client.post(TOKEN_URL, data={
             "grant_type": "refresh_token",
             "scope": "offline_access",
@@ -73,12 +84,106 @@ class CalcasaClient:
         data = r.json()
 
         self.access_token = data["access_token"]
-        # Update refresh token (roteert bij elke call)
         new_refresh = data.get("refresh_token", "")
         if new_refresh:
             self.refresh_token = new_refresh
             self._save_new_refresh_token(new_refresh)
 
+        return self.access_token
+
+    def _login_via_playwright(self) -> str:
+        """Login via headless browser (Playwright) en haal tokens op."""
+        username = os.getenv("CALCASA_USERNAME", "")
+        password = os.getenv("CALCASA_PASSWORD", "")
+        if not username or not password:
+            raise ValueError(
+                "Calcasa refresh token verlopen en geen CALCASA_USERNAME/"
+                "CALCASA_PASSWORD beschikbaar voor automatische login."
+            )
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise ImportError(
+                "Playwright niet geïnstalleerd. Installeer met: "
+                "pip install playwright && python -m playwright install chromium"
+            )
+
+        logger.info("Playwright login gestart voor %s", username)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+
+            # Stap 1: Ga naar Calcasa login pagina
+            page.goto("https://app.desktoptaxatie.nl/", wait_until="networkidle")
+
+            # Stap 2: Wacht op login formulier (Azure B2C redirect)
+            page.wait_for_selector("input[name='E-mailadres'], input[name='logonIdentifier'], input[type='email']", timeout=15000)
+
+            # Vul email in
+            email_input = page.query_selector("input[name='E-mailadres'], input[name='logonIdentifier'], input[type='email']")
+            email_input.fill(username)
+
+            # Vul wachtwoord in
+            password_input = page.query_selector("input[name='Wachtwoord'], input[name='password'], input[type='password']")
+            password_input.fill(password)
+
+            # Stap 3: Intercepteer de token response na login
+            captured_tokens = {}
+
+            def handle_response(response):
+                if "oauth2" in response.url and "token" in response.url:
+                    try:
+                        data = response.json()
+                        if "access_token" in data:
+                            captured_tokens.update(data)
+                    except Exception:
+                        pass
+
+            page.on("response", handle_response)
+
+            # Klik login knop
+            submit = page.query_selector("button[type='submit']")
+            submit.click()
+
+            # Wacht tot we op de app terechtkomen
+            page.wait_for_url("**/overzicht**", timeout=30000, wait_until="domcontentloaded")
+
+            # Geef de app even tijd om de token exchange te doen
+            page.wait_for_timeout(3000)
+
+            tokens = captured_tokens if captured_tokens.get("access_token") else None
+
+            # Fallback: zoek tokens in localStorage/sessionStorage
+            if not tokens:
+                logger.info("Tokens niet via interceptie gevonden, zoek in storage...")
+                tokens = page.evaluate("""() => {
+                    for (const storage of [localStorage, sessionStorage]) {
+                        for (let i = 0; i < storage.length; i++) {
+                            const val = storage.getItem(storage.key(i));
+                            try {
+                                const obj = JSON.parse(val);
+                                if (obj && obj.access_token && obj.refresh_token) return obj;
+                            } catch {}
+                        }
+                    }
+                    return null;
+                }""")
+
+            browser.close()
+
+        if not tokens or "access_token" not in tokens:
+            raise RuntimeError("Playwright login gelukt maar geen tokens gevonden")
+
+        self.access_token = tokens["access_token"]
+        new_refresh = tokens.get("refresh_token", "")
+        if new_refresh:
+            self.refresh_token = new_refresh
+            self._save_new_refresh_token(new_refresh)
+
+        logger.info("Playwright login geslaagd, tokens vernieuwd")
         return self.access_token
 
     def _save_new_refresh_token(self, token: str):
