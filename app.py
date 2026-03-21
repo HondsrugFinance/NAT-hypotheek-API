@@ -17,17 +17,18 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import date
 from decimal import Decimal
-import sentry_sdk
-
-# --- Sentry error monitoring ---
-_SENTRY_DSN = os.environ.get("SENTRY_DSN")
-if _SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=_SENTRY_DSN,
-        traces_sample_rate=0.1,
-        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
-        release=os.environ.get("RENDER_GIT_COMMIT", "unknown"),
-    )
+try:
+    import sentry_sdk
+    _SENTRY_DSN = os.environ.get("SENTRY_DSN")
+    if _SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            traces_sample_rate=0.1,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+            release=os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+        )
+except ImportError:
+    pass  # Sentry niet geïnstalleerd — geen monitoring
 
 import calculator_final
 import aow_calculator
