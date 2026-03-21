@@ -433,14 +433,36 @@ class NormalizedDossierData:
     @property
     def inkomen_aanvrager_huidig(self) -> float:
         ink = self.aanvrager.inkomen
-        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
+        basis = ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
+        # Bij AOW-gerechtigden: pensioen en AOW-uitkering zijn huidig inkomen
+        if self._is_aow_bereikt(self.aanvrager.geboortedatum):
+            basis += ink.aow_uitkering + ink.pensioen
+        return basis
 
     @property
     def inkomen_partner_huidig(self) -> float:
         if not self.partner:
             return 0
         ink = self.partner.inkomen
-        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
+        basis = ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
+        # Bij AOW-gerechtigden: pensioen en AOW-uitkering zijn huidig inkomen
+        if self._is_aow_bereikt(self.partner.geboortedatum):
+            basis += ink.aow_uitkering + ink.pensioen
+        return basis
+
+    @staticmethod
+    def _is_aow_bereikt(geboortedatum_str: str) -> bool:
+        """Check of iemand vandaag de AOW-leeftijd heeft bereikt."""
+        if not geboortedatum_str:
+            return False
+        try:
+            from aow_calculator import bereken_aow_datum
+            from datetime import date as _date
+            gd = _date.fromisoformat(geboortedatum_str)
+            aow_datum = bereken_aow_datum(gd)
+            return _date.today() >= aow_datum
+        except (ValueError, TypeError, ImportError):
+            return False
 
     @property
     def inkomen_aanvrager_aow(self) -> float:
