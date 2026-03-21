@@ -1035,28 +1035,28 @@ def _build_pensioen_chart_data(
     naam_aanvrager = (data.aanvrager.naam or "aanvr.").split()[0]
     naam_partner = ((data.partner.naam if data.partner else None) or "partner").split()[0]
 
-    aow_events = []  # [(jaar, wie, label)]
-    for sc in aow_scenarios:
-        peildatum = sc.get("peildatum", "")
-        try:
-            aow_jaar = int(peildatum[:4])
-        except (ValueError, IndexError):
-            continue
-        wie = sc.get("van_toepassing_op", "")
-        naam = naam_partner if wie == "partner" else naam_aanvrager
-        label = f"AOW {naam}"
-        aow_events.append((aow_jaar, wie, label))
-
-    aow_events.sort(key=lambda x: x[0])
-
-    # Bepaal AOW-jaren per persoon
+    # Bepaal AOW-jaren per persoon direct uit geboortedatum (niet uit scenario's)
     aow_jaar_aanvrager = None
     aow_jaar_partner = None
-    for aj, wie, _lbl in aow_events:
-        if wie == "partner":
-            aow_jaar_partner = aj
-        else:
-            aow_jaar_aanvrager = aj
+    try:
+        _aow_dt = bereken_aow_datum(date.fromisoformat(data.aanvrager.geboortedatum))
+        aow_jaar_aanvrager = _aow_dt.year
+    except (ValueError, TypeError):
+        pass
+    if data.partner and data.partner.geboortedatum:
+        try:
+            _aow_dt_p = bereken_aow_datum(date.fromisoformat(data.partner.geboortedatum))
+            aow_jaar_partner = _aow_dt_p.year
+        except (ValueError, TypeError):
+            pass
+
+    # AOW markers voor de grafiek
+    aow_events = []
+    if aow_jaar_aanvrager:
+        aow_events.append((aow_jaar_aanvrager, "aanvrager", f"AOW {naam_aanvrager}"))
+    if aow_jaar_partner:
+        aow_events.append((aow_jaar_partner, "partner", f"AOW {naam_partner}"))
+    aow_events.sort(key=lambda x: x[0])
 
     # Tijdspan: altijd 30 jaar
     n_jaren = 30
