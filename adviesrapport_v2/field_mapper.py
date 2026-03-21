@@ -1401,11 +1401,17 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
         rvp_jaren = _to_float(deel.get("renteVastPeriode") or deel.get("rentevastePeriode"))
         rvp_maanden = int(rvp_jaren * 12) if rvp_jaren else 120
 
-        # Restant waarden berekenen voor bestaand/meenemen leningdelen
+        # Restant waarden berekenen
         # Referentiedatum = passeerdatum (of vandaag als fallback)
         restant_rvp = None
         restant_looptijd = None
         restant_aftrekbaar = None
+
+        # Restant renteaftrek: voor ALLE leningdelen (nieuw, bestaand, meenemen)
+        aftrek_tot_str = str(deel.get("renteAftrekTot") or deel.get("renteaftrekTot") or "").strip()
+        if aftrek_tot_str:
+            restant_aftrekbaar = _bereken_restant_aftrekbaar(aftrek_tot_str, passeerdatum)
+
         if herkomst in ("bestaand", "meenemen"):
             # Restant RVP: gebruik einddatumRvp direct (niet ingangsdatum + rvp_jaren,
             # want ingangsdatum kan de nieuwe passeerdatum zijn terwijl RVP eerder begon)
@@ -1421,10 +1427,6 @@ def _extract_leningdelen_from_aanvraag(aanvraag_data: dict) -> tuple[list["Norma
             einddatum_str = str(deel.get("einddatum") or "").strip()
             if einddatum_str:
                 restant_looptijd = _bereken_restant_looptijd(einddatum_str, passeerdatum)
-            # Restant renteaftrek uit renteAftrekTot
-            aftrek_tot_str = str(deel.get("renteAftrekTot") or deel.get("renteaftrekTot") or "").strip()
-            if aftrek_tot_str:
-                restant_aftrekbaar = _bereken_restant_aftrekbaar(aftrek_tot_str, passeerdatum)
 
         # Box: "box1" of "box3"
         box_raw = str(deel.get("box") or "box1").lower()
