@@ -111,6 +111,16 @@ class NormalizedLeningdeel:
 
 
 @dataclass
+class NormalizedInkomenItem:
+    """Individueel inkomensitem met datumbereik."""
+    bedrag: float           # Jaarbedrag
+    ingangsdatum: str = ""  # YYYY-MM-DD of "" (= altijd actief)
+    einddatum: str = ""     # YYYY-MM-DD of "" (= loopt door)
+    type: str = ""          # "loondienst", "pensioen", "aow", "uitkering", etc.
+    omschrijving: str = ""  # Vrije tekst (bijv. "ING loondienst", "AOW")
+
+
+@dataclass
 class NormalizedInkomen:
     """Inkomen voor één persoon."""
     loondienst: float = 0
@@ -124,6 +134,8 @@ class NormalizedInkomen:
     nabestaandenpensioen: float = 0  # Uitkering bij overlijden partner
     partneralimentatie_ontvangen: float = 0
     partneralimentatie_betalen: float = 0
+    # Individuele inkomensitems met datumbereiken (voor per-jaar berekeningen)
+    items: list = field(default_factory=list)  # list[NormalizedInkomenItem]
 
     @property
     def totaal_huidig(self) -> float:
@@ -140,6 +152,35 @@ class NormalizedInkomen:
     def hoofd_inkomen(self) -> float:
         """Hoofdinkomen = loondienst + onderneming + roz."""
         return self.loondienst + self.onderneming + self.roz
+
+    def totaal_op_datum(self, peildatum) -> float:
+        """Som van alle inkomensitems die actief zijn op peildatum.
+
+        Args:
+            peildatum: date object — de datum waarop het inkomen wordt berekend.
+
+        Returns:
+            Totaal jaarbedrag van alle actieve inkomensitems.
+        """
+        from datetime import date as _date
+        totaal = 0.0
+        for item in self.items:
+            if item.ingangsdatum:
+                try:
+                    start = _date.fromisoformat(item.ingangsdatum)
+                    if peildatum < start:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            if item.einddatum:
+                try:
+                    eind = _date.fromisoformat(item.einddatum)
+                    if peildatum >= eind:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            totaal += item.bedrag
+        return totaal
 
     @property
     def is_ondernemer(self) -> bool:
@@ -432,37 +473,25 @@ class NormalizedDossierData:
 
     @property
     def inkomen_aanvrager_huidig(self) -> float:
+        """Huidig inkomen aanvrager — som van alle actieve inkomensitems vandaag."""
+        from datetime import date as _date
         ink = self.aanvrager.inkomen
-        basis = ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
-        # Bij AOW-gerechtigden: pensioen en AOW-uitkering zijn huidig inkomen
-        if self._is_aow_bereikt(self.aanvrager.geboortedatum):
-            basis += ink.aow_uitkering + ink.pensioen
-        return basis
+        if ink.items:
+            return ink.totaal_op_datum(_date.today())
+        # Fallback als items niet gevuld zijn (backward-compat)
+        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
 
     @property
     def inkomen_partner_huidig(self) -> float:
+        """Huidig inkomen partner — som van alle actieve inkomensitems vandaag."""
         if not self.partner:
             return 0
+        from datetime import date as _date
         ink = self.partner.inkomen
-        basis = ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
-        # Bij AOW-gerechtigden: pensioen en AOW-uitkering zijn huidig inkomen
-        if self._is_aow_bereikt(self.partner.geboortedatum):
-            basis += ink.aow_uitkering + ink.pensioen
-        return basis
-
-    @staticmethod
-    def _is_aow_bereikt(geboortedatum_str: str) -> bool:
-        """Check of iemand vandaag de AOW-leeftijd heeft bereikt."""
-        if not geboortedatum_str:
-            return False
-        try:
-            from aow_calculator import bereken_aow_datum
-            from datetime import date as _date
-            gd = _date.fromisoformat(geboortedatum_str)
-            aow_datum = bereken_aow_datum(gd)
-            return _date.today() >= aow_datum
-        except (ValueError, TypeError, ImportError):
-            return False
+        if ink.items:
+            return ink.totaal_op_datum(_date.today())
+        # Fallback als items niet gevuld zijn (backward-compat)
+        return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
 
     @property
     def inkomen_aanvrager_aow(self) -> float:
@@ -681,10 +710,24 @@ def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -
     overig_tijdelijk = 0  # Inkomen met einddatum → telt NIET mee na AOW
     uitkering = 0
     dienstverband = "Loondienst"
+    inkomen_items = []  # Individuele items met datumbereiken
 
     for item in (items or []):
         item_type = str(item.get("type", "")).lower()
         jaarbedrag = _to_float(item.get("jaarbedrag"))
+
+        # Registreer elk item met datumbereik voor per-jaar berekeningen
+        _item_ingangsdatum = str(item.get("ingangsdatum") or "")
+        _item_einddatum = str(item.get("einddatum") or "")
+        _item_bron = str(item.get("inkomstenbron") or item.get("soort") or item_type)
+        if jaarbedrag > 0:
+            inkomen_items.append(NormalizedInkomenItem(
+                bedrag=jaarbedrag,
+                ingangsdatum=_item_ingangsdatum,
+                einddatum=_item_einddatum,
+                type=item_type,
+                omschrijving=_item_bron,
+            ))
 
         if item_type == "loondienst":
             # Bepaal dienstverband type
@@ -783,6 +826,7 @@ def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -
         overig=overig,
         overig_tijdelijk=overig_tijdelijk,
         uitkering=uitkering,
+        items=inkomen_items,
     )
 
     logger.debug(

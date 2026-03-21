@@ -998,9 +998,6 @@ def _build_pensioen_chart_data(
     - Vaste toetsrente (RVP daalt niet voor deze berekening)
     - Inkomen: huidig vóór AOW, AOW-inkomen erna
     """
-    if not aow_scenarios:
-        return None
-
     hypotheek = data.totale_hypotheekschuld
     start_jaar = date.today().year
     alleenstaande = "NEE" if not data.alleenstaand else "JA"
@@ -1032,9 +1029,8 @@ def _build_pensioen_chart_data(
         else:
             aow_jaar_aanvrager = aj
 
-    # Tijdspan: tot 5 jaar na laatste AOW, minimaal 25 jaar
-    laatste_aow_jaar = aow_events[-1][0] if aow_events else start_jaar + 25
-    n_jaren = max(laatste_aow_jaar - start_jaar + 5, 25)
+    # Tijdspan: altijd 30 jaar
+    n_jaren = 30
 
     # Gemeenschappelijke calculator-input (ongewijzigd per jaar)
     base_inputs = {
@@ -1078,18 +1074,13 @@ def _build_pensioen_chart_data(
             peildatum = date(jaar, 1, 1)
             projected = projecteer_hypotheekdelen(delen_api, elapsed_mnd, peildatum)
 
-            # Inkomen: switch naar AOW op individueel AOW-moment
-            ink_a = data.inkomen_aanvrager_huidig
-            ink_p = data.inkomen_partner_huidig
+            # Inkomen: bepaal per datum welke inkomensitems actief zijn
+            ink_a = data.aanvrager.inkomen.totaal_op_datum(peildatum)
+            ink_p = data.partner.inkomen.totaal_op_datum(peildatum) if data.partner else 0
             aanvrager_is_aow = aow_jaar_aanvrager and jaar >= aow_jaar_aanvrager
             partner_is_aow = aow_jaar_partner and jaar >= aow_jaar_partner
 
-            if aanvrager_is_aow:
-                ink_a = inkomen_aanvrager_aow
-            if partner_is_aow:
-                ink_p = inkomen_partner_aow
-
-            # ontvangt_aow: JA als hoogste verdiener AOW is
+            # ontvangt_aow: JA als hoogste verdiener AOW is (voor woonquote-tabel)
             ontvangt_aow = "NEE"
             if alleenstaande == "JA":
                 ontvangt_aow = "JA" if aanvrager_is_aow else "NEE"
