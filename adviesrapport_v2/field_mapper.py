@@ -1527,6 +1527,14 @@ def _extract_verplichtingen_from_aanvraag(aanvraag_data: dict) -> dict:
         einddatum = str(item.get("einddatum") or "").strip()
         omschrijving = str(item.get("omschrijving") or item.get("maatschappij") or vtype).strip()
         is_doorlopend = "doorlopend" in vtype
+        status = str(item.get("status") or "").lower().strip()
+
+        # Verplichtingen met status "aflossen voor/tijdens passeren" overslaan
+        # — deze zijn afgelost bij aanvang hypotheek
+        if "aflossen" in status:
+            logger.info("Verplichting '%s' (€%.0f/mnd) overgeslagen: status=%s",
+                        omschrijving, maandbedrag, status)
+            continue
 
         if "studie" in vtype:
             studielening += maandbedrag
