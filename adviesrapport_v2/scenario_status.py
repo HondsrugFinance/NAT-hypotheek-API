@@ -113,6 +113,37 @@ def derive_retirement_status(
     return {"status": "shortfall", "advice_type": "advise_extra_repayment"}
 
 
+def derive_betaalbaarheid_status(
+    *,
+    chart_jaren: list[dict],
+    buffer: float = 0,
+) -> dict:
+    """Betaalbaarheid status op basis van 30-jaar tijdlijn.
+
+    Check: is max_hypotheek >= restschuld in alle jaren?
+    Buffer: als het maximale tekort gedekt wordt door spaargeld (extra aflossing) → afgedekt.
+    """
+    if not chart_jaren:
+        return {"status": "affordable", "advice_type": "no_action"}
+
+    max_tekort = 0
+    for jr in chart_jaren:
+        restschuld = jr.get("restschuld", 0)
+        max_hyp = jr.get("max_hypotheek", 0)
+        if restschuld > max_hyp:
+            tekort = restschuld - max_hyp
+            max_tekort = max(max_tekort, tekort)
+
+    if max_tekort == 0:
+        return {"status": "affordable", "advice_type": "no_action"}
+
+    # Buffer kan het maximale tekort dekken → extra aflossing lost het op
+    if buffer >= max_tekort:
+        return {"status": "resolved", "advice_type": "no_action"}
+
+    return {"status": "attention", "advice_type": "consider_solution"}
+
+
 def derive_disability_status(
     *,
     has_aov: bool = False,

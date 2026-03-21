@@ -213,23 +213,24 @@ DEATH_TEXT: StandardScenarioText = {
 RETIREMENT_TEXT: StandardScenarioText = {
     "intro": (
         "Wij hebben berekend hoe de betaalbaarheid van de hypotheek "
-        "zich ontwikkelt wanneer u met pensioen gaat."
+        "zich ontwikkelt gedurende de looptijd, rekening houdend met "
+        "verwachte inkomenswijzigingen, het aflopen van verplichtingen en renteaftrek."
     ),
     "outcome": {
         "affordable": (
             "Op basis van deze berekening blijft de hypotheek "
-            "ook na pensionering betaalbaar."
+            "gedurende de gehele looptijd betaalbaar."
         ),
         "resolved": (
-            "Na pensionering ontstaat er op basis van deze berekening "
+            "Gedurende de looptijd ontstaat er op basis van deze berekening "
             f"een financieel tekort. {_VOORZIENINGEN_VOLDOENDE}"
         ),
         "attention": (
-            "Na pensionering ontstaat er op basis van deze berekening "
+            "Gedurende de looptijd ontstaat er op basis van deze berekening "
             f"een beperkt financieel tekort. {_VRAAGT_AANDACHT}"
         ),
         "shortfall": (
-            "Na pensionering ontstaat er op basis van deze berekening "
+            "Gedurende de looptijd ontstaat er op basis van deze berekening "
             "een financieel tekort dat niet volledig kan worden opgevangen "
             "met de huidige voorzieningen."
         ),

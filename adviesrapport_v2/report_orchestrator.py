@@ -48,6 +48,7 @@ from adviesrapport_v2.section_builders.closing import build_closing_section
 from adviesrapport_v2.scenario_status import (
     derive_death_status,
     derive_retirement_status,
+    derive_betaalbaarheid_status,
     derive_disability_status,
     derive_unemployment_status,
     derive_relationship_status,
@@ -306,14 +307,7 @@ def generate_sections(
     beschikbare_buffer = data.beschikbare_buffer
     logger.info("Beschikbare buffer: %.0f", beschikbare_buffer)
 
-    # --- Stap 7: Scenario checks ---
-    scenario_checks = _bepaal_scenario_checks(
-        data, max_hypotheek, aow_scenarios, overlijden_scenarios,
-        ao_scenarios, ww_scenarios, max_hyp_aanvrager_alleen, max_hyp_partner_alleen,
-        beschikbare_buffer=beschikbare_buffer,
-    )
-
-    # --- Stap 8: Pensioen chart data ---
+    # --- Stap 7: Betaalbaarheid chart data (was: Pensioen chart) ---
     pensioen_chart_data = _build_pensioen_chart_data(
         data=data,
         aow_scenarios=aow_scenarios,
@@ -322,6 +316,14 @@ def generate_sections(
         toetsrente=toetsrente_start,
         inkomen_aanvrager_aow=inkomen_aanvrager_aow,
         inkomen_partner_aow=inkomen_partner_aow,
+    )
+
+    # --- Stap 8: Scenario checks ---
+    scenario_checks = _bepaal_scenario_checks(
+        data, max_hypotheek, aow_scenarios, overlijden_scenarios,
+        ao_scenarios, ww_scenarios, max_hyp_aanvrager_alleen, max_hyp_partner_alleen,
+        beschikbare_buffer=beschikbare_buffer,
+        pensioen_chart_data=pensioen_chart_data,
     )
 
     # --- Stap 9: Bouw secties ---
@@ -895,6 +897,7 @@ def _bepaal_scenario_checks(
     max_hyp_aanvrager_alleen: float,
     max_hyp_partner_alleen: float,
     beschikbare_buffer: float = 0,
+    pensioen_chart_data: dict = None,
 ) -> list[dict]:
     """Bepaal scenario check statussen voor samenvatting.
 
@@ -926,10 +929,17 @@ def _bepaal_scenario_checks(
             return _check(label, "partial", "aandachtspunt")
         return _check(label, "warning", "aandachtspunt")
 
-    # Pensioen
-    ret_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek, buffer=beschikbare_buffer)
-    ret_key = ret_status["status"]
-    checks.append(_check("Pensionering", _STATUS_CSS_CLASS.get(ret_key, "warning"), ADVICE_RISK_LABELS[ret_key]))
+    # Betaalbaarheid (was: Pensionering)
+    if pensioen_chart_data and pensioen_chart_data.get("jaren"):
+        bet_status = derive_betaalbaarheid_status(
+            chart_jaren=pensioen_chart_data["jaren"],
+            buffer=beschikbare_buffer,
+        )
+    else:
+        # Fallback naar oude methode als chart data niet beschikbaar
+        bet_status = derive_retirement_status(aow_scenarios=aow_scenarios, hypotheek=hypotheek, buffer=beschikbare_buffer)
+    bet_key = bet_status["status"]
+    checks.append(_check("Betaalbaarheid", _STATUS_CSS_CLASS.get(bet_key, "warning"), ADVICE_RISK_LABELS[bet_key]))
 
     # Overlijden (alleen stel)
     if has_partner and overlijden_scenarios:

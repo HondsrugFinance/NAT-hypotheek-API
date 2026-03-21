@@ -4,7 +4,7 @@ import re
 
 from adviesrapport_v2.field_mapper import NormalizedDossierData
 from adviesrapport_v2.formatters import format_bedrag
-from adviesrapport_v2.scenario_status import derive_retirement_status
+from adviesrapport_v2.scenario_status import derive_retirement_status, derive_betaalbaarheid_status
 from adviesrapport_v2.section_builders._align import align_columns_at_totaal
 from adviesrapport_v2.texts import (
     RETIREMENT_TEXT,
@@ -24,11 +24,17 @@ def build_retirement_section(
     hypotheek = data.totale_hypotheekschuld
 
     # --- Status derivatie ---
-    status_result = derive_retirement_status(
-        aow_scenarios=aow_scenarios,
-        hypotheek=hypotheek,
-        buffer=beschikbare_buffer,
-    )
+    if pensioen_chart_data and pensioen_chart_data.get("jaren"):
+        status_result = derive_betaalbaarheid_status(
+            chart_jaren=pensioen_chart_data["jaren"],
+            buffer=beschikbare_buffer,
+        )
+    else:
+        status_result = derive_retirement_status(
+            aow_scenarios=aow_scenarios,
+            hypotheek=hypotheek,
+            buffer=beschikbare_buffer,
+        )
 
     # --- Nuance keys ---
     has_partner = not data.alleenstaand and data.partner is not None
@@ -119,7 +125,7 @@ def build_retirement_section(
 
         section = {
             "id": "retirement",
-            "title": "Pensioen",
+            "title": "Betaalbaarheid",
             "visible": True,
             "narratives": narratives,
             "rows": rows,
@@ -194,7 +200,7 @@ def build_retirement_section(
 
         section = {
             "id": "retirement",
-            "title": "Pensioen",
+            "title": "Betaalbaarheid",
             "visible": True,
             "narratives": narratives,
             "columns": columns,

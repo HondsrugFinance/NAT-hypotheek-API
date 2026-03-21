@@ -115,20 +115,21 @@ class TestMaandlasten:
 
 class TestScenarioChecks:
     def test_geen_scenarios(self):
-        """Bij lege scenario-lijsten krijg je alleen pensioen check."""
+        """Bij lege scenario-lijsten krijg je betaalbaarheid check."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
         checks = _bepaal_scenario_checks(data, 400000, [], [], [], [], 0, 0)
-        # Bij lege aow_scenarios → ok (vacuously true)
-        assert any(c["label"] == "Pensionering" for c in checks)
+        assert any(c["label"] == "Betaalbaarheid" for c in checks)
 
     def test_aow_warning(self):
-        """Als max hypotheek < geadviseerd → tekort aanwezig."""
+        """Als max hypotheek < restschuld in chart → tekort aanwezig."""
         data = extract_dossier_data(MOCK_DOSSIER, MOCK_AANVRAAG)
-        aow = [{"max_hypotheek_annuitair": 200000}]  # Onder de 325k
-        checks = _bepaal_scenario_checks(data, 400000, aow, [], [], [], 0, 0)
-        pensioen = [c for c in checks if c["label"] == "Pensionering"][0]
-        assert pensioen["status"] == "tekort aanwezig"
-        assert pensioen["status_class"] == "warning"
+        # Simuleer chart data met tekort
+        chart_data = {"jaren": [
+            {"jaar": 2026, "max_hypotheek": 200000, "restschuld": 400000},
+        ]}
+        checks = _bepaal_scenario_checks(data, 400000, [], [], [], [], 0, 0, pensioen_chart_data=chart_data)
+        bet = [c for c in checks if c["label"] == "Betaalbaarheid"][0]
+        assert bet["status_class"] == "warning"
 
 
 class TestSectionBuilders:
