@@ -744,29 +744,27 @@ Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
 | C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
 | — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
 
-### Te doen — Meer tests (wacht op Excel-waarden)
-
-- AOW-scenario testen
-- Scenario 2 (over 10 jaar) testen
-- Alle 8 energielabels testen
-- Grensgevallen (nul-inkomen, hoog inkomen, RVP 119 vs 120)
-
 ### Te doen — Uitbouwen
 
-- API-versioning (`/v1/calculate` voor NAT 2026)
-- Sentry monitoring voor foutmeldingen
+| Item | Prioriteit | Beschrijving |
+|------|-----------|--------------|
+| Sentry monitoring | Hoog | Foutmeldingen centraal bijhouden — nu geen zicht op productie-fouten |
+| API-versioning | Laag | `/v1/calculate` — pas relevant bij NAT 2027 naast 2026 of externe afnemers |
 
-### Te doen — Code refactoring (niet urgent)
+### Te doen — Code refactoring (laag — pas bij grote wijzigingen in betreffend bestand)
 
-| Bestand | Regels | Actie | Inspanning |
-|---------|--------|-------|-----------|
-| `adviesrapport_v2/field_mapper.py` | 2.414 | Splitsen in schemas + extractors + converters | Halve dag |
-| `app.py` | 1.289 | Routes extraheren naar `routes/` submap | Halve dag |
-| `risk_scenarios.py` | 1.012 | Splitsen per scenario-type (aow, overlijden, ao, ww) | 2 uur |
-| `adviesrapport_v2/report_orchestrator.py` | 1.124 | Berekeningshelpers extraheren | Halve dag |
+| Bestand | Regels | Actie | Handmatig | Claude Code |
+|---------|--------|-------|-----------|-------------|
+| `adviesrapport_v2/field_mapper.py` | 2.414 | Splitsen in schemas + extractors + converters | Halve dag | ~15 min |
+| `app.py` | 1.289 | Routes extraheren naar `routes/` submap | Halve dag | ~10 min |
+| `risk_scenarios.py` | 1.012 | Splitsen per scenario-type (aow, overlijden, ao, ww) | 2 uur | ~10 min |
+| `adviesrapport_v2/report_orchestrator.py` | 1.124 | Berekeningshelpers extraheren | Halve dag | ~10 min |
 
 ### Toekomst — Integraties
 
-- HDN-export (hypotheekaanvragen elektronisch versturen)
-- AI document processing vanuit SharePoint/OneDrive
-- Supabase REST API als centrale hub voor externe services
+| Item | Prioriteit | Beschrijving |
+|------|-----------|--------------|
+| HDN-export | Hoog | Hypotheekaanvragen elektronisch versturen — nodig bij eerste echte klant |
+| Calcasa desktoptaxatie | Medium | Taxatie uitzetten via API (€110/stuk), rapport koppelen aan dossier |
+| AI document processing | Laag | Documenten verwerken vanuit SharePoint/OneDrive |
+| Supabase REST API als hub | Laag | Centrale hub voor externe services — pas bij schaling |
