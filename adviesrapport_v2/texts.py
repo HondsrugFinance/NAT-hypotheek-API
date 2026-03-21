@@ -253,8 +253,8 @@ RETIREMENT_TEXT: StandardScenarioText = {
             "momenten waarop u beiden de AOW-leeftijd bereikt."
         ),
         "income_decrease": (
-            "Na pensionering daalt het huishoudinkomen ten opzichte "
-            "van de huidige situatie."
+            "Gedurende de looptijd wijzigt het huishoudinkomen "
+            "ten opzichte van de huidige situatie."
         ),
         "later_shortfall": (
             "Wanneer ook de partner met pensioen gaat kan het tekort toenemen."
