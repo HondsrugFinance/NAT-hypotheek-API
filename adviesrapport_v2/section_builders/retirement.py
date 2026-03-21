@@ -69,18 +69,28 @@ def build_retirement_section(
     )
 
     # --- Dynamische intro-tekst op basis van klant-specifieke events ---
-    heeft_inkomenswijzigingen = any(
-        item.ingangsdatum or item.einddatum
-        for item in data.aanvrager.inkomen.items
-    )
+    from datetime import date as _date
+    _vandaag_str = _date.today().isoformat()
+
+    def _heeft_toekomstige_wijziging(items):
+        """Check of er inkomensitems zijn die in de toekomst starten of stoppen."""
+        for item in items:
+            if item.ingangsdatum and item.ingangsdatum > _vandaag_str:
+                return True
+            if item.einddatum and item.einddatum > _vandaag_str:
+                return True
+        return False
+
+    heeft_inkomenswijzigingen = _heeft_toekomstige_wijziging(data.aanvrager.inkomen.items)
     if has_partner and data.partner:
-        heeft_inkomenswijzigingen = heeft_inkomenswijzigingen or any(
-            item.ingangsdatum or item.einddatum
-            for item in data.partner.inkomen.items
-        )
-    heeft_verplichtingen = len([v for v in data.verplichtingen_items if not v.is_doorlopend]) > 0
+        heeft_inkomenswijzigingen = heeft_inkomenswijzigingen or _heeft_toekomstige_wijziging(data.partner.inkomen.items)
+
+    heeft_verplichtingen = any(
+        not v.is_doorlopend and v.einddatum and v.einddatum > _vandaag_str
+        for v in data.verplichtingen_items
+    )
     heeft_renteaftrek_einde = any(
-        ld.restant_aftrekbaar is not None
+        ld.restant_aftrekbaar is not None and ld.restant_aftrekbaar > 0
         for ld in data.leningdelen_voor_api
     )
 
