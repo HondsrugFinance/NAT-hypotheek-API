@@ -945,9 +945,10 @@ def _bepaal_scenario_checks(
 
     # Overlijden
     if not has_partner:
-        # Alleenstaand: LTV-check
+        # Alleenstaand: LTV-check op basis van 90% netto verkoopopbrengst
         _woningwaarde = data.financiering.woningwaarde or data.financiering.koopsom
-        _ltv_ok = _woningwaarde >= hypotheek if _woningwaarde > 0 else False
+        _netto_opbrengst = _woningwaarde * 0.90
+        _ltv_ok = _netto_opbrengst >= hypotheek if _woningwaarde > 0 else False
         checks.append(_check(
             "Overlijden",
             "ok" if _ltv_ok else "warning",

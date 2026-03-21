@@ -26,31 +26,38 @@ def build_risk_death_section(
     # Alleenstaand: LTV-perspectief (kan de hypotheek afgelost worden uit woningverkoop?)
     if data.alleenstaand:
         woningwaarde = data.financiering.woningwaarde or data.financiering.koopsom
+        # Geschatte netto verkoopopbrengst: 90% van marktwaarde
+        # (verkoopkosten, makelaarscourtage, eventuele marktdaling)
+        NETTO_OPBRENGST_FACTOR = 0.90
+        netto_opbrengst = woningwaarde * NETTO_OPBRENGST_FACTOR
         ltv = (hypotheek / woningwaarde * 100) if woningwaarde > 0 else 0
 
-        if ltv <= 100:
+        if hypotheek <= netto_opbrengst:
             intro = (
                 "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
-                "Op basis van de huidige woningwaarde is de opbrengst voldoende om de volledige hypotheek af te lossen."
+                "Op basis van een geschatte verkoopopbrengst van 90% van de marktwaarde is de opbrengst "
+                "voldoende om de volledige hypotheek af te lossen."
             )
             status_class = "ok"
         else:
-            restschuld = hypotheek - woningwaarde
+            restschuld = hypotheek - netto_opbrengst
             intro = (
-                f"Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
-                f"Op basis van de huidige woningwaarde resteert na verkoop een schuld van {format_bedrag(restschuld)}."
+                "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
+                "Op basis van een geschatte verkoopopbrengst van 90% van de marktwaarde resteert "
+                f"na verkoop een schuld van {format_bedrag(restschuld)}."
             )
             status_class = "warning"
 
         rows = [
             {"label": "Woningwaarde", "value": format_bedrag(woningwaarde)},
+            {"label": "Geschatte verkoopopbrengst (90%)", "value": format_bedrag(netto_opbrengst)},
             {"label": "Hypotheek", "value": format_bedrag(hypotheek)},
             {"label": "Schuld-marktwaardeverhouding (LTV)", "value": f"{ltv:.1f}%", "bold": True},
         ]
 
         disclaimer = (
-            "De woningwaarde is gebaseerd op de huidige marktwaarde. "
-            "Toekomstige waardeontwikkelingen kunnen afwijken."
+            "Bij de geschatte verkoopopbrengst is rekening gehouden met verkoopkosten en "
+            "een mogelijke marktdaling. De werkelijke opbrengst kan afwijken."
         )
 
         # Chart data: twee staven (woningwaarde vs hypotheek)
