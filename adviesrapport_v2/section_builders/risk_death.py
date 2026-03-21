@@ -51,8 +51,9 @@ def build_risk_death_section(
             status_class = "warning"
 
         disclaimer = (
-            "Bij de geschatte verkoopopbrengst is rekening gehouden met verkoopkosten en "
-            "een mogelijke marktdaling. De werkelijke opbrengst kan afwijken."
+            "Bij de geschatte verkoopopbrengst houden wij rekening met een marge van 10% "
+            "voor makelaarskosten, verkoopkosten en het risico dat de woning onder tijdsdruk "
+            "verkocht moet worden. De werkelijke opbrengst kan afwijken."
         )
 
         # Column met rows + vergelijkingsgrafiek (zelfde stijl als overlijden-stel)
