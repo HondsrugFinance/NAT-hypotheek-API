@@ -23,13 +23,55 @@ def build_risk_death_section(
     """Bouw de overlijden sectie."""
     hypotheek = data.totale_hypotheekschuld
 
-    # Alleenstaand: kort verhaal
+    # Alleenstaand: LTV-perspectief (kan de hypotheek afgelost worden uit woningverkoop?)
     if data.alleenstaand:
+        woningwaarde = data.financiering.woningwaarde or data.financiering.koopsom
+        ltv = (hypotheek / woningwaarde * 100) if woningwaarde > 0 else 0
+
+        if ltv <= 100:
+            intro = (
+                "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
+                "Op basis van de huidige woningwaarde is de opbrengst voldoende om de volledige hypotheek af te lossen."
+            )
+            status_class = "ok"
+        else:
+            restschuld = hypotheek - woningwaarde
+            intro = (
+                f"Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
+                f"Op basis van de huidige woningwaarde resteert na verkoop een schuld van {format_bedrag(restschuld)}."
+            )
+            status_class = "warning"
+
+        rows = [
+            {"label": "Woningwaarde", "value": format_bedrag(woningwaarde)},
+            {"label": "Hypotheek", "value": format_bedrag(hypotheek)},
+            {"label": "Schuld-marktwaardeverhouding (LTV)", "value": f"{ltv:.1f}%", "bold": True},
+        ]
+
+        disclaimer = (
+            "De woningwaarde is gebaseerd op de huidige marktwaarde. "
+            "Toekomstige waardeontwikkelingen kunnen afwijken."
+        )
+
+        # Chart data: twee staven (woningwaarde vs hypotheek)
+        chart_data = {
+            "type": "comparison",
+            "bars": [
+                {"label": "Woningwaarde", "value": round(woningwaarde)},
+                {"label": "Hypotheek", "value": round(hypotheek)},
+            ],
+            "hypotheek": round(hypotheek),
+        }
+
         return {
             "id": "risk-death",
             "title": "Overlijden",
             "visible": True,
-            "narratives": [DEATH_SINGLE_TEXT],
+            "narratives": [intro],
+            "rows": rows,
+            "conclusion": [disclaimer],
+            "chart_data": chart_data,
+            "_status_class": status_class,
         }
 
     # --- Verzekeringen ---

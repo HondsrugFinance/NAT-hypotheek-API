@@ -355,14 +355,13 @@ def generate_sections(
         beschikbare_buffer=beschikbare_buffer,
     ))
 
-    # Overlijden: alleen bij stel (niet bij alleenstaande)
-    if not data.alleenstaand and data.partner:
-        sections.append(build_risk_death_section(
-            data=data,
-            overlijden_scenarios=overlijden_scenarios,
-            max_hypotheek_huidig=max_hypotheek,
-            beschikbare_buffer=beschikbare_buffer,
-        ))
+    # Overlijden: altijd tonen (stel: inkomensperspectief, alleenstaand: LTV-perspectief)
+    sections.append(build_risk_death_section(
+        data=data,
+        overlijden_scenarios=overlijden_scenarios,
+        max_hypotheek_huidig=max_hypotheek,
+        beschikbare_buffer=beschikbare_buffer,
+    ))
 
     if ao_scenarios:
         sections.append(build_risk_disability_section(
@@ -944,8 +943,17 @@ def _bepaal_scenario_checks(
     bet_key = bet_status["status"]
     checks.append(_check("Betaalbaarheid", _STATUS_CSS_CLASS.get(bet_key, "warning"), ADVICE_RISK_LABELS[bet_key]))
 
-    # Overlijden (alleen stel)
-    if has_partner and overlijden_scenarios:
+    # Overlijden
+    if not has_partner:
+        # Alleenstaand: LTV-check
+        _woningwaarde = data.financiering.woningwaarde or data.financiering.koopsom
+        _ltv_ok = _woningwaarde >= hypotheek if _woningwaarde > 0 else False
+        checks.append(_check(
+            "Overlijden",
+            "ok" if _ltv_ok else "warning",
+            "afgedekt" if _ltv_ok else "aandachtspunt",
+        ))
+    elif has_partner and overlijden_scenarios:
         personen_ov: dict[str, list] = {}
         for sc in overlijden_scenarios:
             personen_ov.setdefault(sc.get("van_toepassing_op", "aanvrager"), []).append(sc)
