@@ -17,6 +17,18 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import date
 from decimal import Decimal
+import sentry_sdk
+
+# --- Sentry error monitoring ---
+_SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        traces_sample_rate=0.1,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        release=os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+    )
+
 import calculator_final
 import aow_calculator
 import pdf_generator
@@ -770,7 +782,7 @@ async def samenvatting_pdf(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="Samenvatting hypotheek - {request_body.klant_naam or "Klant"}.pdf"',
+                "Content-Disposition": f'attachment; filename="Samenvatting hypotheekberekening - {request_body.klant_naam or "Klant"}.pdf"',
             },
         )
     except Exception as e:
@@ -1265,7 +1277,7 @@ async def email_draft_samenvatting(
             to_recipients=recipients,
             subject=subject,
             body_html=body_html,
-            attachment_name=f"Samenvatting hypotheek - {klant_naam}.pdf",
+            attachment_name=f"Samenvatting hypotheekberekening - {klant_naam}.pdf",
             attachment_bytes=pdf_bytes,
         )
     except graph_client.GraphAPIError as e:
