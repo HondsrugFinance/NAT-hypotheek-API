@@ -770,7 +770,7 @@ async def samenvatting_pdf(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": 'attachment; filename="samenvatting-hypotheek.pdf"',
+                "Content-Disposition": f'attachment; filename="Samenvatting hypotheek - {request_body.klant_naam or "Klant"}.pdf"',
             },
         )
     except Exception as e:
@@ -866,7 +866,7 @@ async def adviesrapport_pdf(
         data = request_body.model_dump(exclude_none=True)
         pdf_bytes = pdf_generator.genereer_adviesrapport_pdf(data)
         klant_naam = request_body.meta.customerName or "klant"
-        filename = f"adviesrapport-{klant_naam.replace(' ', '-').lower()}.pdf"
+        filename = f"Adviesrapport hypotheek - {klant_naam}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -1265,7 +1265,7 @@ async def email_draft_samenvatting(
             to_recipients=recipients,
             subject=subject,
             body_html=body_html,
-            attachment_name=f"samenvatting-{klant_naam.replace(' ', '-').lower()}.pdf",
+            attachment_name=f"Samenvatting hypotheek - {klant_naam}.pdf",
             attachment_bytes=pdf_bytes,
         )
     except graph_client.GraphAPIError as e:

@@ -72,8 +72,9 @@ async def adviesrapport_pdf_v2(
             text_overrides=overrides,
         )
 
-        # 3. Return PDF
-        filename = f"adviesrapport-v2-{request_body.dossier_id[:8]}.pdf"
+        # 3. Return PDF met klantnaam
+        klant_naam = dossier.get("klant_naam") or dossier.get("naam") or "Klant"
+        filename = f"Adviesrapport hypotheek - {klant_naam}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
