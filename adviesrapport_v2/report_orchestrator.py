@@ -1103,6 +1103,16 @@ def _build_pensioen_chart_data(
             peildatum = date(jaar, 1, 1)
             projected = projecteer_hypotheekdelen(delen_api, elapsed_mnd, peildatum)
 
+            # Renteaftrek: als restant_aftrekbaar verstreken, verplaats box1 → box3
+            for i, ld in enumerate(data.leningdelen_voor_api):
+                if ld.restant_aftrekbaar is not None and elapsed_mnd >= ld.restant_aftrekbaar:
+                    if i < len(projected):
+                        pd = projected[i]
+                        box1 = pd.get("hoofdsom_box1", 0)
+                        if box1 > 0:
+                            pd["hoofdsom_box3"] = pd.get("hoofdsom_box3", 0) + box1
+                            pd["hoofdsom_box1"] = 0
+
             # Inkomen: bepaal per datum welke inkomensitems actief zijn
             ink_a = data.aanvrager.inkomen.totaal_op_datum(peildatum)
             ink_p = data.partner.inkomen.totaal_op_datum(peildatum) if data.partner else 0
