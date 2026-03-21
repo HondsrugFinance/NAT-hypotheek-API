@@ -218,7 +218,7 @@ def generate_sections(
     ww_scenarios = []
 
     if _alle_personen_aow:
-        log.info("Alle personen AOW-gerechtigd — AO/WW-scenario's overgeslagen")
+        logger.info("Alle personen AOW-gerechtigd — AO/WW-scenario's overgeslagen")
     else:
         ao_result = _safe_call(
             "AO scenarios",
