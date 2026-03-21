@@ -21,6 +21,7 @@ from datetime import date, timedelta
 import calculator_final
 import risk_scenarios
 import pdf_generator
+from aow_calculator import bereken_aow_datum
 from loan_projection import projecteer_hypotheekdelen
 
 from monthly_costs.domain.calculator import MortgageCalculator
@@ -195,65 +196,100 @@ def generate_sections(
         )
         overlijden_scenarios = (overl_result or {}).get("scenarios", [])
 
-    # 5c: AO-scenario's
-    ao_result = _safe_call(
-        "AO scenarios",
-        risk_scenarios.bereken_ao_scenarios,
-        hypotheek_delen=hypotheek_delen_api,
-        ingangsdatum_hypotheek=ingangsdatum,
-        geboortedatum_aanvrager=data.aanvrager.geboortedatum,
-        alleenstaande="NEE" if not data.alleenstaand else "JA",
-        geboortedatum_partner=data.partner.geboortedatum if data.partner else None,
-        inkomen_loondienst_aanvrager=data.aanvrager.inkomen.loondienst,
-        inkomen_onderneming_aanvrager=data.aanvrager.inkomen.onderneming,
-        inkomen_roz_aanvrager=data.aanvrager.inkomen.roz,
-        inkomen_overig_aanvrager=data.aanvrager.inkomen.overig + data.aanvrager.inkomen.overig_tijdelijk,
-        inkomen_loondienst_partner=data.partner.inkomen.loondienst if data.partner else 0,
-        inkomen_onderneming_partner=data.partner.inkomen.onderneming if data.partner else 0,
-        inkomen_roz_partner=data.partner.inkomen.roz if data.partner else 0,
-        inkomen_overig_partner=(data.partner.inkomen.overig + data.partner.inkomen.overig_tijdelijk) if data.partner else 0,
-        ao_percentage=options.ao_percentage,
-        benutting_rvc_percentage=options.benutting_rvc_percentage,
-        loondoorbetaling_pct_jaar1_aanvrager=options.loondoorbetaling_pct_jaar1_aanvrager,
-        loondoorbetaling_pct_jaar2_aanvrager=options.loondoorbetaling_pct_jaar2_aanvrager,
-        loondoorbetaling_pct_jaar1_partner=options.loondoorbetaling_pct_jaar1_partner,
-        loondoorbetaling_pct_jaar2_partner=options.loondoorbetaling_pct_jaar2_partner,
-        aov_dekking_bruto_jaar_aanvrager=data.aov_dekking_aanvrager,
-        aov_dekking_bruto_jaar_partner=data.aov_dekking_partner,
-        woonlastenverzekering_ao_bruto_jaar=data.woonlastenverzekering_ao,
-        arbeidsverleden_jaren_tm_2015=options.arbeidsverleden_jaren_tm_2015,
-        arbeidsverleden_jaren_vanaf_2016=options.arbeidsverleden_jaren_vanaf_2016,
-        **common_risk_params,
-    )
-    ao_scenarios = (ao_result or {}).get("scenarios", [])
+    # 5c: AO-scenario's — overslaan als alle personen al AOW-gerechtigd zijn
+    _vandaag = date.today()
+    try:
+        _aow_datum_aanvrager = bereken_aow_datum(date.fromisoformat(data.aanvrager.geboortedatum))
+        _aanvrager_is_aow = _vandaag >= _aow_datum_aanvrager
+    except (ValueError, TypeError):
+        _aanvrager_is_aow = False
 
-    # 5d: Werkloosheid
-    ww_result = _safe_call(
-        "WW scenarios",
-        risk_scenarios.bereken_werkloosheid_scenarios,
-        hypotheek_delen=hypotheek_delen_api,
-        ingangsdatum_hypotheek=ingangsdatum,
-        geboortedatum_aanvrager=data.aanvrager.geboortedatum,
-        alleenstaande="NEE" if not data.alleenstaand else "JA",
-        geboortedatum_partner=data.partner.geboortedatum if data.partner else None,
-        inkomen_loondienst_aanvrager=data.aanvrager.inkomen.loondienst,
-        inkomen_onderneming_aanvrager=data.aanvrager.inkomen.onderneming,
-        inkomen_roz_aanvrager=data.aanvrager.inkomen.roz,
-        inkomen_overig_aanvrager=data.aanvrager.inkomen.overig + data.aanvrager.inkomen.overig_tijdelijk,
-        inkomen_loondienst_partner=data.partner.inkomen.loondienst if data.partner else 0,
-        inkomen_onderneming_partner=data.partner.inkomen.onderneming if data.partner else 0,
-        inkomen_roz_partner=data.partner.inkomen.roz if data.partner else 0,
-        inkomen_overig_partner=(data.partner.inkomen.overig + data.partner.inkomen.overig_tijdelijk) if data.partner else 0,
-        arbeidsverleden_jaren_totaal_aanvrager=options.arbeidsverleden_jaren_totaal_aanvrager,
-        arbeidsverleden_pre2016_boven10_aanvrager=options.arbeidsverleden_pre2016_boven10_aanvrager,
-        arbeidsverleden_vanaf2016_boven10_aanvrager=options.arbeidsverleden_vanaf2016_boven10_aanvrager,
-        arbeidsverleden_jaren_totaal_partner=options.arbeidsverleden_jaren_totaal_partner,
-        arbeidsverleden_pre2016_boven10_partner=options.arbeidsverleden_pre2016_boven10_partner,
-        arbeidsverleden_vanaf2016_boven10_partner=options.arbeidsverleden_vanaf2016_boven10_partner,
-        woonlastenverzekering_ww_bruto_jaar=data.woonlastenverzekering_ww,
-        **common_risk_params,
-    )
-    ww_scenarios = (ww_result or {}).get("scenarios", [])
+    _partner_is_aow = False
+    if data.partner and data.partner.geboortedatum:
+        try:
+            _aow_datum_partner = bereken_aow_datum(date.fromisoformat(data.partner.geboortedatum))
+            _partner_is_aow = _vandaag >= _aow_datum_partner
+        except (ValueError, TypeError):
+            pass
+
+    _alle_personen_aow = _aanvrager_is_aow and (data.alleenstaand or _partner_is_aow)
+
+    ao_scenarios = []
+    ww_scenarios = []
+
+    if _alle_personen_aow:
+        log.info("Alle personen AOW-gerechtigd — AO/WW-scenario's overgeslagen")
+    else:
+        ao_result = _safe_call(
+            "AO scenarios",
+            risk_scenarios.bereken_ao_scenarios,
+            hypotheek_delen=hypotheek_delen_api,
+            ingangsdatum_hypotheek=ingangsdatum,
+            geboortedatum_aanvrager=data.aanvrager.geboortedatum,
+            alleenstaande="NEE" if not data.alleenstaand else "JA",
+            geboortedatum_partner=data.partner.geboortedatum if data.partner else None,
+            inkomen_loondienst_aanvrager=data.aanvrager.inkomen.loondienst,
+            inkomen_onderneming_aanvrager=data.aanvrager.inkomen.onderneming,
+            inkomen_roz_aanvrager=data.aanvrager.inkomen.roz,
+            inkomen_overig_aanvrager=data.aanvrager.inkomen.overig + data.aanvrager.inkomen.overig_tijdelijk,
+            inkomen_loondienst_partner=data.partner.inkomen.loondienst if data.partner else 0,
+            inkomen_onderneming_partner=data.partner.inkomen.onderneming if data.partner else 0,
+            inkomen_roz_partner=data.partner.inkomen.roz if data.partner else 0,
+            inkomen_overig_partner=(data.partner.inkomen.overig + data.partner.inkomen.overig_tijdelijk) if data.partner else 0,
+            ao_percentage=options.ao_percentage,
+            benutting_rvc_percentage=options.benutting_rvc_percentage,
+            loondoorbetaling_pct_jaar1_aanvrager=options.loondoorbetaling_pct_jaar1_aanvrager,
+            loondoorbetaling_pct_jaar2_aanvrager=options.loondoorbetaling_pct_jaar2_aanvrager,
+            loondoorbetaling_pct_jaar1_partner=options.loondoorbetaling_pct_jaar1_partner,
+            loondoorbetaling_pct_jaar2_partner=options.loondoorbetaling_pct_jaar2_partner,
+            aov_dekking_bruto_jaar_aanvrager=data.aov_dekking_aanvrager,
+            aov_dekking_bruto_jaar_partner=data.aov_dekking_partner,
+            woonlastenverzekering_ao_bruto_jaar=data.woonlastenverzekering_ao,
+            arbeidsverleden_jaren_tm_2015=options.arbeidsverleden_jaren_tm_2015,
+            arbeidsverleden_jaren_vanaf_2016=options.arbeidsverleden_jaren_vanaf_2016,
+            **common_risk_params,
+        )
+        ao_scenarios = (ao_result or {}).get("scenarios", [])
+
+        # Filter scenario's van personen die al AOW-gerechtigd zijn
+        if _aanvrager_is_aow:
+            ao_scenarios = [s for s in ao_scenarios if s.get("wie") != "aanvrager"]
+        if _partner_is_aow:
+            ao_scenarios = [s for s in ao_scenarios if s.get("wie") != "partner"]
+
+        # 5d: Werkloosheid
+        ww_result = _safe_call(
+            "WW scenarios",
+            risk_scenarios.bereken_werkloosheid_scenarios,
+            hypotheek_delen=hypotheek_delen_api,
+            ingangsdatum_hypotheek=ingangsdatum,
+            geboortedatum_aanvrager=data.aanvrager.geboortedatum,
+            alleenstaande="NEE" if not data.alleenstaand else "JA",
+            geboortedatum_partner=data.partner.geboortedatum if data.partner else None,
+            inkomen_loondienst_aanvrager=data.aanvrager.inkomen.loondienst,
+            inkomen_onderneming_aanvrager=data.aanvrager.inkomen.onderneming,
+            inkomen_roz_aanvrager=data.aanvrager.inkomen.roz,
+            inkomen_overig_aanvrager=data.aanvrager.inkomen.overig + data.aanvrager.inkomen.overig_tijdelijk,
+            inkomen_loondienst_partner=data.partner.inkomen.loondienst if data.partner else 0,
+            inkomen_onderneming_partner=data.partner.inkomen.onderneming if data.partner else 0,
+            inkomen_roz_partner=data.partner.inkomen.roz if data.partner else 0,
+            inkomen_overig_partner=(data.partner.inkomen.overig + data.partner.inkomen.overig_tijdelijk) if data.partner else 0,
+            arbeidsverleden_jaren_totaal_aanvrager=options.arbeidsverleden_jaren_totaal_aanvrager,
+            arbeidsverleden_pre2016_boven10_aanvrager=options.arbeidsverleden_pre2016_boven10_aanvrager,
+            arbeidsverleden_vanaf2016_boven10_aanvrager=options.arbeidsverleden_vanaf2016_boven10_aanvrager,
+            arbeidsverleden_jaren_totaal_partner=options.arbeidsverleden_jaren_totaal_partner,
+            arbeidsverleden_pre2016_boven10_partner=options.arbeidsverleden_pre2016_boven10_partner,
+            arbeidsverleden_vanaf2016_boven10_partner=options.arbeidsverleden_vanaf2016_boven10_partner,
+            woonlastenverzekering_ww_bruto_jaar=data.woonlastenverzekering_ww,
+            **common_risk_params,
+        )
+        ww_scenarios = (ww_result or {}).get("scenarios", [])
+
+        # Filter scenario's van personen die al AOW-gerechtigd zijn
+        if _aanvrager_is_aow:
+            ww_scenarios = [s for s in ww_scenarios if s.get("wie") != "aanvrager"]
+        if _partner_is_aow:
+            ww_scenarios = [s for s in ww_scenarios if s.get("wie") != "partner"]
 
     # --- Stap 6: Relatiebeëindiging (alleen stel) ---
     max_hyp_aanvrager_alleen = 0
