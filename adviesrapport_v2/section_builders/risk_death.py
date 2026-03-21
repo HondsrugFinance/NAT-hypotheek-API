@@ -61,12 +61,13 @@ def build_risk_death_section(
             {"label": "Geschatte opbrengst (90%)", "value": format_bedrag(netto_opbrengst), "sub": True},
             {"label": "", "value": ""},
             {"label": "Hypotheek", "value": format_bedrag(hypotheek), "bold": True},
-            {"label": "LTV", "value": f"{ltv:.1f}%", "sub": True},
+            {"label": "Schuld-marktwaardeverhouding", "value": f"{ltv:.1f}%", "sub": True},
         ]
 
+        # Grafiek: 100% woningwaarde (huidig) vs 90% geschatte opbrengst (na overlijden)
         chart_data = {
             "type": "overlijden_vergelijk",
-            "huidig_max_hypotheek": round(netto_opbrengst),
+            "huidig_max_hypotheek": round(woningwaarde),
             "max_hypotheek_na_overlijden": round(netto_opbrengst),
             "geadviseerd_hypotheekbedrag": round(hypotheek),
         }
