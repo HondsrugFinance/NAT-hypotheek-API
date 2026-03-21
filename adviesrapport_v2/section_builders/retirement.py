@@ -68,9 +68,49 @@ def build_retirement_section(
         ("buffer_partial", buffer_dekt_deels),
     )
 
+    # --- Dynamische intro-tekst op basis van klant-specifieke events ---
+    heeft_inkomenswijzigingen = any(
+        item.ingangsdatum or item.einddatum
+        for item in data.aanvrager.inkomen.items
+    )
+    if has_partner and data.partner:
+        heeft_inkomenswijzigingen = heeft_inkomenswijzigingen or any(
+            item.ingangsdatum or item.einddatum
+            for item in data.partner.inkomen.items
+        )
+    heeft_verplichtingen = len([v for v in data.verplichtingen_items if not v.is_doorlopend]) > 0
+    heeft_renteaftrek_einde = any(
+        ld.restant_aftrekbaar is not None
+        for ld in data.leningdelen_voor_api
+    )
+
+    factoren = []
+    if heeft_inkomenswijzigingen:
+        factoren.append("verwachte inkomenswijzigingen")
+    if heeft_verplichtingen:
+        factoren.append("het aflopen van verplichtingen")
+    if heeft_renteaftrek_einde:
+        factoren.append("het aflopen van renteaftrek")
+
+    if factoren:
+        factoren_tekst = ", ".join(factoren[:-1]) + " en " + factoren[-1] if len(factoren) > 1 else factoren[0]
+        intro = (
+            f"Wij hebben berekend hoe de betaalbaarheid van de hypotheek "
+            f"zich ontwikkelt gedurende de looptijd, rekening houdend met "
+            f"{factoren_tekst}."
+        )
+    else:
+        intro = (
+            "Wij hebben berekend hoe de betaalbaarheid van de hypotheek "
+            "zich ontwikkelt gedurende de looptijd."
+        )
+
+    # Override intro in tekst-dict
+    text_with_intro = {**RETIREMENT_TEXT, "intro": intro}
+
     # --- Render teksten ---
     all_paragraphs = render_standard_scenario(
-        text=RETIREMENT_TEXT,
+        text=text_with_intro,
         status=status_result["status"],
         advice_type=status_result["advice_type"],
         nuance_keys=nuance_keys,

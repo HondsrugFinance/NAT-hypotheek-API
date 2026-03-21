@@ -277,8 +277,8 @@ RETIREMENT_TEXT: StandardScenarioText = {
         ),
     },
     "disclaimer": (
-        "Deze berekening is gebaseerd op de pensioeninformatie en "
-        "fiscale regels zoals die op dit moment bekend zijn."
+        "Deze berekening is gebaseerd op de financiële gegevens en "
+        "de fiscale regels zoals die op dit moment bekend zijn."
     ),
 }
 
