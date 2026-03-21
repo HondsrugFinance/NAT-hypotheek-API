@@ -1129,12 +1129,19 @@ def _build_pensioen_chart_data(
                 elif ink_p > ink_a and partner_is_aow:
                     ontvangt_aow = "JA"
 
+            # Verplichtingen: bepaal per datum welke nog actief zijn
+            verpl = data.verplichtingen_op_datum(peildatum)
+
             inputs = {
                 **base_inputs,
                 "hoofd_inkomen_aanvrager": ink_a,
                 "hoofd_inkomen_partner": ink_p,
                 "ontvangt_aow": ontvangt_aow,
                 "hypotheek_delen": projected,
+                # Override verplichtingen met datum-afhankelijke waarden
+                "studievoorschot_studielening": verpl["studielening"],
+                "jaarlast_overige_kredieten": verpl["overige_kredieten"],
+                "limieten_bkr_geregistreerd": verpl["limieten"],
             }
 
             try:

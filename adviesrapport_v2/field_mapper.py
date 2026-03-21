@@ -121,6 +121,17 @@ class NormalizedInkomenItem:
 
 
 @dataclass
+class NormalizedVerplichtingItem:
+    """Individuele verplichting met datumbereik."""
+    maandbedrag: float      # Maandbedrag
+    einddatum: str = ""     # YYYY-MM-DD of "" (= doorlopend)
+    type: str = ""          # "studieschuld", "persoonlijke_lening", "private_lease", etc.
+    omschrijving: str = ""
+    saldo: float = 0        # Restant saldo
+    is_doorlopend: bool = False  # Doorlopend krediet (geen einddatum, telt als limiet)
+
+
+@dataclass
 class NormalizedInkomen:
     """Inkomen voor één persoon."""
     loondienst: float = 0
@@ -407,6 +418,7 @@ class NormalizedDossierData:
     erfpachtcanon_per_maand: float = 0
     overige_kredieten_maandlast: float = 0
     verplichtingen_details: list = field(default_factory=list)  # [{type, maandbedrag, saldo, omschrijving}]
+    verplichtingen_items: list = field(default_factory=list)  # list[NormalizedVerplichtingItem]
 
     # Verzekeringen, vermogen, woningen, hypotheken
     verzekeringen: list[NormalizedVerzekering] = field(default_factory=list)
@@ -492,6 +504,43 @@ class NormalizedDossierData:
             return ink.totaal_op_datum(_date.today())
         # Fallback als items niet gevuld zijn (backward-compat)
         return ink.hoofd_inkomen + ink.overig + ink.overig_tijdelijk + ink.uitkering
+
+    def verplichtingen_op_datum(self, peildatum) -> dict:
+        """Bereken actieve verplichtingen op peildatum.
+
+        Returns dict met dezelfde keys als de calculator verwacht:
+        - studielening: maandlast studieschuld (actief op peildatum)
+        - overige_kredieten: maandlast overige kredieten (actief op peildatum)
+        - limieten: saldo doorlopende kredieten (altijd actief)
+        """
+        from datetime import date as _date
+        studielening = 0.0
+        overige_kredieten = 0.0
+        limieten = self.limieten_bkr  # Doorlopend krediet telt altijd mee
+
+        for v in self.verplichtingen_items:
+            # Doorlopend krediet: altijd actief (zit al in limieten)
+            if v.is_doorlopend:
+                continue
+            # Check einddatum: als verstreken, verplichting niet meer actief
+            if v.einddatum:
+                try:
+                    eind = _date.fromisoformat(v.einddatum)
+                    if peildatum >= eind:
+                        continue  # Verplichting afgelopen
+                except (ValueError, TypeError):
+                    pass
+            # Verplichting is actief
+            if "studie" in v.type:
+                studielening += v.maandbedrag
+            else:
+                overige_kredieten += v.maandbedrag
+
+        return {
+            "studielening": studielening,
+            "overige_kredieten": overige_kredieten,
+            "limieten": limieten,
+        }
 
     @property
     def inkomen_aanvrager_aow(self) -> float:
@@ -1469,23 +1518,40 @@ def _extract_verplichtingen_from_aanvraag(aanvraag_data: dict) -> dict:
     overige_kredieten = 0
     limieten = 0
 
+    verplichtingen_items = []
+
     for item in items:
         vtype = str(item.get("type") or "").lower()
         maandbedrag = _to_float(item.get("maandbedrag"))
         saldo = _to_float(item.get("saldo"))
+        einddatum = str(item.get("einddatum") or "").strip()
+        omschrijving = str(item.get("omschrijving") or item.get("maatschappij") or vtype).strip()
+        is_doorlopend = "doorlopend" in vtype
 
         if "studie" in vtype:
             studielening += maandbedrag
-        elif "doorlopend" in vtype or "krediet" in vtype:
+        elif is_doorlopend:
             limieten += saldo
             overige_kredieten += maandbedrag
         else:
             overige_kredieten += maandbedrag
 
+        # Bewaar individueel item met einddatum voor per-jaar berekeningen
+        if maandbedrag > 0:
+            verplichtingen_items.append(NormalizedVerplichtingItem(
+                maandbedrag=maandbedrag,
+                einddatum=einddatum,
+                type=vtype,
+                omschrijving=omschrijving,
+                saldo=saldo,
+                is_doorlopend=is_doorlopend,
+            ))
+
     return {
         "studielening": studielening,
         "overige_kredieten": overige_kredieten,
         "limieten": limieten,
+        "verplichtingen_items": verplichtingen_items,
     }
 
 
@@ -2331,8 +2397,10 @@ def extract_dossier_data(
         studielening = verpl["studielening"]
         overig_krediet = verpl["overige_kredieten"]
         limieten_bkr = verpl["limieten"]
+        verplichtingen_items_list = verpl.get("verplichtingen_items", [])
         erfpacht = 0
     else:
+        verplichtingen_items_list = []
         # Fallback: uit dossier haalbaarheidsBerekeningen inkomenGegevens
         haalb_list = _get(invoer, "haalbaarheidsBerekeningen") or []
         haalb_ink = (haalb_list[0].get("inkomenGegevens") or {}) if haalb_list else {}
@@ -2463,6 +2531,7 @@ def extract_dossier_data(
         erfpachtcanon_per_maand=erfpacht,
         overige_kredieten_maandlast=overig_krediet,
         verplichtingen_details=verplichtingen_details,
+        verplichtingen_items=verplichtingen_items_list,
         verzekeringen=verzekeringen,
         vermogen=vermogen,
         bestaande_woningen=bestaande_woningen,
