@@ -30,6 +30,7 @@ RISICO_KEYS_STEL = [
 def build_client_profile_section(
     options: AdviesrapportOptions,
     alleenstaand: bool,
+    alle_personen_aow: bool = False,
 ) -> dict:
     """Bouw de klantprofiel sectie."""
     # Rows: doel, ervaring, kennis
@@ -41,7 +42,11 @@ def build_client_profile_section(
     ]
 
     # Risicobereidheid tabel
-    risico_keys = RISICO_KEYS_ALLEENSTAAND if alleenstaand else RISICO_KEYS_STEL
+    risico_keys = list(RISICO_KEYS_ALLEENSTAAND if alleenstaand else RISICO_KEYS_STEL)
+
+    # Bij AOW-gerechtigden: pensioen, AO en WW niet tonen (niet meer van toepassing)
+    if alle_personen_aow:
+        risico_keys = [k for k in risico_keys if k not in ("pensioen", "arbeidsongeschiktheid", "werkloosheid")]
     risico_rows = []
     for key in risico_keys:
         label = RISICO_LABELS.get(key, key.replace("_", " ").title())

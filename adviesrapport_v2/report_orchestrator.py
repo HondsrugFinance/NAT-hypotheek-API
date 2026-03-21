@@ -340,6 +340,7 @@ def generate_sections(
     sections.append(build_client_profile_section(
         options=options,
         alleenstaand=data.alleenstaand,
+        alle_personen_aow=_alle_personen_aow,
     ))
 
     sections.append(build_current_situation_section(data))
@@ -354,12 +355,14 @@ def generate_sections(
         beschikbare_buffer=beschikbare_buffer,
     ))
 
-    sections.append(build_risk_death_section(
-        data=data,
-        overlijden_scenarios=overlijden_scenarios,
-        max_hypotheek_huidig=max_hypotheek,
-        beschikbare_buffer=beschikbare_buffer,
-    ))
+    # Overlijden: alleen bij stel (niet bij alleenstaande)
+    if not data.alleenstaand and data.partner:
+        sections.append(build_risk_death_section(
+            data=data,
+            overlijden_scenarios=overlijden_scenarios,
+            max_hypotheek_huidig=max_hypotheek,
+            beschikbare_buffer=beschikbare_buffer,
+        ))
 
     if ao_scenarios:
         sections.append(build_risk_disability_section(
