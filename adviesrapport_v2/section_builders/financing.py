@@ -44,8 +44,12 @@ def build_financing_section(
         or (fin.eigendom_aanvrager == 100 and fin.eigendom_partner == 0)
     )
     if not _is_default_verdeling:
-        onderpand_rows.append({"label": "Eigendomsverdeling",
-                               "value": f"{fin.eigendom_aanvrager:.0f}% / {fin.eigendom_partner:.0f}%"})
+        if data.alleenstaand:
+            onderpand_rows.append({"label": "Eigendomsverdeling",
+                                   "value": f"{fin.eigendom_aanvrager:.0f}%"})
+        else:
+            onderpand_rows.append({"label": "Eigendomsverdeling",
+                                   "value": f"{fin.eigendom_aanvrager:.0f}% / {fin.eigendom_partner:.0f}%"})
     subsections.append({"subtitle": "Onderpand", "rows": onderpand_rows})
 
     # --- Financieringsopzet ---
