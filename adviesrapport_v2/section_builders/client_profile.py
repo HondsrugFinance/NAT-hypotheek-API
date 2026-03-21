@@ -17,7 +17,7 @@ RISICO_LABELS = {
 
 # Welke risico-items tonen per situatie
 RISICO_KEYS_ALLEENSTAAND = [
-    "pensioen", "arbeidsongeschiktheid", "werkloosheid",
+    "pensioen", "overlijden", "arbeidsongeschiktheid", "werkloosheid",
     "waardedaling_woning", "rentestijging", "aflopen_hypotheekrenteaftrek",
 ]
 RISICO_KEYS_STEL = [

@@ -4,7 +4,7 @@
 
 Op de Adviespagina (AdviesPage.tsx) worden risicobereidheid-velden getoond die niet altijd van toepassing zijn:
 
-1. **Alleenstaande klant:** verberg "Overlijden" en "Relatiebeëindiging"
+1. **Alleenstaande klant:** verberg "Relatiebeëindiging" (overlijden wél tonen — LTV-perspectief)
 2. **Alle personen AOW-gerechtigd:** verberg "Pensioen", "Arbeidsongeschiktheid" en "Werkloosheid"
 
 De backend filtert deze al uit het rapport — de frontend moet de invoervelden ook verbergen.
@@ -32,13 +32,11 @@ Bij elk risicobereidheid-veld: toon alleen als van toepassing.
   </div>
 )}
 
-{/* Overlijden: verberg als alleenstaand */}
-{!isAlleenstaand && (
-  <div>
-    <Label>Overlijden</Label>
-    <Select value={risicoOverlijden} onValueChange={setRisicoOverlijden}>...</Select>
-  </div>
-)}
+{/* Overlijden: altijd tonen (stel: inkomensperspectief, alleenstaand: LTV-perspectief) */}
+<div>
+  <Label>Overlijden</Label>
+  <Select value={risicoOverlijden} onValueChange={setRisicoOverlijden}>...</Select>
+</div>
 
 {/* AO: verberg als alle personen AOW */}
 {!isAllePersonenAOW && (
@@ -82,8 +80,8 @@ const aowPartner = useAOWData(data.klantGegevens?.geboortedatumPartner);
 
 | Test | Verwacht |
 |------|---------|
-| Alleenstaande klant | Geen "Overlijden" en "Relatiebeëindiging" velden |
+| Alleenstaande klant | Geen "Relatiebeëindiging" veld, "Overlijden" wél zichtbaar |
 | Stel | Alle velden zichtbaar |
-| Gepensioneerde alleenstaande (AOW bereikt) | Alleen Waardedaling, Rentestijging, Aflopen hypotheekrenteaftrek |
+| Gepensioneerde alleenstaande (AOW bereikt) | Overlijden + Waardedaling, Rentestijging, Aflopen hypotheekrenteaftrek |
 | Stel, beide AOW | Geen Pensioen/AO/WW, wél Overlijden en Relatiebeëindiging |
 | Stel, één AOW | Alle velden (AO/WW nog relevant voor de niet-AOW partner) |
