@@ -32,52 +32,54 @@ def build_risk_death_section(
         netto_opbrengst = woningwaarde * NETTO_OPBRENGST_FACTOR
         ltv = (hypotheek / woningwaarde * 100) if woningwaarde > 0 else 0
 
+        intro = (
+            "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen."
+        )
+
         if hypotheek <= netto_opbrengst:
-            intro = (
-                "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
+            toelichting = (
                 "Op basis van een geschatte verkoopopbrengst van 90% van de marktwaarde is de opbrengst "
                 "voldoende om de volledige hypotheek af te lossen."
             )
             status_class = "ok"
         else:
             restschuld = hypotheek - netto_opbrengst
-            intro = (
-                "Bij overlijden zal de woning verkocht moeten worden om de hypotheek af te lossen. "
+            toelichting = (
                 "Op basis van een geschatte verkoopopbrengst van 90% van de marktwaarde resteert "
                 f"na verkoop een schuld van {format_bedrag(restschuld)}."
             )
             status_class = "warning"
-
-        rows = [
-            {"label": "Woningwaarde", "value": format_bedrag(woningwaarde)},
-            {"label": "Geschatte verkoopopbrengst (90%)", "value": format_bedrag(netto_opbrengst)},
-            {"label": "Hypotheek", "value": format_bedrag(hypotheek)},
-            {"label": "Schuld-marktwaardeverhouding (LTV)", "value": f"{ltv:.1f}%", "bold": True},
-        ]
 
         disclaimer = (
             "Bij de geschatte verkoopopbrengst is rekening gehouden met verkoopkosten en "
             "een mogelijke marktdaling. De werkelijke opbrengst kan afwijken."
         )
 
-        # Chart data: twee staven (woningwaarde vs hypotheek)
+        # Column met rows + vergelijkingsgrafiek (zelfde stijl als overlijden-stel)
+        col_rows = [
+            {"label": "Woningwaarde", "value": format_bedrag(woningwaarde)},
+            {"label": "Geschatte opbrengst (90%)", "value": format_bedrag(netto_opbrengst), "sub": True},
+            {"label": "", "value": ""},
+            {"label": "Hypotheek", "value": format_bedrag(hypotheek), "bold": True},
+            {"label": "LTV", "value": f"{ltv:.1f}%", "sub": True},
+        ]
+
         chart_data = {
-            "type": "comparison",
-            "bars": [
-                {"label": "Woningwaarde", "value": round(woningwaarde)},
-                {"label": "Hypotheek", "value": round(hypotheek)},
-            ],
-            "hypotheek": round(hypotheek),
+            "type": "overlijden_vergelijk",
+            "huidig_max_hypotheek": round(netto_opbrengst),
+            "max_hypotheek_na_overlijden": round(netto_opbrengst),
+            "geadviseerd_hypotheekbedrag": round(hypotheek),
         }
+
+        columns = [{"title": "Woningverkoop bij overlijden", "rows": col_rows, "chart_data": chart_data}]
 
         return {
             "id": "risk-death",
             "title": "Overlijden",
             "visible": True,
             "narratives": [intro],
-            "rows": rows,
-            "conclusion": [disclaimer],
-            "chart_data": chart_data,
+            "columns": columns,
+            "conclusion": [toelichting, disclaimer],
             "_status_class": status_class,
         }
 
