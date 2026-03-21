@@ -724,11 +724,40 @@ def _bereken_max_hypotheek(data: NormalizedDossierData) -> tuple[float, float]:
             "inleg_overig": 0,
         }]
 
+    # Bepaal ontvangt_aow: JA als de hoogste verdiener AOW-gerechtigd is
+    from aow_calculator import bereken_aow_datum as _bereken_aow
+    _vandaag = date.today()
+    _ink_a = data.inkomen_aanvrager_huidig
+    _ink_p = data.inkomen_partner_huidig
+
+    try:
+        _a_is_aow = _vandaag >= _bereken_aow(date.fromisoformat(data.aanvrager.geboortedatum))
+    except (ValueError, TypeError):
+        _a_is_aow = False
+
+    _p_is_aow = False
+    if data.partner and data.partner.geboortedatum:
+        try:
+            _p_is_aow = _vandaag >= _bereken_aow(date.fromisoformat(data.partner.geboortedatum))
+        except (ValueError, TypeError):
+            pass
+
+    if data.alleenstaand:
+        _ontvangt_aow = "JA" if _a_is_aow else "NEE"
+    elif _a_is_aow and _p_is_aow:
+        _ontvangt_aow = "JA"
+    elif _a_is_aow and _ink_a >= _ink_p:
+        _ontvangt_aow = "JA"
+    elif _p_is_aow and _ink_p > _ink_a:
+        _ontvangt_aow = "JA"
+    else:
+        _ontvangt_aow = "NEE"
+
     inputs = {
         "hoofd_inkomen_aanvrager": data.inkomen_aanvrager_huidig,
         "hoofd_inkomen_partner": data.inkomen_partner_huidig,
         "alleenstaande": "NEE" if not data.alleenstaand else "JA",
-        "ontvangt_aow": "NEE",
+        "ontvangt_aow": _ontvangt_aow,
         "energielabel": data.financiering.energielabel,
         "verduurzamings_maatregelen": 0,
         "limieten_bkr_geregistreerd": data.limieten_bkr,
