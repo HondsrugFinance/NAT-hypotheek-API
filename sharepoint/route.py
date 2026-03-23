@@ -74,22 +74,12 @@ async def maak_klantmap(body: KlantmapRequest, request: Request):
     if not dossiernummer:
         raise HTTPException(400, "Dossier heeft geen dossiernummer — maak eerst een dossiernummer aan")
 
-    # Klantnaam splitsen in achternaam + voornaam
-    klant_naam = dossier.get("klant_naam", "Onbekend")
-    contact = dossier.get("klant_contact_gegevens") or {}
-    aanvrager = contact.get("aanvrager", {})
-    voornaam = aanvrager.get("voornaam", "")
-    achternaam = aanvrager.get("achternaam", klant_naam)
-
-    # Fallback: als geen contact gegevens, probeer klantnaam te splitsen
-    if not voornaam and " " in klant_naam:
-        parts = klant_naam.split(" ", 1)
-        voornaam = parts[0]
-        achternaam = parts[1] if len(parts) > 1 else klant_naam
+    # Mapnaam opbouwen uit contactgegevens
+    naam_deel = _build_mapnaam(dossier)
 
     # 2. Klantmap aanmaken op SharePoint
     try:
-        result = await sp_client.create_klantmap(dossiernummer, achternaam, voornaam)
+        result = await sp_client.create_klantmap(dossiernummer, naam_deel)
     except GraphAPIError as e:
         logger.error("Klantmap aanmaken mislukt: %s", e.message)
         raise HTTPException(e.status_code, f"SharePoint fout: {e.message}")
@@ -146,17 +136,10 @@ async def lees_klantmap(dossier_id: str, request: Request):
         raise HTTPException(400, "Dossier heeft geen dossiernummer")
 
     # Mapnaam reconstrueren
-    klant_naam = dossier.get("klant_naam", "Onbekend")
-    contact = dossier.get("klant_contact_gegevens") or {}
-    aanvrager = contact.get("aanvrager", {})
-    voornaam = aanvrager.get("voornaam", "")
-    achternaam = aanvrager.get("achternaam", klant_naam)
-    if not voornaam and " " in klant_naam:
-        parts = klant_naam.split(" ", 1)
-        voornaam = parts[0]
-        achternaam = parts[1] if len(parts) > 1 else klant_naam
-
-    mapnaam = f"{dossiernummer} {achternaam}, {voornaam}"
+    naam_deel = _build_mapnaam(dossier)
+    import re
+    clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
+    mapnaam = f"{dossiernummer} {clean_naam}"
     hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{mapnaam}"
 
     try:
@@ -187,20 +170,52 @@ async def lees_klantmap(dossier_id: str, request: Request):
 # Webhook: automatisch klantmap aanmaken bij nieuw dossier
 # =============================================================================
 
-def _extract_naam_delen(dossier: dict) -> tuple[str, str]:
-    """Haal achternaam en voornaam uit een dossier record."""
-    klant_naam = dossier.get("klant_naam", "Onbekend")
+def _format_persoon(persoon: dict) -> str:
+    """Formatteer een persoon als 'Achternaam, Voornaam tussenvoegsel'.
+
+    Voorbeeld: {"achternaam": "Marum", "voornaam": "Walter", "tussenvoegsel": "van"}
+    → "Marum, Walter van"
+    """
+    achternaam = persoon.get("achternaam", "").strip()
+    voornaam = persoon.get("voornaam", "").strip()
+    tussenvoegsel = persoon.get("tussenvoegsel", "").strip()
+
+    if not achternaam:
+        return ""
+
+    delen = [f"{achternaam}, {voornaam}" if voornaam else achternaam]
+    if tussenvoegsel:
+        delen.append(tussenvoegsel)
+
+    return " ".join(delen)
+
+
+def _build_mapnaam(dossier: dict) -> str:
+    """Bouw de mapnaam voor SharePoint.
+
+    Formaat: "{dossiernummer} {Achternaam, Voornaam tussenvoegsel}"
+    Bij stel: "{dossiernummer} {Aanvrager} en {Partner}"
+
+    Voorbeelden:
+      "2026-0050 Marum, Walter van en Marum-Koning, Nynke van"
+      "2026-0007 Alawi, Javad"
+    """
     contact = dossier.get("klant_contact_gegevens") or {}
     aanvrager = contact.get("aanvrager", {})
-    voornaam = aanvrager.get("voornaam", "")
-    achternaam = aanvrager.get("achternaam", klant_naam)
+    partner = contact.get("partner", {})
 
-    if not voornaam and " " in klant_naam:
-        parts = klant_naam.split(" ", 1)
-        voornaam = parts[0]
-        achternaam = parts[1] if len(parts) > 1 else klant_naam
+    aanvrager_str = _format_persoon(aanvrager)
+    partner_str = _format_persoon(partner)
 
-    return achternaam, voornaam
+    # Fallback: als geen contact gegevens, gebruik klant_naam
+    if not aanvrager_str:
+        klant_naam = dossier.get("klant_naam", "Onbekend")
+        return klant_naam
+
+    if partner_str:
+        return f"{aanvrager_str} en {partner_str}"
+
+    return aanvrager_str
 
 
 @webhook_router.post("/webhooks/dossier-created")
@@ -243,12 +258,12 @@ async def webhook_dossier_created(request: Request):
     if record.get("sharepoint_url"):
         return {"status": "skipped", "reason": "already_has_sharepoint_url"}
 
-    # Naam splitsen
-    achternaam, voornaam = _extract_naam_delen(record)
+    # Mapnaam opbouwen
+    naam_deel = _build_mapnaam(record)
 
     # Klantmap aanmaken
     try:
-        result = await sp_client.create_klantmap(dossiernummer, achternaam, voornaam)
+        result = await sp_client.create_klantmap(dossiernummer, naam_deel)
     except GraphAPIError as e:
         logger.error("Webhook: klantmap aanmaken mislukt voor %s: %s", dossier_id, e.message)
         return {"status": "error", "reason": str(e.message)}

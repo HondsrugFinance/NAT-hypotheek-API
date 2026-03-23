@@ -194,26 +194,21 @@ async def upload_file(
         return result
 
 
-async def create_klantmap(dossiernummer: str, achternaam: str, voornaam: str) -> dict:
-    """Maak een volledige klantmap aan op SharePoint.
-
-    Maakt de hoofdmap en alle submappen aan.
-    Formaat: "{dossiernummer} {achternaam}, {voornaam}"
+async def create_klantmap(dossiernummer: str, naam_deel: str) -> dict:
+    """Maak een klantmap aan op SharePoint.
 
     Args:
         dossiernummer: bijv. "2026-0001"
-        achternaam: bijv. "Jansen"
-        voornaam: bijv. "Jan"
+        naam_deel: bijv. "Marum, Walter van en Marum-Koning, Nynke van"
 
     Returns:
         dict met "mapnaam", "sharepoint_url", "mappen_aangemaakt"
     """
+    import re
     # Sanitize: SharePoint staat geen mapnamen toe die eindigen op punt/spatie
     # of die ongeldige tekens bevatten (" * : < > ? / \ |)
-    import re
-    clean_voornaam = re.sub(r'[\"*:<>?/\\|]', '', voornaam).strip().rstrip('.')
-    clean_achternaam = re.sub(r'[\"*:<>?/\\|]', '', achternaam).strip().rstrip('.')
-    mapnaam = f"{dossiernummer} {clean_achternaam}, {clean_voornaam}".rstrip('. ')
+    clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
+    mapnaam = f"{dossiernummer} {clean_naam}"
     hoofdpad = f"{SHAREPOINT_KLANTEN_ROOT}/{mapnaam}"
 
     # Hoofdmap aanmaken (geen submappen — categorisering zit in de database)
