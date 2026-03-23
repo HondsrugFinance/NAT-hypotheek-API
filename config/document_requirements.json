@@ -1,0 +1,71 @@
+{
+  "description": "Document requirements matrix - welke documenten zijn nodig per klanttype en inkomentype (fase: aanvraag). Gebaseerd op Stukkenlijst Hondsrug Finance.",
+  "base_documents": {
+    "identificatie": ["paspoort_of_id_kaart"],
+    "note": "Paspoort of ID kaart (voor en achterkant) - per persoon"
+  },
+  "inkomen_documents": {
+    "loondienst": {
+      "per_persoon": ["salarisstrook", "werkgeversverklaring", "uwv_verzekeringsbericht"],
+      "note": "Salarisstrook laatste 3 maanden, werkgeversverklaring max 3 maanden, UWV max 6 maanden"
+    },
+    "ib_ondernemer": {
+      "per_persoon": ["ib_aangifte", "jaarrapport", "ib60"],
+      "note": "Alle 3 documenten van afgelopen 3 jaren"
+    },
+    "dga": {
+      "per_persoon": ["ib_aangifte", "jaarrapport", "ib60"],
+      "note": "Alle 3 documenten van afgelopen 3 jaren"
+    },
+    "uitkering": {
+      "per_persoon": ["toekenningsbesluit_uitkering", "betaalspecificatie_uitkering"],
+      "note": "Toekenningsbesluit + meest recente betaalspecificatie"
+    },
+    "aow_pensioen": {
+      "per_persoon": ["pensioenspecificatie"],
+      "note": "Overzicht van mijnpensioenoverzicht.nl (MPO), max 3 maanden"
+    }
+  },
+  "klanttype_documents": {
+    "starter": {
+      "woning": ["taxatierapport", "koopovereenkomst"],
+      "financieel": ["bankafschrift", "vermogensoverzicht", "leningoverzicht"]
+    },
+    "doorstromer": {
+      "woning": ["taxatierapport", "koopovereenkomst", "verkoopovereenkomst"],
+      "financieel": ["hypotheekoverzicht", "bankafschrift", "vermogensoverzicht", "leningoverzicht"],
+      "note": "Taxatierapport nieuwe woning + evt. taxatierapport huidige woning, verkoopovereenkomst huidige woning"
+    },
+    "verhoger": {
+      "woning": ["taxatierapport", "verbouwingsspecificatie"],
+      "financieel": ["hypotheekoverzicht", "bankafschrift", "vermogensoverzicht", "leningoverzicht"]
+    },
+    "oversluiter": {
+      "woning": ["taxatierapport"],
+      "financieel": ["hypotheekoverzicht", "bankafschrift", "vermogensoverzicht", "leningoverzicht"]
+    },
+    "oha": {
+      "woning": ["taxatierapport", "energielabel"],
+      "financieel": ["hypotheekoverzicht", "bankafschrift", "vermogensoverzicht", "leningoverzicht"],
+      "overig": ["echtscheidingsconvenant", "beschikking_rechtbank", "inschrijving_burgerlijke_stand"]
+    }
+  },
+  "notes": {
+    "validity": {
+      "salarisstrook": "Niet ouder dan 3 maanden",
+      "werkgeversverklaring": "Niet ouder dan 3 maanden",
+      "uwv_verzekeringsbericht": "Niet ouder dan 6 maanden",
+      "pensioenspecificatie": "Niet ouder dan 3 maanden",
+      "taxatierapport": "Niet ouder dan 6 maanden",
+      "hypotheekoverzicht": "Niet ouder dan 3 maanden",
+      "bankafschrift": "Niet ouder dan 3 maanden",
+      "vermogensoverzicht": "Niet ouder dan 3 maanden",
+      "leningoverzicht": "Niet ouder dan 3 maanden",
+      "ib_aangifte": "3 meest recente jaren",
+      "jaarrapport": "3 meest recente jaren",
+      "ib60": "3 meest recente jaren"
+    },
+    "id_documents": "Paspoort of ID kaart voor + achterkant, rijbewijs is niet toegestaan",
+    "verloopdatum_check": "Paspoort, ID-kaart en Energielabel hebben een verloopdatum die gecontroleerd moet worden"
+  }
+}

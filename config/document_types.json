@@ -1,0 +1,281 @@
+{
+  "paspoort": {
+    "keywords": ["paspoort", "passport"],
+    "category": "Identificatie",
+    "submap": "Identificatie",
+    "persoon_type": "A_or_B",
+    "validity_months": null,
+    "check_verloopdatum": true,
+    "description": "Geldig paspoort",
+    "extract_fields": ["Volledige naam", "Geboortedatum", "Geboorteplaats", "Documentnummer", "Nationaliteit", "Verloopdatum"]
+  },
+  "id_kaart": {
+    "keywords": ["id kaart", "id-kaart", "identiteitskaart", "identiteit", "identiteitsbewijs", "id card"],
+    "category": "Identificatie",
+    "submap": "Identificatie",
+    "persoon_type": "A_or_B",
+    "validity_months": null,
+    "check_verloopdatum": true,
+    "description": "Geldige identiteitskaart (voor en achterkant)",
+    "extract_fields": ["Volledige naam", "Geboortedatum", "Geboorteplaats", "Documentnummer", "Nationaliteit", "Verloopdatum"]
+  },
+  "salarisstrook": {
+    "keywords": ["salarisstrook", "salaris", "loon", "loonstrook", "payslip", "salarisbewijs"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "loondienst",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Salarisstrook (laatste 3 maanden)",
+    "extract_fields": ["Werkgever", "Periode", "Bruto maandloon", "Bijzondere beloningen"]
+  },
+  "werkgeversverklaring": {
+    "keywords": ["werkgeversverklaring", "werkgeververklaring", "werkgever verklaring", "employer statement"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "loondienst",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Werkgeversverklaring",
+    "extract_fields": ["Werkgever", "Bruto jaarsalaris", "Vakantiegeld", "Overige inkomensbestandsdelen", "Datum in dienst", "Type dienstverband", "Functie", "Proeftijd", "Proeftijd verlopen"]
+  },
+  "uwv_verzekeringsbericht": {
+    "keywords": ["uwv", "verzekeringsbericht", "uwv verzekeringsbericht", "uwv-verzekeringsbericht"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "loondienst",
+    "validity_months": 6,
+    "check_verloopdatum": false,
+    "description": "UWV verzekeringsbericht",
+    "extract_fields": []
+  },
+  "ib_aangifte": {
+    "keywords": ["inkomstenbelasting", "ib aangifte", "ib-aangifte", "belastingaangifte", "aangifte", "tax return"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "ondernemer_dga",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "IB Aangifte afgelopen 3 jaren",
+    "extract_fields": []
+  },
+  "jaarrapport": {
+    "keywords": ["jaarrapport", "jaarrekening", "jaar rapport", "annual report"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "ondernemer_dga",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Jaarrekening afgelopen 3 jaren",
+    "extract_fields": []
+  },
+  "ib60": {
+    "keywords": ["ib60", "ib-60", "ib 60"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "ondernemer_dga",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "IB 60 afgelopen 3 jaren",
+    "extract_fields": []
+  },
+  "toekenningsbesluit_uitkering": {
+    "keywords": ["toekenningsbesluit", "toekenning", "uitkeringsbesluit"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "uitkering",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Toekenningsbesluit uitkering",
+    "extract_fields": []
+  },
+  "betaalspecificatie_uitkering": {
+    "keywords": ["betaalspecificatie", "uitkeringsspecificatie", "betaalspec"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "uitkering",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Meest recente betaalspecificatie uitkering",
+    "extract_fields": []
+  },
+  "pensioenspecificatie": {
+    "keywords": ["pensioenspecificatie", "pensioen", "pensioenoverzicht", "mijnpensioenoverzicht", "mpo", "aow"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "aow_pensioen",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Overzicht van mijnpensioenoverzicht.nl (MPO)",
+    "extract_fields": ["Pensioenfonds", "Bruto bedrag", "Ingangsdatum"]
+  },
+  "koopovereenkomst": {
+    "keywords": ["koopovereenkomst", "koop overeenkomst", "koopakte", "koop akte", "koopcontract", "purchase agreement"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Koopakte / voorlopig koopcontract",
+    "extract_fields": ["Adres", "Koopprijs", "Leveringsdatum", "Datum Bankgarantie", "Ontbindende voorwaarden datum", "Erfpacht"]
+  },
+  "taxatierapport": {
+    "keywords": ["taxatierapport", "taxatie rapport", "taxatie", "nwwi", "valuation report"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": 6,
+    "check_verloopdatum": false,
+    "description": "Taxatierapport (NWWI)",
+    "extract_fields": ["Adres", "Marktwaarde", "Taxatiedatum", "Waarde na verbouwing"]
+  },
+  "verkoopovereenkomst": {
+    "keywords": ["verkoopovereenkomst", "verkoop overeenkomst", "verkoopakte", "verkoop"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Verkoopovereenkomst huidige woning",
+    "extract_fields": []
+  },
+  "verbouwingsspecificatie": {
+    "keywords": ["verbouwingsspecificatie", "verbouwing", "verbouwingskosten", "verbouwingsplan"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Specificatie verbouwingskosten",
+    "extract_fields": ["Totaal verbouwingskosten", "Specificatie per post"]
+  },
+  "energielabel": {
+    "keywords": ["energielabel", "energie label", "energieprestatie", "epc"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": true,
+    "description": "Energielabel woning",
+    "extract_fields": ["Adres", "Energielabel", "Registratiedatum", "Verloopdatum"]
+  },
+  "hypotheekoverzicht": {
+    "keywords": ["hypotheekoverzicht", "hypotheek overzicht", "hypotheek", "mortgage overview"],
+    "category": "Financieel",
+    "submap": "Financieel",
+    "persoon_type": "AB",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Overzicht huidige hypotheek",
+    "extract_fields": ["Geldverstrekker", "Oorspronkelijk bedrag", "Restschuld", "Rente", "Maandlast", "Einddatum rentevast"]
+  },
+  "bankafschrift": {
+    "keywords": ["bankafschrift", "bank afschrift", "rekeningafschrift", "rekening afschrift", "incassonummer", "bank statement"],
+    "category": "Financieel",
+    "submap": "Financieel",
+    "persoon_type": "A_or_B_or_AB",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Bankafschrift voor incassonummer",
+    "extract_fields": ["Bank", "Rekeningnummer (IBAN)", "Saldo", "Datum"]
+  },
+  "vermogensoverzicht": {
+    "keywords": ["vermogensoverzicht", "vermogen", "totaaloverzicht vermogen", "spaarsaldo"],
+    "category": "Financieel",
+    "submap": "Financieel",
+    "persoon_type": "A_or_B_or_AB",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Totaaloverzicht vermogen",
+    "extract_fields": ["Totaal vermogen", "Datum"]
+  },
+  "leningoverzicht": {
+    "keywords": ["leningoverzicht", "lening overzicht", "lopende leningen", "schuld", "schulden", "verplichting"],
+    "category": "Financieel",
+    "submap": "Financieel",
+    "persoon_type": "A_or_B_or_AB",
+    "validity_months": 3,
+    "check_verloopdatum": false,
+    "description": "Overzicht lopende leningen",
+    "extract_fields": ["Kredietverstrekker", "Type lening", "Oorspronkelijk bedrag", "Restschuld", "Maandlast", "Einddatum"]
+  },
+  "echtscheidingsconvenant": {
+    "keywords": ["echtscheidingsconvenant", "echtscheiding convenant", "convenant", "scheidingsconvenant", "alimentatie"],
+    "category": "Overige",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Convenant / alimentatieafspraken",
+    "extract_fields": ["Datum scheiding", "Partneralimentatie bedrag", "Kinderalimentatie bedrag", "Verdeling vermogen"]
+  },
+  "beschikking_rechtbank": {
+    "keywords": ["beschikking", "rechtbank beschikking", "uitspraak rechtbank", "court decision"],
+    "category": "Overige",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Beschikking echtscheiding",
+    "extract_fields": ["Datum afgifte"]
+  },
+  "inschrijving_burgerlijke_stand": {
+    "keywords": ["inschrijving burgerlijke stand", "burgerlijke stand", "inschrijvingsbewijs", "civil registry"],
+    "category": "Overige",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Inschrijvingsbewijs echtscheiding gemeente",
+    "extract_fields": ["Datum afgifte"]
+  },
+  "koop_aanneemovereenkomst": {
+    "keywords": ["koop aanneemovereenkomst", "koop- en aanneemovereenkomst", "aanneemovereenkomst", "aanneem overeenkomst"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Koop- en aanneemovereenkomst (nieuwbouw)",
+    "extract_fields": []
+  },
+  "meerwerkoverzicht": {
+    "keywords": ["meerwerkoverzicht", "meerwerk overzicht", "meerwerk", "extra werk"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Ondertekend meerwerkoverzicht (nieuwbouw)",
+    "extract_fields": []
+  },
+  "akte_van_verdeling": {
+    "keywords": ["akte van verdeling", "conceptakte", "concept akte", "verdeling"],
+    "category": "Overige",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Conceptakte van verdeling",
+    "extract_fields": []
+  },
+  "bkr": {
+    "keywords": ["bkr", "kredietregistratie", "bkr uitdraai", "credit registration"],
+    "category": "Overige",
+    "submap": "Overig",
+    "persoon_type": "A_or_B",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "BKR uitdraai",
+    "extract_fields": []
+  }
+}

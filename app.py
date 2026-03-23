@@ -118,6 +118,16 @@ from rentes.route import router as rentes_router
 app.include_router(rentes_router)
 logger.info("Rentes endpoints registered: GET /rentes/lookup, GET/POST /rentes/tarieven, GET/POST /rentes/kortingen")
 
+# --- SharePoint klantmappen ---
+from sharepoint.route import router as sharepoint_router
+app.include_router(sharepoint_router)
+logger.info("SharePoint endpoints registered: POST /sharepoint/klantmap, GET /sharepoint/klantmap/{id}")
+
+# --- Document API (upload, lijst, completheidscheck) ---
+from document_api.route import router as document_router
+app.include_router(document_router)
+logger.info("Document API endpoints registered: POST /documents/upload, GET /documents/{id}, GET /documents/{id}/ontbrekend")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
