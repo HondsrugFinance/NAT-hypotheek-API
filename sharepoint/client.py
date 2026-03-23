@@ -208,7 +208,12 @@ async def create_klantmap(dossiernummer: str, achternaam: str, voornaam: str) ->
     Returns:
         dict met "mapnaam", "sharepoint_url", "mappen_aangemaakt"
     """
-    mapnaam = f"{dossiernummer} {achternaam}, {voornaam}"
+    # Sanitize: SharePoint staat geen mapnamen toe die eindigen op punt/spatie
+    # of die ongeldige tekens bevatten (" * : < > ? / \ |)
+    import re
+    clean_voornaam = re.sub(r'[\"*:<>?/\\|]', '', voornaam).strip().rstrip('.')
+    clean_achternaam = re.sub(r'[\"*:<>?/\\|]', '', achternaam).strip().rstrip('.')
+    mapnaam = f"{dossiernummer} {clean_achternaam}, {clean_voornaam}".rstrip('. ')
     hoofdpad = f"{SHAREPOINT_KLANTEN_ROOT}/{mapnaam}"
 
     # Hoofdmap aanmaken
