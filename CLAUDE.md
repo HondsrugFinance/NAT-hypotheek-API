@@ -723,48 +723,33 @@ De PDF template (`templates/samenvatting.html`) gebruikt het Hondsrug Finance kl
 
 ## Backlog
 
-Volledig voortgangsoverzicht: zie `docs/Lovable Rekentool Voortgang.md`
+Twee strategische doelen: **(A)** daadwerkelijk hypotheekaanvragen indienen en **(B)** workflow automatiseren.
 
-### Te doen — Fase 4
+### Doel A — Hypotheekaanvragen indienen
 
-| # | Item | Waar | Status |
-|---|------|------|--------|
-| J2 | Maandlasten uit API i.p.v. lokale berekening | Lovable | Gereed (fallback behouden) |
-| J3 | AOW centraliseren via useAOWData hook | Lovable | Gereed |
-| J4 | Dead code cleanup berekeningen.ts | Lovable | Vervallen (fallback bewust behouden) |
-| C4 | Hypotheekrentes handmatig beheren | Supabase + Lovable | Te doen |
-| D2 | Adviesrapport PDF — backend endpoint V1 | NAT API | Gereed (POST /adviesrapport-pdf) |
-| D2b | Adviesrapport PDF — SVG grafieken + risico-secties | NAT API | Gereed (chart_generator.py) |
-| D2c | Adviesrapport PDF — klantprofiel (kennis/ervaring/risicobereidheid) | NAT API | Gereed |
-| H1 | Adviesrapport V2 — backend-driven (dossier_id + aanvraag_id) | NAT API | Gereed (POST /adviesrapport-pdf-v2) |
-| I1 | Adviesrapport — preview endpoint + text_overrides | NAT API | Gereed (POST /adviesrapport-preview-v2) |
-| I1 | Adviesrapport — pagina met uitgangspunten + adviesuitkomsten | Lovable | Gereed (AdviesPage.tsx) |
-| G1 | Adviesrapport PDF — Lovable frontend V1 | Lovable | Toegepast |
-| G4 | Adviesrapport — resultaten opslaan + rapportgeneratie | Lovable | Toegepast |
-| C4.2 | Hypotheekrentes automatisch ophalen | NAT API | Toekomst |
-| — | Project-switch naar eigen Supabase | Supabase + Lovable | Toekomst (bij eerste klant/schaling) |
+Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te versturen.
 
-### Te doen — Uitbouwen
+| # | Item | Waar | Handmatig | Claude Code | Blocker |
+|---|------|------|-----------|-------------|---------|
+| C4 | Hypotheekrentes handmatig beheren (Supabase tabel + admin matrix-editor + auto-fill formulier) | Supabase + Lovable | 2 dagen | ~30 min | Lovable prompt geschreven |
+| C4.2 | Hypotheekrentes automatisch ophalen (hypotheekrente-api.nl) | NAT API | 1 dag | ~20 min | API key aanvragen bij info@hypotheekbond.nl |
+| HDN | HDN-export — aanvragen elektronisch versturen via HDN/eBlinqx | NAT API + Lovable | 1-2 weken | ~2 uur | HDN aansluiting + API-specificatie |
 
-| Item | Prioriteit | Beschrijving |
-|------|-----------|--------------|
-| Sentry monitoring | Hoog | Foutmeldingen centraal bijhouden — nu geen zicht op productie-fouten |
-| API-versioning | Laag | `/v1/calculate` — pas relevant bij NAT 2027 naast 2026 of externe afnemers |
+### Doel B — Workflow automatisering
 
-### Te doen — Code refactoring (laag — pas bij grote wijzigingen in betreffend bestand)
+Klantmappen koppelen, documenten verwerken, statusmails versturen.
 
-| Bestand | Regels | Actie | Handmatig | Claude Code |
-|---------|--------|-------|-----------|-------------|
-| `adviesrapport_v2/field_mapper.py` | 2.414 | Splitsen in schemas + extractors + converters | Halve dag | ~15 min |
-| `app.py` | 1.289 | Routes extraheren naar `routes/` submap | Halve dag | ~10 min |
-| `risk_scenarios.py` | 1.012 | Splitsen per scenario-type (aow, overlijden, ao, ww) | 2 uur | ~10 min |
-| `adviesrapport_v2/report_orchestrator.py` | 1.124 | Berekeningshelpers extraheren | Halve dag | ~10 min |
+| # | Item | Waar | Handmatig | Claude Code | Afhankelijkheid |
+|---|------|------|-----------|-------------|-----------------|
+| B1 | OneDrive/SharePoint koppeling — klantmap automatisch aanmaken + linken aan dossier | NAT API + Graph API | 2 dagen | ~1 uur | Azure app-registratie (Files.ReadWrite) |
+| B2 | Document processing — documenten uit klantmap herkennen en Rekentool vullen (AI) | NAT API | 3-5 dagen | ~3 uur | B1 (klantmappen) |
+| B3 | Statusmail automatisering — e-mails genereren met voortgang, benodigde documenten, etc. | NAT API + Graph API | 2 dagen | ~1 uur | E-mail templates + triggers |
+| B4 | Calcasa desktoptaxatie — taxatie uitzetten via API (€110/stuk), rapport koppelen aan dossier | NAT API | 1 dag | ~30 min | Calcasa API-toegang |
 
-### Toekomst — Integraties
+### Lagere prioriteit
 
-| Item | Prioriteit | Beschrijving |
-|------|-----------|--------------|
-| HDN-export | Hoog | Hypotheekaanvragen elektronisch versturen — nodig bij eerste echte klant |
-| Calcasa desktoptaxatie | Medium | Taxatie uitzetten via API (€110/stuk), rapport koppelen aan dossier |
-| AI document processing | Laag | Documenten verwerken vanuit SharePoint/OneDrive |
-| Supabase REST API als hub | Laag | Centrale hub voor externe services — pas bij schaling |
+| Item | Wanneer |
+|------|---------|
+| Code refactoring (4 grote bestanden splitsen, ~45 min Claude Code) | Bij grote wijzigingen in betreffend bestand |
+| API-versioning (`/v1/calculate`) | Bij NAT 2027 of externe afnemers |
+| Project-switch naar eigen Supabase | Bij eerste klant of schaling |

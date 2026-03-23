@@ -113,6 +113,11 @@ from adviesrapport_v2.route import router as adviesrapport_v2_router
 app.include_router(adviesrapport_v2_router)
 logger.info("Adviesrapport V2 endpoints registered: POST /adviesrapport-pdf-v2, POST /adviesrapport-preview-v2")
 
+# --- Hypotheekrentes (Supabase lookup + CRUD) ---
+from rentes.route import router as rentes_router
+app.include_router(rentes_router)
+logger.info("Rentes endpoints registered: GET /rentes/lookup, GET/POST /rentes/tarieven, GET/POST /rentes/kortingen")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
