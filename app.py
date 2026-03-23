@@ -119,9 +119,10 @@ app.include_router(rentes_router)
 logger.info("Rentes endpoints registered: GET /rentes/lookup, GET/POST /rentes/tarieven, GET/POST /rentes/kortingen")
 
 # --- SharePoint klantmappen ---
-from sharepoint.route import router as sharepoint_router
+from sharepoint.route import router as sharepoint_router, webhook_router
 app.include_router(sharepoint_router)
-logger.info("SharePoint endpoints registered: POST /sharepoint/klantmap, GET /sharepoint/klantmap/{id}")
+app.include_router(webhook_router)
+logger.info("SharePoint endpoints registered: POST /sharepoint/klantmap, GET /sharepoint/klantmap/{id}, POST /webhooks/dossier-created")
 
 # --- Document API (upload, lijst, completheidscheck) ---
 from document_api.route import router as document_router
