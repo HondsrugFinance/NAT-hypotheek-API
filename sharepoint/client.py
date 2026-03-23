@@ -216,21 +216,15 @@ async def create_klantmap(dossiernummer: str, achternaam: str, voornaam: str) ->
     mapnaam = f"{dossiernummer} {clean_achternaam}, {clean_voornaam}".rstrip('. ')
     hoofdpad = f"{SHAREPOINT_KLANTEN_ROOT}/{mapnaam}"
 
-    # Hoofdmap aanmaken
+    # Hoofdmap aanmaken (geen submappen — categorisering zit in de database)
     result = await create_folder(hoofdpad)
     sharepoint_url = result.get("webUrl", "")
 
-    # Submappen aanmaken
-    mappen_aangemaakt = [mapnaam]
-    for submap in KLANTMAP_SUBMAPPEN:
-        await create_folder(f"{hoofdpad}/{submap}")
-        mappen_aangemaakt.append(f"{mapnaam}/{submap}")
-
-    logger.info("Klantmap aangemaakt: %s (%d submappen)", mapnaam, len(KLANTMAP_SUBMAPPEN))
+    logger.info("Klantmap aangemaakt: %s", mapnaam)
 
     return {
         "mapnaam": mapnaam,
         "sharepoint_url": sharepoint_url,
         "hoofdpad": hoofdpad,
-        "mappen_aangemaakt": mappen_aangemaakt,
+        "mappen_aangemaakt": [mapnaam],
     }
