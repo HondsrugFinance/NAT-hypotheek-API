@@ -271,7 +271,7 @@ class CalcasaClient:
             return ""
         try:
             r = httpx.get(
-                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?id=eq.1&select=refresh_token",
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?select=refresh_token&limit=1",
                 headers=headers,
                 timeout=5.0,
             )
@@ -293,16 +293,17 @@ class CalcasaClient:
         if not headers:
             return
         try:
+            # Eerst proberen te updaten
             r = httpx.patch(
-                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?id=eq.1",
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?limit=1",
                 headers=headers,
-                json={"refresh_token": token, "updated_at": "now()"},
+                json={"refresh_token": token},
                 timeout=5.0,
             )
             if r.status_code in (200, 204):
                 logger.info("Calcasa refresh token opgeslagen in Supabase")
             else:
-                logger.warning("Supabase token opslaan: %s %s", r.status_code, r.text[:100])
+                logger.warning("Supabase token opslaan: %s %s", r.status_code, r.text[:200])
         except Exception as e:
             logger.debug("Supabase token opslaan mislukt: %s", e)
 
