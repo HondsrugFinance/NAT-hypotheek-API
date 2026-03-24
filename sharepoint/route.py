@@ -149,16 +149,25 @@ async def lees_klantmap(dossier_id: str, request: Request):
             raise HTTPException(404, "Klantmap niet gevonden op SharePoint")
         raise HTTPException(e.status_code, f"SharePoint fout: {e.message}")
 
-    items = [
-        FolderItem(
+    items = []
+    for item in items_raw:
+        # Gewijzigd door: haal naam uit lastModifiedBy.user.displayName
+        modified_by = ""
+        lmb = item.get("lastModifiedBy", {})
+        if isinstance(lmb, dict):
+            user = lmb.get("user", {})
+            if isinstance(user, dict):
+                modified_by = user.get("displayName", "")
+
+        items.append(FolderItem(
             name=item["name"],
             id=item["id"],
             type="folder" if "folder" in item else "file",
             size=item.get("size"),
             web_url=item.get("webUrl"),
-        )
-        for item in items_raw
-    ]
+            last_modified=item.get("lastModifiedDateTime"),
+            last_modified_by=modified_by,
+        ))
 
     return KlantmapInhoudResponse(
         sharepoint_url=dossier.get("sharepoint_url"),

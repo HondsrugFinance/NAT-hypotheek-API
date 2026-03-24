@@ -20,6 +20,8 @@ class FolderItem(BaseModel):
     type: str  # "folder" of "file"
     size: int | None = None
     web_url: str | None = None
+    last_modified: str | None = None
+    last_modified_by: str | None = None
 
 
 class KlantmapInhoudResponse(BaseModel):
