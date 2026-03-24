@@ -94,7 +94,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"https://.*\.lovable\.app|https://.*\.lovableproject\.com",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
