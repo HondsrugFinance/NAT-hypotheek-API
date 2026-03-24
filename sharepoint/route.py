@@ -151,6 +151,10 @@ async def lees_klantmap(dossier_id: str, request: Request):
 
     items = []
     for item in items_raw:
+        # Verberg Inbox map (gebruikt door document processing, niet voor de frontend)
+        if item.get("name") == "Inbox" and "folder" in item:
+            continue
+
         # Gewijzigd door: haal naam uit lastModifiedBy.user.displayName
         modified_by = ""
         lmb = item.get("lastModifiedBy", {})
