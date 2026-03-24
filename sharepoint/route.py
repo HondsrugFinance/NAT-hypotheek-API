@@ -4,7 +4,7 @@ import os
 import logging
 import re
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from adviesrapport_v2.supabase_client import _headers as supabase_headers, SUPABASE_URL
 from graph_auth import GraphAPIError
@@ -173,6 +173,82 @@ async def lees_klantmap(dossier_id: str, request: Request):
         sharepoint_url=dossier.get("sharepoint_url"),
         items=items,
     )
+
+
+@router.post("/klantmap/{dossier_id}/upload")
+async def upload_naar_klantmap(
+    dossier_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+):
+    """Upload een bestand naar de klantmap op SharePoint."""
+    if not sp_client.is_configured():
+        raise HTTPException(503, "SharePoint niet geconfigureerd")
+
+    access_token = _extract_access_token(request)
+
+    # Validatie: bestandsgrootte (max 25MB)
+    content = await file.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Bestand te groot (max 25 MB)")
+    if len(content) < 1024:
+        raise HTTPException(400, "Bestand te klein (min 1 KB)")
+
+    # Dossier ophalen voor SharePoint pad
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(access_token),
+                params={"select": "dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url", "id": f"eq.{dossier_id}"},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as e:
+        raise HTTPException(500, f"Dossier ophalen mislukt: {e}")
+
+    if not rows:
+        raise HTTPException(404, f"Dossier niet gevonden: {dossier_id}")
+
+    dossier = rows[0]
+    dossiernummer = dossier.get("dossiernummer")
+    if not dossiernummer:
+        raise HTTPException(400, "Dossier heeft geen dossiernummer")
+
+    naam_deel = _build_mapnaam(dossier)
+    clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
+    hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{dossiernummer} {clean_naam}"
+
+    try:
+        result = await sp_client.upload_file(
+            hoofdpad,
+            file.filename or "document",
+            content,
+            file.content_type or "application/octet-stream",
+        )
+    except GraphAPIError as e:
+        raise HTTPException(e.status_code, f"Upload mislukt: {e.message}")
+
+    return {
+        "name": result.get("name"),
+        "id": result.get("id"),
+        "size": result.get("size"),
+        "web_url": result.get("webUrl"),
+    }
+
+
+@router.delete("/klantmap/item/{item_id}")
+async def verwijder_bestand(item_id: str, request: Request):
+    """Verwijder een bestand uit een klantmap op SharePoint."""
+    if not sp_client.is_configured():
+        raise HTTPException(503, "SharePoint niet geconfigureerd")
+
+    try:
+        await sp_client.delete_item(item_id)
+    except GraphAPIError as e:
+        raise HTTPException(e.status_code, f"Verwijderen mislukt: {e.message}")
+
+    return {"status": "ok", "deleted": item_id}
 
 
 # =============================================================================

@@ -194,6 +194,29 @@ async def upload_file(
         return result
 
 
+async def delete_item(item_id: str) -> None:
+    """Verwijder een bestand of map van SharePoint.
+
+    Args:
+        item_id: SharePoint item ID
+    """
+    headers = await _graph_headers()
+    url = f"{GRAPH_BASE_URL}/drives/{SHAREPOINT_DRIVE_ID}/items/{item_id}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.delete(url, headers=headers)
+
+        if resp.status_code not in (200, 204):
+            logger.error("Verwijderen mislukt: %s %s", resp.status_code, resp.text[:300])
+            raise GraphAPIError(
+                f"Verwijderen mislukt: {resp.status_code}",
+                status_code=resp.status_code,
+                detail=resp.text[:300],
+            )
+
+        logger.info("Bestand verwijderd: item_id=%s", item_id[:12])
+
+
 async def create_klantmap(dossiernummer: str, naam_deel: str) -> dict:
     """Maak een klantmap aan op SharePoint.
 
