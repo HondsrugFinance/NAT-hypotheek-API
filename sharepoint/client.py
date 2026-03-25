@@ -238,10 +238,11 @@ async def create_klantmap(dossiernummer: str, naam_deel: str) -> dict:
     result = await create_folder(hoofdpad)
     sharepoint_url = result.get("webUrl", "")
 
-    # Inbox submap aanmaken (verborgen voor frontend, gebruikt door document processing)
-    await create_folder(f"{hoofdpad}/Inbox")
+    # Systeemmappen aanmaken (verborgen voor frontend, prefix _ )
+    for systeemmap in ["_inbox", "_communicatie", "_archief"]:
+        await create_folder(f"{hoofdpad}/{systeemmap}")
 
-    logger.info("Klantmap aangemaakt: %s (+ Inbox)", mapnaam)
+    logger.info("Klantmap aangemaakt: %s (+ _inbox, _communicatie, _archief)", mapnaam)
 
     return {
         "mapnaam": mapnaam,

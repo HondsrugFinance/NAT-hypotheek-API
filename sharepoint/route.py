@@ -151,8 +151,8 @@ async def lees_klantmap(dossier_id: str, request: Request):
 
     items = []
     for item in items_raw:
-        # Verberg Inbox map (gebruikt door document processing, niet voor de frontend)
-        if item.get("name") == "Inbox" and "folder" in item:
+        # Verberg systeemmappen (prefix _) voor de frontend
+        if item.get("name", "").startswith("_") and "folder" in item:
             continue
 
         # Gewijzigd door: haal naam uit lastModifiedBy.user.displayName
