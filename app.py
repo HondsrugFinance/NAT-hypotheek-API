@@ -1337,20 +1337,36 @@ class TaxatieModelwaardeRequest(BaseModel):
 
 
 _calcasa_client = None
+_calcasa_init_failed_at: float = 0  # Timestamp van laatste gefaalde init
 
 
 def _get_calcasa_client():
-    """Lazy-load Calcasa client (singleton). Herautht automatisch bij verlopen token."""
-    global _calcasa_client
-    if _calcasa_client is None:
-        try:
-            from Calcasa.calcasa_client import CalcasaClient
-            _calcasa_client = CalcasaClient()
-            _calcasa_client.refresh_access_token()
-            logger.info("Calcasa client geinitialiseerd en token vernieuwd")
-        except Exception as e:
-            logger.error("Calcasa client init mislukt: %s", e)
-            _calcasa_client = None
+    """Lazy-load Calcasa client met auto-recovery.
+
+    - Singleton: client wordt hergebruikt tussen requests
+    - Auto-refresh: _ensure_authenticated() in elke gRPC call
+    - Recovery: bij init-fout, probeer na 60s opnieuw (niet bij elke request)
+    """
+    global _calcasa_client, _calcasa_init_failed_at
+    import time
+
+    if _calcasa_client is not None:
+        return _calcasa_client
+
+    # Voorkom dat we bij elke request opnieuw proberen als init net faalde
+    if _calcasa_init_failed_at and time.time() - _calcasa_init_failed_at < 60:
+        return None
+
+    try:
+        from Calcasa.calcasa_client import CalcasaClient
+        client = CalcasaClient()
+        client.refresh_access_token()
+        _calcasa_client = client
+        _calcasa_init_failed_at = 0
+        logger.info("Calcasa client geinitialiseerd en token vernieuwd")
+    except Exception as e:
+        logger.error("Calcasa client init mislukt: %s", e)
+        _calcasa_init_failed_at = time.time()
     return _calcasa_client
 
 

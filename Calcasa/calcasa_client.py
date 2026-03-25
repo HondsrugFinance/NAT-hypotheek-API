@@ -48,13 +48,21 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 
 class CalcasaClient:
-    """Client voor Calcasa Desktop Taxatie API (gRPC-Web)."""
+    """Client voor Calcasa Desktop Taxatie API (gRPC-Web).
+
+    Token lifecycle:
+    - Access token verloopt na ~1 uur
+    - Refresh token is eenmalig: na gebruik krijg je een nieuwe
+    - Bij elke refresh: nieuwe tokens opslaan in Supabase
+    - _ensure_authenticated() wordt aangeroepen vóór elke API call
+    """
 
     def __init__(self):
         # Probeer eerst Supabase, dan env var
         self.refresh_token = self._load_token_from_supabase() or os.getenv("CALCASA_REFRESH_TOKEN", "")
         self.access_token = os.getenv("CALCASA_BEARER_TOKEN", "")
         self._client = httpx.Client(timeout=30.0, follow_redirects=True)
+        self._token_expires_at: float = 0  # Unix timestamp wanneer access token verloopt
 
     def close(self):
         self._client.close()
@@ -67,16 +75,43 @@ class CalcasaClient:
 
     # ─── Auth ─────────────────────────────────────────────────
 
+    def _ensure_authenticated(self):
+        """Zorg dat we een geldige access token hebben. Vernieuw als nodig."""
+        import time
+        if self.access_token and time.time() < self._token_expires_at - 60:
+            return  # Token nog geldig (met 60s marge)
+        logger.info("Access token verlopen of ontbreekt, vernieuwen...")
+        self.refresh_access_token()
+
     def refresh_access_token(self) -> str:
         """Vernieuw access token via refresh_token, met Playwright fallback."""
+        import time
+
+        # Stap 1: Probeer huidige refresh token
         if self.refresh_token:
             try:
-                return self._refresh_via_token()
+                result = self._refresh_via_token()
+                self._token_expires_at = time.time() + 3500  # ~58 min
+                return result
             except Exception as e:
-                logger.warning("Refresh token mislukt (%s), probeer Playwright login...", e)
+                logger.warning("Refresh token mislukt (%s)", e)
 
-        # Fallback: Playwright browser login
-        return self._login_via_playwright()
+        # Stap 2: Herlaad token uit Supabase (misschien is er een nieuwere)
+        fresh_token = self._load_token_from_supabase()
+        if fresh_token and fresh_token != self.refresh_token:
+            self.refresh_token = fresh_token
+            try:
+                result = self._refresh_via_token()
+                self._token_expires_at = time.time() + 3500
+                return result
+            except Exception as e:
+                logger.warning("Supabase token ook mislukt (%s)", e)
+
+        # Stap 3: Playwright fallback
+        logger.info("Alle tokens mislukt, probeer Playwright login...")
+        result = self._login_via_playwright()
+        self._token_expires_at = time.time() + 3500
+        return result
 
     def _refresh_via_token(self) -> str:
         """Vernieuw access token via refresh_token."""
@@ -319,15 +354,28 @@ class CalcasaClient:
 
     def _grpc_call(self, host: str, service: str, method: str,
                    protobuf_bytes: bytes) -> bytes:
-        """Voer een gRPC-Web call uit en return response protobuf bytes."""
+        """Voer een gRPC-Web call uit en return response protobuf bytes.
+
+        Automatische re-auth bij 401 of bij gRPC UNAUTHENTICATED status.
+        """
+        self._ensure_authenticated()
+
         url = f"{host}/{service}/{method}"
         body = grpc_web_encode(protobuf_bytes)
 
         r = self._client.post(url, content=body, headers=self._grpc_headers())
 
-        if r.status_code == 401:
-            # Token verlopen → refresh en retry
-            self.refresh_access_token()
+        # Check voor auth-fouten (HTTP 401 of gRPC status 16 = UNAUTHENTICATED)
+        needs_reauth = (
+            r.status_code == 401
+            or r.headers.get("grpc-status") == "16"
+            or (r.status_code == 200 and not r.text and r.headers.get("grpc-status", "0") != "0")
+        )
+
+        if needs_reauth:
+            logger.info("gRPC auth fout, hernieuw token en retry...")
+            self._token_expires_at = 0  # Forceer re-auth
+            self._ensure_authenticated()
             r = self._client.post(url, content=body, headers=self._grpc_headers())
 
         r.raise_for_status()
