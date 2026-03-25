@@ -366,14 +366,21 @@ class CalcasaClient:
                    protobuf_bytes: bytes) -> bytes:
         """Voer een gRPC-Web call uit en return response protobuf bytes.
 
-        Automatische re-auth bij 401 of bij gRPC UNAUTHENTICATED status.
+        Automatische re-auth bij 401, gRPC UNAUTHENTICATED, of disconnect.
         """
         self._ensure_authenticated()
 
         url = f"{host}/{service}/{method}"
         body = grpc_web_encode(protobuf_bytes)
 
-        r = self._client.post(url, content=body, headers=self._grpc_headers())
+        try:
+            r = self._client.post(url, content=body, headers=self._grpc_headers())
+        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError) as e:
+            # Server disconnect — vaak door verlopen token op bestaande connectie
+            logger.warning("gRPC disconnect (%s), hernieuw token en retry...", e)
+            self._token_expires_at = 0
+            self._ensure_authenticated()
+            r = self._client.post(url, content=body, headers=self._grpc_headers())
 
         # Check voor auth-fouten (HTTP 401 of gRPC status 16 = UNAUTHENTICATED)
         needs_reauth = (
@@ -384,7 +391,7 @@ class CalcasaClient:
 
         if needs_reauth:
             logger.info("gRPC auth fout, hernieuw token en retry...")
-            self._token_expires_at = 0  # Forceer re-auth
+            self._token_expires_at = 0
             self._ensure_authenticated()
             r = self._client.post(url, content=body, headers=self._grpc_headers())
 
