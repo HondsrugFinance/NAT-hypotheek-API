@@ -150,6 +150,38 @@ async def list_folder(pad: str) -> list[dict]:
         return resp.json().get("value", [])
 
 
+async def download_file(pad: str) -> bytes:
+    """Download een bestand van SharePoint.
+
+    Args:
+        pad: Volledig pad naar het bestand (bijv. "1.Klanten/2026-0001 Naam/bestand.pdf")
+
+    Returns:
+        Bestandsinhoud als bytes
+    """
+    token = await get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    url = (
+        f"{GRAPH_BASE_URL}/drives/{SHAREPOINT_DRIVE_ID}"
+        f"/root:/{pad}:/content"
+    )
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.get(url, headers=headers, follow_redirects=True)
+
+        if resp.status_code != 200:
+            logger.error("Download mislukt: %s %s", resp.status_code, resp.text[:300])
+            raise GraphAPIError(
+                f"Download mislukt: {resp.status_code}",
+                status_code=resp.status_code,
+                detail=resp.text[:300],
+            )
+
+        logger.info("Bestand gedownload: %s (%d bytes)", pad, len(resp.content))
+        return resp.content
+
+
 async def upload_file(
     pad: str,
     filename: str,

@@ -129,6 +129,11 @@ from document_api.route import router as document_router
 app.include_router(document_router)
 logger.info("Document API endpoints registered: POST /documents/upload, GET /documents/{id}, GET /documents/{id}/ontbrekend")
 
+# --- Document Processing Pipeline (OCR, classificatie, extractie) ---
+from document_processing.route import router as doc_processing_router
+app.include_router(doc_processing_router)
+logger.info("Document Processing endpoints registered: POST /documents/{id}/process, GET /documents/{id}/extracted")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
