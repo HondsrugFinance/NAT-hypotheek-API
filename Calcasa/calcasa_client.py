@@ -323,19 +323,29 @@ class CalcasaClient:
 
     @staticmethod
     def _save_token_to_supabase(token: str):
-        """Sla refresh token op in Supabase (upsert op id=1)."""
+        """Sla refresh token op in Supabase.
+
+        Strategie: DELETE alle rijen + INSERT nieuwe rij.
+        Werkt ongeacht of id een int of uuid is.
+        """
         headers = CalcasaClient._supabase_headers()
         if not headers:
             return
         try:
-            # Eerst proberen te updaten
-            r = httpx.patch(
-                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?limit=1",
+            # Stap 1: Verwijder bestaande rij(en)
+            httpx.delete(
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens?refresh_token=neq.IMPOSSIBLE_VALUE",
+                headers=headers,
+                timeout=5.0,
+            )
+            # Stap 2: Insert nieuwe rij
+            r = httpx.post(
+                f"{SUPABASE_URL}/rest/v1/calcasa_tokens",
                 headers=headers,
                 json={"refresh_token": token},
                 timeout=5.0,
             )
-            if r.status_code in (200, 204):
+            if r.status_code in (200, 201):
                 logger.info("Calcasa refresh token opgeslagen in Supabase")
             else:
                 logger.warning("Supabase token opslaan: %s %s", r.status_code, r.text[:200])
