@@ -343,9 +343,25 @@ async def webhook_dossier_created(request: Request):
         logger.info("Webhook: dossier %s heeft nog geen dossiernummer of klantnaam — skip", dossier_id)
         return {"status": "skipped", "reason": "incomplete_data"}
 
-    # Check of klantmap al bestaat
-    if record.get("sharepoint_url"):
-        return {"status": "skipped", "reason": "already_has_sharepoint_url"}
+    # Deduplicatie: claim dit dossier door sharepoint_url te zetten op "pending"
+    # Alleen als sharepoint_url nog NULL is (atomic conditional update)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.patch(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers={**supabase_headers(None), "Prefer": "return=representation"},
+                params={"id": f"eq.{dossier_id}", "sharepoint_url": "is.null"},
+                json={"sharepoint_url": "pending"},
+            )
+            resp.raise_for_status()
+            updated = resp.json()
+            if not updated:
+                # Andere webhook-aanroep was sneller — skip
+                logger.info("Webhook: klantmap al geclaimd door andere aanroep voor %s", dossier_id)
+                return {"status": "skipped", "reason": "already_claimed"}
+    except Exception as e:
+        logger.warning("Webhook: claim mislukt voor %s: %s", dossier_id, e)
+        return {"status": "error", "reason": f"claim_failed: {e}"}
 
     # Mapnaam opbouwen
     naam_deel = _build_mapnaam(record)
@@ -355,14 +371,22 @@ async def webhook_dossier_created(request: Request):
         result = await sp_client.create_klantmap(dossiernummer, naam_deel)
     except GraphAPIError as e:
         logger.error("Webhook: klantmap aanmaken mislukt voor %s: %s", dossier_id, e.message)
+        # Reset sharepoint_url naar NULL zodat het opnieuw geprobeerd kan worden
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(None),
+                params={"id": f"eq.{dossier_id}"},
+                json={"sharepoint_url": None},
+            )
         return {"status": "error", "reason": str(e.message)}
 
-    # SharePoint URL opslaan (met service key, geen user session)
+    # SharePoint URL opslaan (echte URL vervangt "pending")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.patch(
                 f"{SUPABASE_URL}/rest/v1/dossiers",
-                headers=supabase_headers(None),  # Gebruikt service key
+                headers=supabase_headers(None),
                 params={"id": f"eq.{dossier_id}"},
                 json={"sharepoint_url": result["sharepoint_url"]},
             )
