@@ -6,8 +6,7 @@ import os
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
-from document_processing.pipeline import process_document
-from document_processing.priority_resolver import resolve_all_fields
+from document_processing.pipeline_v2 import process_document_v2
 from document_processing.schemas import ProcessRequest, ApplyToAanvraagRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
@@ -40,12 +39,12 @@ async def process_single(document_id: str, request: Request, body: ProcessReques
 
     Wordt aangeroepen na upload of handmatig voor herverwerking.
     """
-    result = await process_document(document_id, force=body.force)
+    result = await process_document_v2(document_id, force=body.force)
 
-    if result.status == "error":
-        raise HTTPException(500, f"Verwerking mislukt: {result.error}")
+    if result.get("status") == "error":
+        raise HTTPException(500, f"Verwerking mislukt: {result.get('error', 'onbekend')}")
 
-    return result.model_dump()
+    return result
 
 
 @router.post("/{dossier_id}/process-all")
@@ -161,11 +160,11 @@ async def process_all_pending(dossier_id: str, request: Request):
 
     results = []
     for doc in docs:
-        result = await process_document(doc["id"])
-        results.append(result.model_dump())
+        result = await process_document_v2(doc["id"])
+        results.append(result)
 
-    succeeded = sum(1 for r in results if r["status"] == "extracted")
-    failed = sum(1 for r in results if r["status"] == "error")
+    succeeded = sum(1 for r in results if r.get("status") == "extracted")
+    failed = sum(1 for r in results if r.get("status") == "error")
 
     return {
         "processed": len(results),
