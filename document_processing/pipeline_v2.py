@@ -94,6 +94,29 @@ def _build_dossier_context(dossier: dict) -> dict:
     }
 
 
+def _map_categorie(document_type: str) -> str:
+    """Map documenttype naar geldige categorie (CHECK constraint)."""
+    _type_to_cat = {
+        "paspoort": "Identificatie", "id_kaart": "Identificatie",
+        "salarisstrook": "Inkomen", "werkgeversverklaring": "Inkomen",
+        "uwv_verzekeringsbericht": "Inkomen", "ibl_resultaat": "Inkomen",
+        "ib_aangifte": "Inkomen", "jaarrapport": "Inkomen", "ib60": "Inkomen",
+        "toekenningsbesluit_uitkering": "Inkomen", "betaalspecificatie_uitkering": "Inkomen",
+        "pensioenspecificatie": "Inkomen", "arbeidsmarktscan": "Inkomen",
+        "koopovereenkomst": "Woning", "verkoopovereenkomst": "Woning",
+        "taxatierapport": "Woning", "verbouwingsspecificatie": "Woning",
+        "energielabel": "Woning", "koop_aanneemovereenkomst": "Woning",
+        "meerwerkoverzicht": "Woning",
+        "hypotheekoverzicht": "Financieel", "bankafschrift": "Financieel",
+        "vermogensoverzicht": "Financieel", "leningoverzicht": "Financieel",
+        "nota_van_afrekening": "Financieel",
+        "echtscheidingsconvenant": "Overig", "beschikking_rechtbank": "Overig",
+        "inschrijving_burgerlijke_stand": "Overig", "akte_van_verdeling": "Overig",
+        "bkr": "Overig",
+    }
+    return _type_to_cat.get(document_type, "Overig")
+
+
 async def process_document_v2(document_id: str, force: bool = False) -> dict:
     """Verwerk één document door de 3-stappen pipeline.
 
@@ -191,9 +214,14 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         except (ValueError, TypeError):
             conf_float = None
 
+        # Categorie moet voldoen aan CHECK constraint
+        VALID_CATEGORIES = {"Identificatie", "Inkomen", "Woning", "Financieel", "Overig"}
+        raw_categorie = classification.get("categorie", "Overig")
+        categorie = raw_categorie if raw_categorie in VALID_CATEGORIES else _map_categorie(document_type)
+
         doc_update = {
             "document_type": document_type,
-            "categorie": classification.get("categorie", "Overig"),
+            "categorie": categorie,
             "persoon": persoon,
             "status": "classified",
             "classification_reasoning": str(classification.get("reasoning", ""))[:500],
