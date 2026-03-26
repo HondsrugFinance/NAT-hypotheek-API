@@ -10,10 +10,20 @@ from decimal import Decimal
 
 logger = logging.getLogger("nat-api.ibl")
 
-# Voeg IBL-tool toe aan sys.path
-_ibl_path = os.path.join(os.path.dirname(__file__), "..", "B1", "IBL-tool")
-if _ibl_path not in sys.path:
-    sys.path.insert(0, _ibl_path)
+# Voeg IBL-tool toe aan sys.path (meerdere mogelijke locaties)
+_possible_paths = [
+    os.path.join(os.path.dirname(__file__), "..", "B1", "IBL-tool"),
+    os.path.join(os.getcwd(), "B1", "IBL-tool"),
+    "/opt/render/project/src/B1/IBL-tool",  # Render deploy pad
+]
+for _p in _possible_paths:
+    _p = os.path.abspath(_p)
+    if os.path.isdir(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
+        logger.info("IBL-tool pad gevonden: %s", _p)
+        break
+else:
+    logger.warning("IBL-tool pad niet gevonden in: %s", _possible_paths)
 
 _executor = ThreadPoolExecutor(max_workers=2)
 
