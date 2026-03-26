@@ -56,8 +56,10 @@ async def _sb_insert(table: str, data: dict) -> dict:
 
 
 async def _sb_update(table: str, params: dict, data: dict) -> None:
+    headers = _sb_headers()
+    headers.pop("Prefer", None)  # PATCH heeft geen Prefer nodig
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=_sb_headers(), params=params, json=data)
+        resp = await client.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers, params=params, json=data)
         resp.raise_for_status()
 
 
