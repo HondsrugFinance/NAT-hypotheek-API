@@ -402,10 +402,31 @@ async def _find_pensioen_bijdrage(dossier_id: str, persoon: str) -> float:
 
         if rows:
             values = rows[0].get("computed_values", {})
-            # Zoek naar pensioenbijdrage veld (verschillende mogelijke namen)
-            for key in ["maandelijksePensioenbijdrage", "pensioenbijdrage", "eigen_bijdrage_pensioen"]:
-                if key in values and values[key]:
-                    return float(values[key])
+            raw = rows[0].get("raw_values", {})
+            # Zoek naar pensioenbijdrage in computed_values EN raw_values
+            # Claude kan het onder verschillende namen opslaan
+            pensioen_keys = [
+                "maandelijksePensioenbijdrage",
+                "pensioenbijdrage",
+                "eigen_bijdrage_pensioen",
+                "eigen_bijdrage_pensioen_bedrag",
+                "pensioen_eigen_bijdrage_bedrag",
+                "pensioenpremie",
+                "Premie pensioen",
+                "Premie OP",
+                "Ouderdomspensioen",
+                "Pensioenpremie WN",
+            ]
+            for source in [values, raw]:
+                for key in pensioen_keys:
+                    if key in source and source[key]:
+                        try:
+                            val = float(source[key])
+                            if val > 0:
+                                logger.info("Pensioenbijdrage gevonden: %s = %.2f", key, val)
+                                return val
+                        except (ValueError, TypeError):
+                            continue
     except Exception as e:
         logger.warning("Pensioenbijdrage ophalen mislukt: %s (default 0)", e)
 

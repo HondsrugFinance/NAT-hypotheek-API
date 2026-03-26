@@ -62,7 +62,16 @@ Extraheer de volgende gegevens uit de tekst:
 
 ## Extra instructies per documenttype
 {"- Bij werkgeversverklaring: let op of proeftijd is verstreken, of er loonbeslag is, of er een onderhandse lening is" if document_type == "werkgeversverklaring" else ""}
-{"- Bij salarisstrook: zoek naar de eigen bijdrage pensioen (nodig voor IBL-berekening)" if document_type == "salarisstrook" else ""}
+{'''- Bij salarisstrook: zoek naar de EIGEN BIJDRAGE PENSIOEN van de werknemer (kritiek voor IBL-berekening).
+  Dit staat op loonstroken onder vele verschillende benamingen, waaronder:
+  "Ouderdomspensioen", "Premie pensioen", "Premie OP", "Premie Op/Np", "Premie OVP",
+  "Ouderdomspensioen Wn", "Pensioen/NP", "Pensioenpremie WN", "Pensioenpremie PMT Wn",
+  "Premie ABP Pensioen/NP", "Bijdrage Pensioenfonds A/B", "Pensioen", "Pension Premium",
+  "PENSION PR.", "Excedent pensioen".
+  LET OP: Tel ALLE pensioen-inhoudingen bij elkaar op (bijv. Premie OP + Premie AP + Premie AOP).
+  NIET meetellen: WGA-Hiaat, WIA-excedent, PAWW, Sociaal Fonds, Pensioentoeslag (bruto toeslag).
+  Sla het totaalbedrag op als veld "maandelijksePensioenbijdrage" en het percentage als "pensioenbijdragePercentage".
+  Als er geen pensioenbijdrage is (bijv. bij 30%-ruling of geen pensioenregeling), sla op als 0.''' if document_type == "salarisstrook" else ""}
 {"- Bij UWV verzekeringsbericht: extraheer alle werkgevers/dienstverbanden apart" if document_type == "uwv_verzekeringsbericht" else ""}
 {"- Bij koopovereenkomst: let op erfpacht, ontbindende voorwaarden datum, bankgarantie datum" if document_type == "koopovereenkomst" else ""}
 {"- Bij paspoort/ID: voorletters afleiden uit voornamen (eerste letters + punten)" if document_type in ("paspoort", "id_kaart") else ""}
@@ -178,7 +187,16 @@ def _build_extraction_prompt_base(document_type: str, dossier_context: dict) -> 
     if document_type == "werkgeversverklaring":
         extra = "- Let op proeftijd, loonbeslag, onderhandse lening, loondoorbetaling bij ziekte"
     elif document_type == "salarisstrook":
-        extra = "- Zoek de eigen bijdrage pensioen (bedrag + percentage) — nodig voor IBL-berekening"
+        extra = """- Zoek naar de EIGEN BIJDRAGE PENSIOEN van de werknemer (kritiek voor IBL-berekening).
+  Dit staat op loonstroken onder vele verschillende benamingen, waaronder:
+  "Ouderdomspensioen", "Premie pensioen", "Premie OP", "Premie Op/Np", "Premie OVP",
+  "Ouderdomspensioen Wn", "Pensioen/NP", "Pensioenpremie WN", "Pensioenpremie PMT Wn",
+  "Premie ABP Pensioen/NP", "Bijdrage Pensioenfonds A/B", "Pensioen", "Pension Premium",
+  "PENSION PR.", "Excedent pensioen".
+  Tel ALLE pensioen-inhoudingen bij elkaar op (bijv. Premie OP + Premie AP + Premie AOP).
+  NIET meetellen: WGA-Hiaat, WIA-excedent, PAWW, Sociaal Fonds, Pensioentoeslag (bruto toeslag).
+  Sla het totaalbedrag op als veld "maandelijksePensioenbijdrage" en het percentage als "pensioenbijdragePercentage".
+  Als er geen pensioenbijdrage is (bijv. bij 30%-ruling of geen pensioenregeling), sla op als 0."""
     elif document_type == "koopovereenkomst":
         extra = "- Let op erfpacht, ontbindende voorwaarden datum, bankgarantie datum"
     elif document_type in ("paspoort", "id_kaart"):
