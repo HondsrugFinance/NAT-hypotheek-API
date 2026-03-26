@@ -60,20 +60,39 @@ def _signature_html(sender_email: str) -> str:
 def samenvatting_email_body(
     klant_naam: str,
     sender_email: str = "",
+    has_partner: bool = False,
 ) -> str:
     """
     Genereer de HTML body voor een samenvatting e-mail.
 
     Args:
-        klant_naam: Naam van de klant (aanvrager)
+        klant_naam: Naam van de klant (aanvrager, of "Naam & Naam" bij stel)
         sender_email: E-mailadres van de afzender (voor persoonlijke handtekening)
+        has_partner: True als er een partner is (jullie-vorm), False = je-vorm
 
     Returns:
         HTML string voor de e-mail body.
     """
     signature = _signature_html(sender_email)
 
-    return f"""\
+    if has_partner:
+        return f"""\
+<p>Beste {klant_naam},</p>
+
+<p>Zoals besproken stuur ik jullie hierbij de samenvatting van de hypotheekberekening.</p>
+
+<p>In het document vinden jullie een overzicht van de maximale hypotheek, de mogelijke financieringsopzet en de bijbehorende maandlasten. Hiermee krijgen jullie een goed beeld van de financi\u00eble mogelijkheden in jullie situatie.</p>
+
+<p>De berekening is gebaseerd op de huidige gegevens en hypotheeknormen en dient als eerste indicatie. De uiteindelijke mogelijkheden kunnen nog afhankelijk zijn van onder andere de definitieve toetsing van de gegevens en de actuele rentestand op het moment van aanvragen.</p>
+
+<p>Wanneer jullie vragen hebben of bepaalde onderdelen willen bespreken, neem gerust contact met mij op.</p>
+
+{signature}
+
+<p style="font-size: 11px; color: #888;"><em>Dit bericht is automatisch gegenereerd.
+De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>"""
+    else:
+        return f"""\
 <p>Beste {klant_naam},</p>
 
 <p>Zoals besproken stuur ik je hierbij de samenvatting van de hypotheekberekening.</p>

@@ -57,16 +57,22 @@ jinja_env = Environment(
 
 
 def _fix_toelichting_paragrafen(data: dict) -> None:
-    """Fix toelichting paragrafen: zorg dat de onderdelen-lijst als HTML bullets wordt gerenderd."""
+    """Fix toelichting paragrafen: zorg dat de onderdelen-lijst als HTML bullets wordt gerenderd.
+
+    Ondersteunt een variabel aantal onderdelen — als de frontend alleen
+    'Financieringsopzet' en 'Maandlasten' stuurt (haalbaarheid verborgen),
+    wordt de lijst correct opgebouwd met alleen die items.
+    """
     toelichting = data.get("toelichting")
     if not toelichting or not toelichting.get("paragrafen"):
         return
 
-    onderdelen = [
-        ("Maximaal haalbare hypotheek", "een indicatie van het maximale hypotheekbedrag op basis van inkomen en financiële verplichtingen."),
-        ("Financieringsopzet", "een overzicht van de totale financieringsbehoefte en de opbouw van de hypotheek, inclusief kosten en eventuele eigen middelen."),
-        ("Maandlasten", "een indicatie van de verwachte bruto en netto maandlasten."),
-    ]
+    # Bekende onderdelen die als bullet-lijst moeten worden gerenderd
+    onderdelen_beschrijvingen = {
+        "Maximaal haalbare hypotheek": "een indicatie van het maximale hypotheekbedrag op basis van inkomen en financiële verplichtingen.",
+        "Financieringsopzet": "een overzicht van de totale financieringsbehoefte en de opbouw van de hypotheek, inclusief kosten en eventuele eigen middelen.",
+        "Maandlasten": "een indicatie van de verwachte bruto en netto maandlasten.",
+    }
 
     nieuwe_paragrafen = []
     for p in toelichting["paragrafen"]:
@@ -75,15 +81,22 @@ def _fix_toelichting_paragrafen(data: dict) -> None:
             nieuwe_paragrafen.append(p)
             continue
 
-        # Detecteer de paragraaf met de drie onderdelen als platte tekst
-        if "Maximaal haalbare hypotheek" in p and "Financieringsopzet" in p and "Maandlasten" in p:
-            # Vervang door HTML-lijst (intro-zin staat al in vorige paragraaf)
-            items = "".join(
-                f'<li><strong>{naam}</strong> — {beschrijving}</li>'
-                for naam, beschrijving in onderdelen
-            )
-            nieuwe_paragrafen.append(f'<ul style="margin: 4px 0; padding-left: 20px;">{items}</ul>')
-            continue
+        # Detecteer de onderdelen-paragraaf: bevat " — " en minstens één
+        # bekend onderdeel-label. Dit onderscheidt het van de intro-zin
+        # (die geen " — " bevat).
+        if "\u2014" in p or " — " in p:
+            gevonden = [
+                (naam, beschrijving)
+                for naam, beschrijving in onderdelen_beschrijvingen.items()
+                if naam in p
+            ]
+            if gevonden:
+                items = "".join(
+                    f'<li><strong>{naam}</strong> \u2014 {beschrijving}</li>'
+                    for naam, beschrijving in gevonden
+                )
+                nieuwe_paragrafen.append(f'<ul style="margin: 4px 0; padding-left: 20px;">{items}</ul>')
+                continue
 
         # Ongewijzigd doorlaten
         nieuwe_paragrafen.append(p)

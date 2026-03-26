@@ -1287,9 +1287,34 @@ async def email_draft_samenvatting(
         else "klant"
     )
     subject = request_body.email_subject or f"Samenvatting hypotheekberekening - {klant_naam}"
+    has_partner = bool(
+        request_body.pdf_data.klant_gegevens
+        and request_body.pdf_data.klant_gegevens.partner
+        and request_body.pdf_data.klant_gegevens.partner.naam
+    )
+    # Aanhef: alleen voornamen ("Beste Piet en Greta")
+    aanhef_naam = klant_naam
+    if request_body.pdf_data.klant_gegevens:
+        voornaam_aanvrager = (
+            request_body.pdf_data.klant_gegevens.aanvrager.naam.split()[0]
+            if request_body.pdf_data.klant_gegevens.aanvrager.naam.strip()
+            else ""
+        )
+        voornaam_partner = ""
+        if has_partner:
+            voornaam_partner = (
+                request_body.pdf_data.klant_gegevens.partner.naam.split()[0]
+                if request_body.pdf_data.klant_gegevens.partner.naam.strip()
+                else ""
+            )
+        if voornaam_aanvrager and voornaam_partner:
+            aanhef_naam = f"{voornaam_aanvrager} en {voornaam_partner}"
+        elif voornaam_aanvrager:
+            aanhef_naam = voornaam_aanvrager
     body_html = email_templates.samenvatting_email_body(
-        klant_naam=klant_naam,
+        klant_naam=aanhef_naam,
         sender_email=request_body.sender_email,
+        has_partner=has_partner,
     )
 
     # Stap 4: Concept e-mail aanmaken in Outlook via Graph API
