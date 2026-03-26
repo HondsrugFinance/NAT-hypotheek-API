@@ -69,6 +69,38 @@ Partner: {partner or 'geen'}
 - Bruto salaris: "brutoJaarsalaris" (jaar) of "brutoMaandloon" (maand)
 - Vakantiegeld: "vakantiegeldBedrag" (bedrag) en "vakantiegeldPercentage" (%)
 
+## Documenttype-specifieke instructies
+
+### Bij werkgeversverklaring:
+- BEREKEN het totale WGV toetsinkomen: de SOM van ALLE genummerde posten (1 t/m 10 of meer).
+  Dit zijn: bruto jaarsalaris + vakantietoeslag + 13e maand + eindejaarsuitkering + ORT +
+  overwerk + provisie + flexibel budget + bijdrage levensloop + consign. toeslag + eventuele andere posten.
+  Sla dit op als veld "totaalWgvInkomen".
+- Neem ALLE posten op, ook als ze €0 zijn (dit bevestigt dat ze bewust zijn ingevuld).
+- COMPLEETHEIDSCHECK: controleer of alle verplichte velden zijn ingevuld:
+  * Loonbeslag/looncessie: MOET ja of nee zijn
+  * Onderhandse lening: MOET ja of nee zijn
+  * Directeur-aandeelhouder: MOET ja of nee zijn
+  * Reorganisatie aangekondigd: MOET ja of nee zijn
+  * Proeftijd: MOET ja of nee zijn
+  * Als proeftijd = Ja → proeftijd verstreken MOET ook ingevuld zijn
+  * Handtekening werkgever: MOET aanwezig zijn
+  * Datum ondertekening: MOET ingevuld zijn
+  Meld ELKE ontbrekende of niet-ingevulde veld als waarschuwing:
+  "WGV onvolledig: [veldnaam] is niet ingevuld"
+
+### Bij pensioenspecificatie / UPO:
+- BEREKEN totaal ouderdomspensioen EXCLUSIEF AOW. Tel alle pensioenfondsen op behalve SVB/AOW.
+  Sla op als "ouderdomspensioenTotaalExclAow".
+- Sla AOW apart op als "aowBedrag" (het "te bereiken" bedrag van SVB).
+- NABESTAANDENPENSIOEN: bepaal welk scenario van toepassing is:
+  * Bereken AOW-datum op basis van geboortedatum + pensioenleeftijd
+  * Als AOW-datum in de toekomst → scenario "voor pensionering" is van toepassing
+  * Als AOW-datum in het verleden → scenario "na pensionering"
+  * Tel alle nabestaandenpensioenen per fonds op voor het juiste scenario
+  * Sla op als "nabestaandenpensioenPartner" (totaal) en "nabestaandenpensioenKinderen" (per kind)
+- Gebruik altijd de "te bereiken" bedragen, niet de "opgebouwd" bedragen.
+
 Antwoord in exact dit JSON formaat:
 {{
   "sectie": "{document_type}",
