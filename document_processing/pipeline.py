@@ -9,7 +9,7 @@ import httpx
 from document_processing import ocr_client, classifier, extractor, ibl_runner
 from document_processing.name_matcher import match_persoon
 from document_processing.rename_move import build_filename, move_from_inbox, archive_existing
-from document_processing.schemas import ProcessingResult
+from document_processing.schemas import ProcessingResult, ExtractionResult
 from sharepoint import client as sp_client
 
 logger = logging.getLogger("nat-api.pipeline")
@@ -191,9 +191,62 @@ async def process_document(document_id: str, force: bool = False) -> ProcessingR
         else:
             logger.warning("Claude niet geconfigureerd of geen OCR tekst — skip classificatie")
 
-        # 5. Extractie
+        # 5. Extractie — UWV Verzekeringsbericht: eigen parser (IBL-tool)
+        #    Andere documenten: Claude API extractie
         extraction = None
-        if classifier.is_configured() and classification and classification.document_type != "onbekend":
+
+        if classification and classification.document_type == "uwv_verzekeringsbericht":
+            # UWV: gebruik IBL-tool direct (eigen PyPDF2 parser, leest alle pagina's)
+            logger.info("UWV document → IBL-tool route (bypass Azure DI extractie)")
+            try:
+                pensioen = await _find_pensioen_bijdrage(dossier_id, classification.persoon)
+                ibl_results = await ibl_runner.run_ibl(file_bytes, pensioen)
+
+                # Sla IBL resultaten op
+                for ibl_r in ibl_results:
+                    await _insert_extracted_data({
+                        "dossier_id": dossier_id,
+                        "document_id": document_id,
+                        "extract_type": "ibl_toetsinkomen",
+                        "persoon": classification.persoon,
+                        "raw_values": ibl_r,
+                        "computed_values": {
+                            "gemiddeldJaarToetsinkomen": ibl_r.get("toetsinkomen", 0),
+                            "berekening_type": ibl_r.get("berekening_type", ""),
+                            "werkgever_naam": ibl_r.get("werkgever_naam", ""),
+                        },
+                        "confidence": 1.0,  # IBL is een exacte berekening
+                        "status": "pending_review",
+                    })
+
+                # Bouw extraction result voor response
+                totaal = sum(r.get("toetsinkomen", 0) for r in ibl_results)
+                extraction = ExtractionResult(
+                    raw_values={r.get("werkgever_naam", f"werkgever_{i}"): r for i, r in enumerate(ibl_results)},
+                    computed_values={
+                        "gemiddeldJaarToetsinkomen": totaal,
+                        "aantalWerkgevers": len(ibl_results),
+                        "resultaten": ibl_results,
+                    },
+                    confidence=1.0,
+                    warnings=[
+                        f"IBL toetsinkomen: EUR {totaal:,.2f} ({len(ibl_results)} werkgever(s))",
+                        f"Pensioenbijdrage gebruikt: EUR {pensioen:.2f}/mnd",
+                    ] + [w for r in ibl_results for w in r.get("waarschuwingen", [])],
+                )
+
+                logger.info("IBL berekening succesvol: %d resultaten, totaal EUR %.2f", len(ibl_results), totaal)
+            except Exception as e:
+                logger.error("IBL berekening mislukt: %s", e)
+                extraction = ExtractionResult(
+                    raw_values={},
+                    computed_values={},
+                    confidence=0.0,
+                    warnings=[f"IBL berekening mislukt: {e}"],
+                )
+
+        elif classifier.is_configured() and classification and classification.document_type != "onbekend":
+            # Alle andere documenten: Claude API extractie
             extraction = await extractor.extract_fields(
                 ocr_text, classification.document_type, context
             )
@@ -210,34 +263,6 @@ async def process_document(document_id: str, force: bool = False) -> ProcessingR
                 "notes": "; ".join(extraction.warnings) if extraction.warnings else None,
                 "status": "pending_review",
             })
-
-        # 6. IBL-tool bij UWV Verzekeringsbericht
-        if classification and classification.document_type == "uwv_verzekeringsbericht":
-            try:
-                # Zoek pensioenbijdrage uit eerder geëxtraheerde salarisstrook
-                pensioen = await _find_pensioen_bijdrage(dossier_id, classification.persoon)
-
-                ibl_results = await ibl_runner.run_ibl(file_bytes, pensioen)
-
-                # Sla IBL resultaat op als extracted_data
-                for ibl_r in ibl_results:
-                    await _insert_extracted_data({
-                        "dossier_id": dossier_id,
-                        "document_id": document_id,
-                        "extract_type": "ibl_toetsinkomen",
-                        "persoon": classification.persoon,
-                        "raw_values": ibl_r,
-                        "computed_values": {
-                            "gemiddeldJaarToetsinkomen": ibl_r.get("toetsinkomen", 0),
-                            "berekening_type": ibl_r.get("berekening_type", ""),
-                        },
-                        "confidence": 1.0,  # IBL is een exacte berekening
-                        "status": "pending_review",
-                    })
-
-                logger.info("IBL berekening succesvol: %d resultaten", len(ibl_results))
-            except Exception as e:
-                logger.warning("IBL berekening mislukt: %s (ga door met pipeline)", e)
 
         # 7. Hernoem en verplaats
         new_filename = None

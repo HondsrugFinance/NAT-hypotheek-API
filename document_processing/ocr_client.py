@@ -17,8 +17,8 @@ AZURE_DI_KEY = os.environ.get("AZURE_DI_KEY", "")
 MODEL_ID = "prebuilt-read"
 API_VERSION = "2024-11-30"
 
-MAX_POLL_SECONDS = 90
-POLL_INTERVAL = 2
+MAX_POLL_SECONDS = 180
+POLL_INTERVAL = 3
 
 
 def is_configured() -> bool:
@@ -60,7 +60,7 @@ async def analyze_document(content: bytes, mime_type: str = "application/pdf") -
 
     start = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         # Start analyse
         resp = await client.post(url, headers=headers, json=payload)
 
