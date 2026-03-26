@@ -114,7 +114,10 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         if doc["status"] not in ("pending", "processing") and not force:
             return {"document_id": document_id, "status": "skipped", "reason": f"Status is '{doc['status']}'"}
 
-        await _sb_update("documents", {"id": f"eq.{document_id}"}, {"status": "processing"})
+        try:
+            await _sb_update("documents", {"id": f"eq.{document_id}"}, {"status": "processing"})
+        except Exception as e:
+            logger.warning("Status update naar 'processing' mislukt: %s", e)
 
         dossiers = await _sb_get("dossiers", {
             "select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url",
@@ -198,7 +201,10 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         if conf_float is not None:
             doc_update["classification_confidence"] = conf_float
 
-        await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
+        try:
+            await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
+        except Exception as e:
+            logger.error("Document status update mislukt (doorgaan): %s — data: %s", e, doc_update)
 
         result["steps"]["step1"] = {
             "classification": classification,
@@ -318,7 +324,10 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
 
         duration_ms = int((time.monotonic() - start) * 1000)
         final_updates["processing_duration_ms"] = duration_ms
-        await _sb_update("documents", {"id": f"eq.{document_id}"}, final_updates)
+        try:
+            await _sb_update("documents", {"id": f"eq.{document_id}"}, final_updates)
+        except Exception as e:
+            logger.error("Final document update mislukt (doorgaan): %s", e)
 
         result["status"] = "extracted"
         result["document_type"] = document_type
