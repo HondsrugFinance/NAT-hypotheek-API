@@ -1,5 +1,6 @@
-"""Document extractie via Claude API — haalt specifieke velden uit OCR tekst."""
+"""Document extractie via Claude API — haalt specifieke velden uit documenten."""
 
+import base64
 import json
 import logging
 import os
@@ -154,6 +155,156 @@ async def extract_fields(
 
     logger.info("Geëxtraheerd: %s — %d velden, confidence=%.2f, %d waarschuwingen",
                 document_type, len(raw_values), confidence, len(warnings))
+
+    return ExtractionResult(
+        raw_values=raw_values,
+        computed_values=computed_values,
+        confidence=confidence,
+        warnings=warnings,
+    )
+
+
+def _build_extraction_prompt_base(document_type: str, dossier_context: dict) -> str:
+    """Bouw de extractie-prompt zonder OCR tekst (voor Vision modus)."""
+    doc_types = _load_document_types()
+    doc_info = doc_types.get(document_type, {})
+    extract_fields = doc_info.get("extract_fields", [])
+
+    aanvrager = dossier_context.get("aanvrager_naam", "onbekend")
+    partner = dossier_context.get("partner_naam", "")
+    fields_text = "\n".join(f"- {f}" for f in extract_fields)
+
+    extra = ""
+    if document_type == "werkgeversverklaring":
+        extra = "- Let op proeftijd, loonbeslag, onderhandse lening, loondoorbetaling bij ziekte"
+    elif document_type == "salarisstrook":
+        extra = "- Zoek de eigen bijdrage pensioen (bedrag + percentage) — nodig voor IBL-berekening"
+    elif document_type == "koopovereenkomst":
+        extra = "- Let op erfpacht, ontbindende voorwaarden datum, bankgarantie datum"
+    elif document_type in ("paspoort", "id_kaart"):
+        extra = "- Voorletters afleiden uit voornamen (eerste letters + punten)"
+    elif document_type == "hypotheekoverzicht":
+        extra = "- Extraheer ALLE leningdelen apart (aflosvorm, bedrag, rente, looptijd per deel)"
+
+    return f"""Je bent een specialist in het extraheren van gegevens uit Nederlandse hypotheekdocumenten.
+
+## Document
+Type: {document_type}
+Beschrijving: {doc_info.get('description', document_type)}
+
+## Dossiercontext
+Aanvrager: {aanvrager}
+Partner: {partner or 'geen'}
+
+## Gewenste velden
+Extraheer de volgende gegevens uit het bijgevoegde document:
+{fields_text}
+
+## Extra instructies
+{extra}
+
+## Formateerinstructies
+- Bedragen als getal ZONDER valutasymbool (bijv. 55000, niet €55.000)
+- Percentages als getal (bijv. 8, niet 8%)
+- Datums in formaat YYYY-MM-DD
+- Lege/ontbrekende velden als null
+- Namen voluit, correct gespeld
+
+Antwoord in exact dit JSON formaat:
+{{
+  "extracted_fields": {{
+    "veldnaam": "waarde",
+    ...
+  }},
+  "confidence": 0.92,
+  "warnings": ["waarschuwing 1", ...]
+}}
+
+Geef ALLEEN de velden die je daadwerkelijk kunt vinden. Gok niet."""
+
+
+async def extract_fields_vision(
+    file_bytes: bytes,
+    mime_type: str,
+    document_type: str,
+    dossier_context: dict,
+) -> ExtractionResult:
+    """Extraheer velden via Claude Vision (direct, zonder OCR).
+
+    Stuurt het document als base64 naar Claude. Standaardroute voor digitale PDF's.
+    """
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError("Claude API niet geconfigureerd (ANTHROPIC_API_KEY)")
+
+    prompt = _build_extraction_prompt_base(document_type, dossier_context)
+
+    b64 = base64.standard_b64encode(file_bytes).decode("ascii")
+    media_type = {
+        "application/pdf": "application/pdf",
+        "image/jpeg": "image/jpeg",
+        "image/png": "image/png",
+        "image/tiff": "image/tiff",
+    }.get(mime_type, "application/pdf")
+
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    payload = {
+        "model": ANTHROPIC_MODEL,
+        "max_tokens": 2000,
+        "temperature": 0.0,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": media_type, "data": b64},
+                },
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(ANTHROPIC_URL, headers=headers, json=payload)
+
+        if resp.status_code != 200:
+            logger.error("Claude Vision extractie mislukt: %s %s", resp.status_code, resp.text[:300])
+            raise RuntimeError(f"Claude Vision API fout: {resp.status_code}")
+
+        data = resp.json()
+        text = data["content"][0]["text"].strip()
+
+        try:
+            start = text.index("{")
+            end = text.rindex("}") + 1
+            result = json.loads(text[start:end])
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.error("Claude Vision extractie: ongeldig JSON: %s", text[:200])
+            raise RuntimeError(f"Claude Vision extractie: kon JSON niet parsen: {e}")
+
+    raw_values = result.get("extracted_fields", {})
+    warnings = result.get("warnings", [])
+    confidence = float(result.get("confidence", 0.5))
+
+    computed_values = {}
+    for key, val in raw_values.items():
+        if val is None:
+            continue
+        if isinstance(val, str):
+            clean = val.replace(".", "").replace(",", ".").replace("\u20ac", "").replace(" ", "").strip()
+            try:
+                computed_values[key] = float(clean)
+            except ValueError:
+                computed_values[key] = val
+        else:
+            computed_values[key] = val
+
+    logger.info("Vision extractie: %s — %d velden, confidence=%.2f",
+                document_type, len(raw_values), confidence)
 
     return ExtractionResult(
         raw_values=raw_values,

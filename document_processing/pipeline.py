@@ -157,39 +157,67 @@ async def process_document(document_id: str, force: bool = False) -> ProcessingR
         file_bytes = await sp_client.download_file(sharepoint_pad)
         mime_type = doc.get("mime_type", "application/pdf")
 
-        # 3. OCR
-        ocr_result = None
-        ocr_text = ""
-
-        if ocr_client.is_configured():
-            ocr_result = await ocr_client.analyze_document(file_bytes, mime_type)
-            ocr_text = ocr_result.get("content", "")
-
-            # Sla OCR tekst op
-            await _update_document(document_id, {
-                "ocr_text": ocr_text[:50000],  # max 50k tekens
-                "ocr_page_count": ocr_result.get("page_count", 0),
-            })
-        else:
-            logger.warning("Azure DI niet geconfigureerd — skip OCR")
-
-        # 4. Classificatie
+        # 3 + 4. Classificatie — Claude Vision direct (standaard)
+        #         Azure DI OCR als fallback bij lage confidence
         classification = None
-        if classifier.is_configured() and ocr_text:
-            classification = await classifier.classify_document(
-                ocr_text, doc["bestandsnaam"], context
+        ocr_text = ""
+        used_azure_fallback = False
+
+        if classifier.is_configured():
+            # Stap 1: Probeer Claude Vision direct
+            try:
+                classification = await classifier.classify_document_vision(
+                    file_bytes, mime_type, doc["bestandsnaam"], context
+                )
+                logger.info("Claude Vision classificatie: %s (confidence=%.2f)",
+                            classification.document_type, classification.confidence)
+            except Exception as e:
+                logger.warning("Claude Vision mislukt: %s — probeer Azure DI fallback", e)
+
+            # Stap 2: Fallback naar Azure DI als confidence laag of type onbekend
+            needs_fallback = (
+                classification is None
+                or classification.confidence < 0.7
+                or classification.document_type == "onbekend"
             )
 
-            await _update_document(document_id, {
-                "document_type": classification.document_type,
-                "categorie": classification.categorie,
-                "persoon": classification.persoon,
-                "status": "classified",
-                "classification_confidence": classification.confidence,
-                "classification_reasoning": classification.reasoning,
-            })
+            if needs_fallback and ocr_client.is_configured():
+                logger.info("Fallback naar Azure DI OCR (confidence=%.2f, type=%s)",
+                            classification.confidence if classification else 0,
+                            classification.document_type if classification else "geen")
+                used_azure_fallback = True
+
+                try:
+                    ocr_result = await ocr_client.analyze_document(file_bytes, mime_type)
+                    ocr_text = ocr_result.get("content", "")
+
+                    await _update_document(document_id, {
+                        "ocr_text": ocr_text[:50000],
+                        "ocr_page_count": ocr_result.get("page_count", 0),
+                    })
+
+                    # Herclassificeer met schone OCR-tekst
+                    if ocr_text:
+                        classification = await classifier.classify_document(
+                            ocr_text, doc["bestandsnaam"], context
+                        )
+                        logger.info("Azure DI fallback classificatie: %s (confidence=%.2f)",
+                                    classification.document_type, classification.confidence)
+                except Exception as e:
+                    logger.warning("Azure DI fallback ook mislukt: %s", e)
+
+            # Sla classificatie op
+            if classification:
+                await _update_document(document_id, {
+                    "document_type": classification.document_type,
+                    "categorie": classification.categorie,
+                    "persoon": classification.persoon,
+                    "status": "classified",
+                    "classification_confidence": classification.confidence,
+                    "classification_reasoning": classification.reasoning,
+                })
         else:
-            logger.warning("Claude niet geconfigureerd of geen OCR tekst — skip classificatie")
+            logger.warning("Claude niet geconfigureerd — skip classificatie")
 
         # 5. Extractie — UWV Verzekeringsbericht: eigen parser (IBL-tool)
         #    Andere documenten: Claude API extractie
@@ -247,9 +275,16 @@ async def process_document(document_id: str, force: bool = False) -> ProcessingR
 
         elif classifier.is_configured() and classification and classification.document_type != "onbekend":
             # Alle andere documenten: Claude API extractie
-            extraction = await extractor.extract_fields(
-                ocr_text, classification.document_type, context
-            )
+            if used_azure_fallback and ocr_text:
+                # Azure DI was nodig → gebruik schone OCR-tekst
+                extraction = await extractor.extract_fields(
+                    ocr_text, classification.document_type, context
+                )
+            else:
+                # Claude Vision direct → stuur document als base64
+                extraction = await extractor.extract_fields_vision(
+                    file_bytes, mime_type, classification.document_type, context
+                )
 
             # Sla op in extracted_data
             await _insert_extracted_data({
