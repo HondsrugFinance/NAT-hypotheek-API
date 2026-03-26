@@ -30,14 +30,16 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 
-def _sb_headers() -> dict:
+def _sb_headers(prefer: str | None = None) -> dict:
     key = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
-    return {
+    h = {
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation",
     }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
 
 
 async def _sb_get(table: str, params: dict) -> list:
@@ -49,17 +51,15 @@ async def _sb_get(table: str, params: dict) -> list:
 
 async def _sb_insert(table: str, data: dict) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=_sb_headers(), json=data)
+        resp = await client.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=_sb_headers("return=representation"), json=data)
         resp.raise_for_status()
         rows = resp.json()
         return rows[0] if rows else data
 
 
 async def _sb_update(table: str, params: dict, data: dict) -> None:
-    headers = _sb_headers()
-    headers.pop("Prefer", None)  # PATCH heeft geen Prefer nodig
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers, params=params, json=data)
+        resp = await client.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=_sb_headers(), params=params, json=data)
         resp.raise_for_status()
 
 
