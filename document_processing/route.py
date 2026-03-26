@@ -50,14 +50,103 @@ async def process_single(document_id: str, request: Request, body: ProcessReques
 
 @router.post("/{dossier_id}/process-all")
 async def process_all_pending(dossier_id: str, request: Request):
-    """Verwerk alle pending documenten voor een dossier."""
+    """Scan _inbox, registreer nieuwe bestanden, en verwerk alles."""
     token = _extract_token(request)
+    headers = _sb_headers(token)
 
-    # Haal pending documenten op
+    # Stap 1: Haal dossier op voor SharePoint pad
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossiers",
+            headers=headers,
+            params={"select": "id,dossiernummer,klant_naam,sharepoint_url", "id": f"eq.{dossier_id}"},
+        )
+        resp.raise_for_status()
+        dossiers = resp.json()
+
+    if not dossiers:
+        raise HTTPException(404, "Dossier niet gevonden")
+
+    dossier = dossiers[0]
+    dossiernummer = dossier.get("dossiernummer", "")
+
+    # Stap 2: Scan _inbox op SharePoint
+    from sharepoint import client as sp_client
+    inbox_pad = None
+    sharepoint_url = dossier.get("sharepoint_url", "")
+    if sharepoint_url:
+        # Haal mapnaam uit sharepoint_url: .../1.Klanten/{mapnaam}
+        # URL decode en extract het pad
+        import re
+        from urllib.parse import unquote
+        decoded = unquote(sharepoint_url)
+        match = re.search(r"1\.Klanten/([^?]+)", decoded)
+        if match:
+            mapnaam = match.group(1).rstrip("/")
+            inbox_pad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{mapnaam}/_inbox"
+            logger.info("_inbox pad: %s", inbox_pad)
+
+    inbox_bestanden = []
+    if inbox_pad:
+        try:
+            items = await sp_client.list_folder(inbox_pad)
+            inbox_bestanden = [
+                item for item in items
+                if item.get("file") and not item.get("folder")
+            ]
+            logger.info("_inbox scan: %d bestanden gevonden", len(inbox_bestanden))
+        except Exception as e:
+            logger.warning("_inbox scan mislukt (map bestaat mogelijk niet): %s", e)
+
+    # Stap 3: Registreer nieuwe bestanden in documents tabel
+    registered = 0
+    for item in inbox_bestanden:
+        bestandsnaam = item.get("name", "")
+        sp_item_id = item.get("id", "")
+        size = item.get("size", 0)
+        mime = item.get("file", {}).get("mimeType", "application/octet-stream")
+        web_url = item.get("webUrl", "")
+
+        # Check of bestand al geregistreerd is
+        async with httpx.AsyncClient(timeout=10) as client:
+            check = await client.get(
+                f"{SUPABASE_URL}/rest/v1/documents",
+                headers=headers,
+                params={
+                    "select": "id",
+                    "dossier_id": f"eq.{dossier_id}",
+                    "bestandsnaam": f"eq.{bestandsnaam}",
+                },
+            )
+            if check.json():
+                continue  # Al geregistreerd
+
+        # Registreer in Supabase
+        doc_record = {
+            "dossier_id": dossier_id,
+            "bestandsnaam": bestandsnaam,
+            "sharepoint_pad": f"{inbox_pad}/{bestandsnaam}",
+            "bron": "upload",
+            "status": "pending",
+            "mime_type": mime,
+            "bestandsgrootte": size,
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            ins = await client.post(
+                f"{SUPABASE_URL}/rest/v1/documents",
+                headers={**headers, "Prefer": "return=representation"},
+                json=doc_record,
+            )
+            if ins.status_code in (200, 201):
+                registered += 1
+
+    logger.info("_inbox: %d nieuwe bestanden geregistreerd", registered)
+
+    # Stap 4: Haal alle pending documenten op
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
             f"{SUPABASE_URL}/rest/v1/documents",
-            headers=_sb_headers(token),
+            headers=headers,
             params={
                 "select": "id",
                 "dossier_id": f"eq.{dossier_id}",
@@ -68,7 +157,7 @@ async def process_all_pending(dossier_id: str, request: Request):
         docs = resp.json()
 
     if not docs:
-        return {"message": "Geen pending documenten", "processed": 0}
+        return {"message": "Geen documenten gevonden in _inbox", "registered": registered, "processed": 0}
 
     results = []
     for doc in docs:
