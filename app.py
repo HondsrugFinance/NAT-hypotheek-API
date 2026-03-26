@@ -1828,3 +1828,82 @@ async def onderpand_lookup(
 
 if RATE_LIMITING_ENABLED:
     onderpand_lookup = limiter.limit("30/minute")(onderpand_lookup)
+
+
+# ── KVK Handelsregister ─────────────────────────────────
+
+from kvk.kvk_client import KVKClient as _KVKClient
+
+
+@app.get("/kvk/zoeken")
+async def kvk_zoeken(
+    kvk_nummer: Optional[str] = None,
+    naam: Optional[str] = None,
+    postcode: Optional[str] = None,
+    huisnummer: Optional[int] = None,
+    plaats: Optional[str] = None,
+    request: Request = None,
+) -> Dict[str, Any]:
+    """
+    Zoek bedrijven in het KVK handelsregister.
+
+    Gratis endpoint — minimaal 1 zoekparameter vereist.
+    Vereist KVK_API_KEY env var.
+    """
+    origin = request.headers.get("origin", "onbekend") if request else "onbekend"
+    logger.info("KVK zoeken: origin=%s, kvk=%s, naam=%s", origin, kvk_nummer, naam)
+
+    client = _KVKClient()
+    if not client.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="KVK API niet beschikbaar. Controleer KVK_API_KEY.",
+        )
+
+    result = client.zoeken(
+        kvk_nummer=kvk_nummer,
+        naam=naam,
+        postcode=postcode,
+        huisnummer=huisnummer,
+        plaats=plaats,
+    )
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
+@app.get("/kvk/basisprofiel/{kvk_nummer}")
+async def kvk_basisprofiel(
+    kvk_nummer: str,
+    request: Request = None,
+) -> Dict[str, Any]:
+    """
+    Haal basisprofiel op voor een KVK-nummer.
+
+    EUR 0,02 per call. Vereist KVK_API_KEY env var.
+    Retourneert bedrijfsnaam, adres, rechtsvorm, SBI-codes, handelsnamen.
+    """
+    origin = request.headers.get("origin", "onbekend") if request else "onbekend"
+    logger.info("KVK basisprofiel: origin=%s, kvk=%s", origin, kvk_nummer)
+
+    client = _KVKClient()
+    if not client.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="KVK API niet beschikbaar. Controleer KVK_API_KEY.",
+        )
+
+    result = client.basisprofiel(kvk_nummer)
+
+    if "error" in result:
+        status = 404 if "Geen bedrijf" in result["error"] else 400
+        raise HTTPException(status_code=status, detail=result["error"])
+
+    return result
+
+
+if RATE_LIMITING_ENABLED:
+    kvk_zoeken = limiter.limit("30/minute")(kvk_zoeken)
+    kvk_basisprofiel = limiter.limit("30/minute")(kvk_basisprofiel)
