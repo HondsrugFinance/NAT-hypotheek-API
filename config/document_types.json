@@ -42,15 +42,26 @@
     "extract_fields": ["Werkgever", "Bruto jaarsalaris", "Vakantiegeld", "Overige inkomensbestandsdelen", "Datum in dienst", "Type dienstverband", "Functie", "Proeftijd", "Proeftijd verlopen"]
   },
   "uwv_verzekeringsbericht": {
-    "keywords": ["uwv", "verzekeringsbericht", "uwv verzekeringsbericht", "uwv-verzekeringsbericht"],
+    "keywords": ["uwv", "verzekeringsbericht", "uwv verzekeringsbericht", "uwv-verzekeringsbericht", "printversie verzekeringsbericht"],
     "category": "Inkomen",
     "submap": "Inkomen",
     "persoon_type": "A_or_B",
     "inkomen_type": "loondienst",
     "validity_months": 6,
     "check_verloopdatum": false,
-    "description": "UWV verzekeringsbericht",
+    "description": "UWV verzekeringsbericht — het ORIGINELE document van UWV met loongegevens per periode. Bevat header 'uwv Printversie verzekeringsbericht'. NIET hetzelfde als een IBL-berekening/resultaat.",
     "extract_fields": []
+  },
+  "ibl_resultaat": {
+    "keywords": ["ibl", "inkomensbepaling loondienst", "toetsinkomen", "ibl berekening", "ibl resultaat"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "loondienst",
+    "validity_months": 6,
+    "check_verloopdatum": false,
+    "description": "IBL-berekening resultaat — een BEREKEND rapport op basis van UWV data, met toetsinkomen, grafiek en berekeningstype (A/B/C/D). Dit is NIET het originele UWV verzekeringsbericht. Bevat tekst als 'Toetsinkomen', 'A-berekening', 'B-berekening', 'SV-loon grafiek'.",
+    "extract_fields": ["Toetsinkomen", "Berekening type", "Werkgever", "Pensioenbijdrage"]
   },
   "ib_aangifte": {
     "keywords": ["inkomstenbelasting", "ib aangifte", "ib-aangifte", "belastingaangifte", "aangifte", "tax return"],
