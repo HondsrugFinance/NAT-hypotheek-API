@@ -60,6 +60,9 @@ async def _sb_insert(table: str, data: dict) -> dict:
 async def _sb_update(table: str, params: dict, data: dict) -> None:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=_sb_headers(), params=params, json=data)
+        if resp.status_code >= 400:
+            logger.error("_sb_update FOUT %s: %s %s (params=%s, data_keys=%s)",
+                         table, resp.status_code, resp.text[:200], params, list(data.keys()))
         resp.raise_for_status()
 
 
@@ -179,14 +182,23 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         })
 
         # Update document record
-        await _sb_update("documents", {"id": f"eq.{document_id}"}, {
+        # Zorg dat confidence een float is (Claude kan string teruggeven)
+        try:
+            conf_float = float(confidence) if confidence is not None else None
+        except (ValueError, TypeError):
+            conf_float = None
+
+        doc_update = {
             "document_type": document_type,
             "categorie": classification.get("categorie", "Overig"),
             "persoon": persoon,
             "status": "classified",
-            "classification_confidence": confidence,
-            "classification_reasoning": classification.get("reasoning", ""),
-        })
+            "classification_reasoning": str(classification.get("reasoning", ""))[:500],
+        }
+        if conf_float is not None:
+            doc_update["classification_confidence"] = conf_float
+
+        await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
 
         result["steps"]["step1"] = {
             "classification": classification,
