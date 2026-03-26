@@ -162,84 +162,145 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         input_method, pdf_text = determine_input_method(file_bytes, mime_type)
         logger.info("Stap 0: input_method=%s, tekst=%s", input_method, "ja" if pdf_text else "nee")
 
-        # === STAP 1: Vrije extractie ===
-        step1_start = time.monotonic()
+        # === UWV snelroute: detecteer op basis van PDF tekst ===
+        is_uwv = False
+        if pdf_text:
+            text_lower = pdf_text.lower()
+            if "uwv" in text_lower and ("verzekeringsbericht" in text_lower or "loongegevens" in text_lower):
+                is_uwv = True
+                logger.info("UWV snelroute: document herkend als UWV Verzekeringsbericht via tekst")
 
-        if input_method == "pdf_text" and pdf_text:
-            step1_result = await extract_all_text(pdf_text, doc["bestandsnaam"], context)
-        else:
-            step1_result = await extract_all_vision(file_bytes, mime_type, context)
+        if is_uwv:
+            # Skip stap 1 (Claude) — direct naar IBL-tool
+            document_type = "uwv_verzekeringsbericht"
+            persoon = "aanvrager"  # Default, wordt later gecorrigeerd
+            confidence = 1.0
+            classification = {
+                "document_type": document_type,
+                "categorie": "Inkomen",
+                "persoon": persoon,
+                "confidence": confidence,
+                "reasoning": "UWV Verzekeringsbericht herkend via PDF tekst (bevat 'uwv' + 'verzekeringsbericht/loongegevens')",
+            }
+            step1_result = {"classification": classification, "extracted_data": {}}
+            input_method = "pdf_text"
+            step1_ms = 0
 
-        classification = step1_result.get("classification", {})
-        document_type = classification.get("document_type", "onbekend")
-        persoon = classification.get("persoon", "gezamenlijk")
-        confidence = classification.get("confidence", 0.5)
+            # Probeer persoon te bepalen uit PDF tekst
+            if context.get("partner_naam"):
+                partner_achternaam = context.get("partner_achternaam", "").lower()
+                aanvrager_achternaam = context.get("aanvrager_achternaam", "").lower()
+                if partner_achternaam and partner_achternaam in text_lower:
+                    if not aanvrager_achternaam or aanvrager_achternaam not in text_lower:
+                        persoon = "partner"
+                        classification["persoon"] = persoon
 
-        # Fallback naar Azure DI als confidence laag
-        if confidence < 0.7 and ocr_client.is_configured():
-            logger.info("Stap 1: confidence %.2f < 0.7, fallback naar Azure DI", confidence)
+            # Sla classificatie op in document_extractions
+            extraction_record = await _sb_insert("document_extractions", {
+                "dossier_id": dossier_id,
+                "document_id": document_id,
+                "document_type": document_type,
+                "persoon": persoon,
+                "classification": classification,
+                "raw_data": {"uwv_snelroute": True, "tekst_lengte": len(pdf_text)},
+                "input_method": input_method,
+                "confidence": confidence,
+                "duration_ms": 0,
+            })
+
+            # Update document record
+            categorie = _map_categorie(document_type)
             try:
-                ocr_result = await ocr_client.analyze_document(file_bytes, mime_type)
-                ocr_text = ocr_result.get("content", "")
-                if ocr_text:
-                    step1_result = await extract_all_text(ocr_text, doc["bestandsnaam"], context)
-                    classification = step1_result.get("classification", {})
-                    document_type = classification.get("document_type", "onbekend")
-                    persoon = classification.get("persoon", "gezamenlijk")
-                    confidence = classification.get("confidence", 0.5)
-                    input_method = "azure_di"
+                await _sb_update("documents", {"id": f"eq.{document_id}"}, {
+                    "document_type": document_type,
+                    "categorie": categorie,
+                    "persoon": persoon,
+                    "status": "classified",
+                    "classification_confidence": confidence,
+                    "classification_reasoning": classification["reasoning"],
+                })
             except Exception as e:
-                logger.warning("Azure DI fallback mislukt: %s", e)
+                logger.warning("Document status update mislukt: %s", e)
 
-        step1_ms = int((time.monotonic() - step1_start) * 1000)
+            result["steps"]["step1"] = {"classification": classification, "input_method": "uwv_snelroute", "duration_ms": 0}
 
-        # Sla stap 1 op in document_extractions
-        extraction_record = await _sb_insert("document_extractions", {
-            "dossier_id": dossier_id,
-            "document_id": document_id,
-            "document_type": document_type,
-            "persoon": persoon,
-            "classification": classification,
-            "raw_data": step1_result.get("extracted_data", {}),
-            "input_method": input_method,
-            "confidence": confidence,
-            "warnings": step1_result.get("extracted_data", {}).get("opvallend", []),
-            "duration_ms": step1_ms,
-        })
+        else:
+            # === STAP 1: Vrije extractie (normaal) ===
+            step1_start = time.monotonic()
 
-        # Update document record
-        # Zorg dat confidence een float is (Claude kan string teruggeven)
-        try:
-            conf_float = float(confidence) if confidence is not None else None
-        except (ValueError, TypeError):
-            conf_float = None
+            if input_method == "pdf_text" and pdf_text:
+                step1_result = await extract_all_text(pdf_text, doc["bestandsnaam"], context)
+            else:
+                step1_result = await extract_all_vision(file_bytes, mime_type, context)
 
-        # Categorie moet voldoen aan CHECK constraint
-        VALID_CATEGORIES = {"Identificatie", "Inkomen", "Woning", "Financieel", "Overig"}
-        raw_categorie = classification.get("categorie", "Overig")
-        categorie = raw_categorie if raw_categorie in VALID_CATEGORIES else _map_categorie(document_type)
+            classification = step1_result.get("classification", {})
+            document_type = classification.get("document_type", "onbekend")
+            persoon = classification.get("persoon", "gezamenlijk")
+            confidence = classification.get("confidence", 0.5)
 
-        doc_update = {
-            "document_type": document_type,
-            "categorie": categorie,
-            "persoon": persoon,
-            "status": "classified",
-            "classification_reasoning": str(classification.get("reasoning", ""))[:500],
-        }
-        if conf_float is not None:
-            doc_update["classification_confidence"] = conf_float
+            # Fallback naar Azure DI als confidence laag
+            if confidence < 0.7 and ocr_client.is_configured():
+                logger.info("Stap 1: confidence %.2f < 0.7, fallback naar Azure DI", confidence)
+                try:
+                    ocr_result = await ocr_client.analyze_document(file_bytes, mime_type)
+                    ocr_text = ocr_result.get("content", "")
+                    if ocr_text:
+                        step1_result = await extract_all_text(ocr_text, doc["bestandsnaam"], context)
+                        classification = step1_result.get("classification", {})
+                        document_type = classification.get("document_type", "onbekend")
+                        persoon = classification.get("persoon", "gezamenlijk")
+                        confidence = classification.get("confidence", 0.5)
+                        input_method = "azure_di"
+                except Exception as e:
+                    logger.warning("Azure DI fallback mislukt: %s", e)
 
-        try:
-            await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
-        except Exception as e:
-            logger.error("Document status update mislukt (doorgaan): %s — data: %s", e, doc_update)
+            step1_ms = int((time.monotonic() - step1_start) * 1000)
 
-        result["steps"]["step1"] = {
-            "classification": classification,
-            "extracted_data": step1_result.get("extracted_data", {}),
-            "input_method": input_method,
-            "duration_ms": step1_ms,
-        }
+            # Sla stap 1 op in document_extractions
+            extraction_record = await _sb_insert("document_extractions", {
+                "dossier_id": dossier_id,
+                "document_id": document_id,
+                "document_type": document_type,
+                "persoon": persoon,
+                "classification": classification,
+                "raw_data": step1_result.get("extracted_data", {}),
+                "input_method": input_method,
+                "confidence": confidence,
+                "warnings": step1_result.get("extracted_data", {}).get("opvallend", []),
+                "duration_ms": step1_ms,
+            })
+
+            # Update document record
+            try:
+                conf_float = float(confidence) if confidence is not None else None
+            except (ValueError, TypeError):
+                conf_float = None
+
+            VALID_CATEGORIES = {"Identificatie", "Inkomen", "Woning", "Financieel", "Overig"}
+            raw_categorie = classification.get("categorie", "Overig")
+            categorie = raw_categorie if raw_categorie in VALID_CATEGORIES else _map_categorie(document_type)
+
+            doc_update = {
+                "document_type": document_type,
+                "categorie": categorie,
+                "persoon": persoon,
+                "status": "classified",
+                "classification_reasoning": str(classification.get("reasoning", ""))[:500],
+            }
+            if conf_float is not None:
+                doc_update["classification_confidence"] = conf_float
+
+            try:
+                await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
+            except Exception as e:
+                logger.error("Document status update mislukt (doorgaan): %s — data: %s", e, doc_update)
+
+            result["steps"]["step1"] = {
+                "classification": classification,
+                "extracted_data": step1_result.get("extracted_data", {}),
+                "input_method": input_method,
+                "duration_ms": step1_ms,
+            }
 
         # === UWV → IBL-tool route ===
         ibl_result = None
