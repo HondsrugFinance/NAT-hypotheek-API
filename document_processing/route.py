@@ -12,7 +12,7 @@ from document_processing.schemas import ProcessRequest, ApplyToAanvraagRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
 
-router = APIRouter(prefix="/documents", tags=["document-processing"])
+router = APIRouter(prefix="/doc-processing", tags=["document-processing"])
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
