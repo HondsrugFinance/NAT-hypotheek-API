@@ -476,20 +476,21 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
         logger.info("Pipeline V2 voltooid: %s → %s (%dms)", doc["bestandsnaam"], document_type, duration_ms)
         return result
 
-    except Exception as e:
+    except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
-        logger.error("Pipeline V2 fout: %s", e)
+        error_msg = str(exc)
+        logger.error("Pipeline V2 fout: %s", error_msg)
 
         try:
             await _sb_update("documents", {"id": f"eq.{document_id}"}, {
                 "status": "error",
-                "processing_error": str(e)[:500],
+                "processing_error": error_msg[:500],
                 "processing_duration_ms": duration_ms,
             })
         except Exception:
             pass
 
-        return {"document_id": document_id, "status": "error", "error": str(e), "duration_ms": duration_ms}
+        return {"document_id": document_id, "status": "error", "error": error_msg, "duration_ms": duration_ms}
 
 
 async def _find_pensioen_bijdrage(dossier_id: str, persoon: str) -> float:
