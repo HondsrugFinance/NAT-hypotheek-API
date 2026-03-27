@@ -93,8 +93,6 @@ def samenvatting_email_body(
 
 {signature}
 
-<p style="font-size: 9pt; color: #888;"><em>Dit bericht is automatisch gegenereerd.
-De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>
 </div>"""
     else:
         return f"""\
@@ -111,6 +109,4 @@ De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend 
 
 {signature}
 
-<p style="font-size: 9pt; color: #888;"><em>Dit bericht is automatisch gegenereerd.
-De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>
 </div>"""
