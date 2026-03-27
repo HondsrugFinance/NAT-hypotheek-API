@@ -20,6 +20,7 @@ from document_processing.text_detector import determine_input_method
 from document_processing.step1_extract_all import extract_all_vision, extract_all_text
 from document_processing.step2_structure import structure_and_compare
 from document_processing.step3_dossier_analysis import analyze_dossier
+from document_processing.step_combined import process_combined_vision, process_combined_text, SIMPLE_DOCUMENTS
 from document_processing.rename_move import build_filename, move_from_inbox
 from sharepoint import client as sp_client
 
@@ -117,7 +118,7 @@ def _map_categorie(document_type: str) -> str:
     return _type_to_cat.get(document_type, "Overig")
 
 
-async def process_document_v2(document_id: str, force: bool = False) -> dict:
+async def process_document_v2(document_id: str, force: bool = False, skip_step3: bool = False) -> dict:
     """Verwerk één document door de 3-stappen pipeline.
 
     Returns:
@@ -164,6 +165,7 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
 
         # === UWV snelroute: detecteer op basis van PDF tekst ===
         is_uwv = False
+        combined_result = None  # Wordt gezet bij gecombineerde stap 1+2
         if pdf_text:
             text_lower = pdf_text.lower()
             if "uwv" in text_lower and ("verzekeringsbericht" in text_lower or "loongegevens" in text_lower):
@@ -225,16 +227,33 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
             result["steps"]["step1"] = {"classification": classification, "input_method": "uwv_snelroute", "duration_ms": 0}
 
         else:
-            # === STAP 1: Vrije extractie (normaal) ===
+            # === STAP 1 (+2): Extractie ===
             step1_start = time.monotonic()
+            combined_result = None  # Als gezet: stap 2 kan overgeslagen worden
 
-            if input_method == "pdf_text" and pdf_text:
-                step1_result = await extract_all_text(pdf_text, doc["bestandsnaam"], context)
+            # Probeer gecombineerde stap 1+2 (één call) voor alle documenten
+            # Na classificatie bepalen we of het simpel genoeg was
+            try:
+                if input_method == "pdf_text" and pdf_text:
+                    combined_result = await process_combined_text(pdf_text, doc["bestandsnaam"], context)
+                else:
+                    combined_result = await process_combined_vision(file_bytes, mime_type, context)
+            except Exception as e:
+                logger.warning("Gecombineerde stap mislukt: %s — fallback naar apart", e)
+
+            if combined_result:
+                step1_result = combined_result
+                classification = combined_result.get("classification", {})
+                document_type = classification.get("document_type", "onbekend")
             else:
-                step1_result = await extract_all_vision(file_bytes, mime_type, context)
+                # Fallback: aparte stap 1
+                if input_method == "pdf_text" and pdf_text:
+                    step1_result = await extract_all_text(pdf_text, doc["bestandsnaam"], context)
+                else:
+                    step1_result = await extract_all_vision(file_bytes, mime_type, context)
 
-            classification = step1_result.get("classification", {})
-            document_type = classification.get("document_type", "onbekend")
+                classification = step1_result.get("classification", {})
+                document_type = classification.get("document_type", "onbekend")
             persoon = classification.get("persoon", "gezamenlijk")
             confidence = classification.get("confidence", 0.5)
 
@@ -346,17 +365,36 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         if document_type != "uwv_verzekeringsbericht" and document_type != "onbekend":
             step2_start = time.monotonic()
 
-            # Haal bestaande velden op voor vergelijking
-            existing = await _get_existing_fields(dossier_id, persoon)
+            # Check of gecombineerde stap al structured_fields heeft
+            has_combined_fields = (
+                combined_result
+                and combined_result.get("structured_fields")
+                and document_type in SIMPLE_DOCUMENTS
+            )
 
             try:
-                step2_result = await structure_and_compare(
-                    step1_result.get("extracted_data", {}),
-                    document_type,
-                    persoon,
-                    existing,
-                    context,
-                )
+                if has_combined_fields:
+                    # Simpel document: gebruik structured_fields uit gecombineerde stap
+                    step2_result = {
+                        "sectie": document_type,
+                        "persoon": persoon,
+                        "fields": combined_result["structured_fields"],
+                        "field_confidence": combined_result.get("field_confidence", {}),
+                        "waarschuwingen": combined_result.get("waarschuwingen", []),
+                        "inconsistenties": [],
+                        "suggesties": [],
+                    }
+                    logger.info("Stap 2 overgeslagen: %s is simpel document (gecombineerd)", document_type)
+                else:
+                    # Complex document: aparte stap 2
+                    existing = await _get_existing_fields(dossier_id, persoon)
+                    step2_result = await structure_and_compare(
+                        step1_result.get("extracted_data", {}),
+                        document_type,
+                        persoon,
+                        existing,
+                        context,
+                    )
 
                 step2_ms = int((time.monotonic() - step2_start) * 1000)
 
@@ -424,12 +462,15 @@ async def process_document_v2(document_id: str, force: bool = False) -> dict:
         result["new_filename"] = new_filename
         result["duration_ms"] = duration_ms
 
-        # === STAP 3: Dossier-analyse (na elk document) ===
-        try:
-            await _run_dossier_analysis(dossier_id, context)
-            result["steps"]["step3"] = "completed"
-        except Exception as e:
-            logger.error("Stap 3 mislukt: %s", e)
+        # === STAP 3: Dossier-analyse (optioneel, skip bij batch) ===
+        if not skip_step3:
+            try:
+                await _run_dossier_analysis(dossier_id, context)
+                result["steps"]["step3"] = "completed"
+            except Exception as e:
+                logger.error("Stap 3 mislukt: %s", e)
+        else:
+            result["steps"]["step3"] = "skipped (batch)"
             result["steps"]["step3_error"] = str(e)
 
         logger.info("Pipeline V2 voltooid: %s → %s (%dms)", doc["bestandsnaam"], document_type, duration_ms)

@@ -158,19 +158,57 @@ async def process_all_pending(dossier_id: str, request: Request):
     if not docs:
         return {"message": "Geen documenten gevonden in _inbox", "registered": registered, "processed": 0}
 
-    results = []
-    for doc in docs:
-        result = await process_document_v2(doc["id"])
-        results.append(result)
+    import asyncio
+    from document_processing.pipeline_v2 import _run_dossier_analysis, _build_dossier_context
 
-    succeeded = sum(1 for r in results if r.get("status") == "extracted")
-    failed = sum(1 for r in results if r.get("status") == "error")
+    # Parallelle verwerking: max 4 tegelijk, stap 3 alleen aan het einde
+    semaphore = asyncio.Semaphore(4)
+
+    async def process_with_limit(doc_id: str) -> dict:
+        async with semaphore:
+            return await process_document_v2(doc_id, skip_step3=True)
+
+    tasks = [process_with_limit(doc["id"]) for doc in docs]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Converteer exceptions naar error dicts
+    clean_results = []
+    for r in results:
+        if isinstance(r, Exception):
+            clean_results.append({"status": "error", "error": str(r)})
+        else:
+            clean_results.append(r)
+
+    succeeded = sum(1 for r in clean_results if r.get("status") == "extracted")
+    failed = sum(1 for r in clean_results if r.get("status") == "error")
+
+    # Stap 3: dossier-analyse één keer aan het einde
+    step3_result = None
+    try:
+        # Haal dossier op voor context
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=headers,
+                params={"select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url", "id": f"eq.{dossier_id}"},
+            )
+            resp.raise_for_status()
+            dossier_rows = resp.json()
+
+        if dossier_rows:
+            context = _build_dossier_context(dossier_rows[0])
+            await _run_dossier_analysis(dossier_id, context)
+            step3_result = "completed"
+    except Exception as e:
+        logger.error("Stap 3 (einde) mislukt: %s", e)
+        step3_result = f"error: {e}"
 
     return {
-        "processed": len(results),
+        "processed": len(clean_results),
         "succeeded": succeeded,
         "failed": failed,
-        "results": results,
+        "step3": step3_result,
+        "results": clean_results,
     }
 
 
