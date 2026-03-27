@@ -136,7 +136,17 @@
     "persoon_type": "AB",
     "validity_months": null,
     "check_verloopdatum": false,
-    "description": "Koopakte / voorlopig koopcontract",
+    "description": "Koopakte — getekend juridisch bindend document met handtekeningen van koper en verkoper. Bevat koopsom, leveringsdatum, ontbindende voorwaarden. NIET hetzelfde als een concept of verkoopbrochure.",
+    "extract_fields": ["Adres", "Koopprijs", "Leveringsdatum", "Datum Bankgarantie", "Ontbindende voorwaarden datum", "Erfpacht"]
+  },
+  "concept_koopovereenkomst": {
+    "keywords": ["concept koopovereenkomst", "concept koop", "concept akte"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Concept koopovereenkomst — zelfde inhoud als koopovereenkomst maar ZONDER handtekeningen of met 'concept' in de titel. Nog niet juridisch bindend.",
     "extract_fields": ["Adres", "Koopprijs", "Leveringsdatum", "Datum Bankgarantie", "Ontbindende voorwaarden datum", "Erfpacht"]
   },
   "taxatierapport": {
@@ -150,14 +160,24 @@
     "extract_fields": ["Adres", "Marktwaarde", "Taxatiedatum", "Waarde na verbouwing"]
   },
   "verkoopovereenkomst": {
-    "keywords": ["verkoopovereenkomst", "verkoop overeenkomst", "verkoopakte", "verkoop"],
+    "keywords": ["verkoopovereenkomst", "verkoop overeenkomst", "verkoopakte"],
     "category": "Woning",
     "submap": "Woning",
     "persoon_type": "AB",
     "validity_months": null,
     "check_verloopdatum": false,
-    "description": "Verkoopovereenkomst huidige woning",
+    "description": "Verkoopovereenkomst huidige woning — getekend juridisch bindend document. NIET hetzelfde als een verkoopbrochure.",
     "extract_fields": []
+  },
+  "verkoopbrochure": {
+    "keywords": ["brochure", "verkoopbrochure", "verkoop advies", "woningpresentatie", "funda"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Verkoopbrochure / woningpresentatie — marketingmateriaal van makelaar met foto's, beschrijving, vraagprijs. GEEN juridisch document, geen handtekeningen, geen koopsom. Vaak van Funda of makelaarskantoor.",
+    "extract_fields": ["Adres", "Vraagprijs", "Woonoppervlakte", "Bouwjaar", "Energielabel"]
   },
   "verbouwingsspecificatie": {
     "keywords": ["verbouwingsspecificatie", "verbouwing", "verbouwingskosten", "verbouwingsplan"],

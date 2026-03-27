@@ -118,12 +118,17 @@ async def extract_all_vision(
         "image/jpeg": "image/jpeg",
         "image/png": "image/png",
         "image/tiff": "image/tiff",
+        "image/gif": "image/gif",
+        "image/webp": "image/webp",
     }.get(mime_type, "application/pdf")
+
+    is_image = media_type.startswith("image/")
+    content_type = "image" if is_image else "document"
 
     prompt = _build_prompt(dossier_context)
 
     resp = await _call_claude([
-        {"type": "document", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+        {"type": content_type, "source": {"type": "base64", "media_type": media_type, "data": b64}},
         {"type": "text", "text": prompt},
     ])
     return resp
