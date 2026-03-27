@@ -60,6 +60,19 @@ Aanvrager: {aanvrager}{partner_text}
 ### A. Classificatie
 Bepaal het documenttype, categorie, persoon (aanvrager/partner/gezamenlijk), confidence.
 
+KRITIEKE CLASSIFICATIEREGELS:
+- De TITEL of KOPTEKST van het document bepaalt het type. Als er bovenaan "Ontruimingsverklaring" staat,
+  is het een ontruimingsverklaring — ook als er paspoortgegevens in staan.
+  Een explainformulier met paspoortgegevens is een explainformulier, geen paspoort.
+  Een hypotheekaanvraag met adresgegevens is een hypotheekaanvraag, geen koopovereenkomst.
+- Een JAAROPGAVE (loonopgave van werkgever voor de belastingdienst) is NIET hetzelfde als een JAARREKENING
+  (financieel verslag van een onderneming). Classificeer als "jaaropgave" als het een loonopgave betreft.
+- Een VERKOOPBROCHURE (foto's, beschrijving, vraagprijs, makelaar) is GEEN verkoopovereenkomst.
+- Bij OHA-dossiers (partner uitkopen): als een paspoort/ID op naam staat van iemand die NIET de aanvrager
+  of partner is, classificeer als persoon="ex-partner".
+- Als het document op naam staat van de ex-partner (herkenbaar uit echtscheidingsstukken of omdat de naam
+  niet matcht met aanvrager/partner), gebruik persoon="ex-partner".
+
 ### B. Volledige extractie
 Extraheer ALLE informatie: elk veld, bedrag, datum, naam, adres, percentage.
 Structureer in categorieën: persoonsgegevens, adressen, financieel, datums, document_specifiek, opvallend.

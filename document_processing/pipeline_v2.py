@@ -95,6 +95,15 @@ def _build_dossier_context(dossier: dict) -> dict:
     }
 
 
+def _db_persoon(persoon: str) -> str:
+    """Map persoon naar geldige database-waarde (CHECK constraint)."""
+    if persoon in ("aanvrager", "partner", "gezamenlijk"):
+        return persoon
+    if persoon == "ex-partner":
+        return "gezamenlijk"  # Ex-partner opgeslagen als gezamenlijk in DB
+    return "gezamenlijk"
+
+
 def _map_categorie(document_type: str) -> str:
     """Map documenttype naar geldige categorie (CHECK constraint)."""
     _type_to_cat = {
@@ -104,6 +113,7 @@ def _map_categorie(document_type: str) -> str:
         "ib_aangifte": "Inkomen", "jaarrapport": "Inkomen", "ib60": "Inkomen",
         "toekenningsbesluit_uitkering": "Inkomen", "betaalspecificatie_uitkering": "Inkomen",
         "pensioenspecificatie": "Inkomen", "arbeidsmarktscan": "Inkomen",
+        "jaaropgave": "Inkomen",
         "koopovereenkomst": "Woning", "concept_koopovereenkomst": "Woning",
         "verkoopovereenkomst": "Woning", "verkoopbrochure": "Woning",
         "taxatierapport": "Woning", "verbouwingsspecificatie": "Woning",
@@ -181,7 +191,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
             classification = {
                 "document_type": document_type,
                 "categorie": "Inkomen",
-                "persoon": persoon,
+                "persoon": _db_persoon(persoon),
                 "confidence": confidence,
                 "reasoning": "UWV Verzekeringsbericht herkend via PDF tekst (bevat 'uwv' + 'verzekeringsbericht/loongegevens')",
             }
@@ -203,7 +213,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                 "dossier_id": dossier_id,
                 "document_id": document_id,
                 "document_type": document_type,
-                "persoon": persoon,
+                "persoon": _db_persoon(persoon),
                 "classification": classification,
                 "raw_data": {"uwv_snelroute": True, "tekst_lengte": len(pdf_text)},
                 "input_method": input_method,
@@ -217,7 +227,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                 await _sb_update("documents", {"id": f"eq.{document_id}"}, {
                     "document_type": document_type,
                     "categorie": categorie,
-                    "persoon": persoon,
+                    "persoon": _db_persoon(persoon),
                     "status": "classified",
                     "classification_confidence": confidence,
                     "classification_reasoning": classification["reasoning"],
@@ -281,7 +291,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                 "dossier_id": dossier_id,
                 "document_id": document_id,
                 "document_type": document_type,
-                "persoon": persoon,
+                "persoon": _db_persoon(persoon),
                 "classification": classification,
                 "raw_data": step1_result.get("extracted_data", {}),
                 "input_method": input_method,
@@ -303,7 +313,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
             doc_update = {
                 "document_type": document_type,
                 "categorie": categorie,
-                "persoon": persoon,
+                "persoon": _db_persoon(persoon),
                 "status": "classified",
                 "classification_reasoning": str(classification.get("reasoning", ""))[:500],
             }
@@ -344,7 +354,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                         "dossier_id": dossier_id,
                         "document_id": document_id,
                         "extraction_id": extraction_record.get("id"),
-                        "persoon": persoon,
+                        "persoon": _db_persoon(persoon),
                         "sectie": "inkomen_ibl",
                         "fields": {
                             "gemiddeldJaarToetsinkomen": totaal,
@@ -378,7 +388,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                     # Simpel document: gebruik structured_fields uit gecombineerde stap
                     step2_result = {
                         "sectie": document_type,
-                        "persoon": persoon,
+                        "persoon": _db_persoon(persoon),
                         "fields": combined_result["structured_fields"],
                         "field_confidence": combined_result.get("field_confidence", {}),
                         "waarschuwingen": combined_result.get("waarschuwingen", []),
@@ -404,7 +414,7 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                     "dossier_id": dossier_id,
                     "document_id": document_id,
                     "extraction_id": extraction_record.get("id"),
-                    "persoon": persoon,
+                    "persoon": _db_persoon(persoon),
                     "sectie": step2_result.get("sectie", document_type),
                     "fields": step2_result.get("fields", {}),
                     "field_confidence": step2_result.get("field_confidence", {}),

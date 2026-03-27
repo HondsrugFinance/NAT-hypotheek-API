@@ -75,15 +75,26 @@
     "extract_fields": []
   },
   "jaarrapport": {
-    "keywords": ["jaarrapport", "jaarrekening", "jaar rapport", "annual report"],
+    "keywords": ["jaarrapport", "jaarrekening", "jaar rapport", "annual report", "balans", "winst en verliesrekening"],
     "category": "Inkomen",
     "submap": "Inkomen",
     "persoon_type": "A_or_B",
     "inkomen_type": "ondernemer_dga",
     "validity_months": null,
     "check_verloopdatum": false,
-    "description": "Jaarrekening afgelopen 3 jaren",
+    "description": "Jaarrekening van een onderneming (BV, VOF, eenmanszaak) — financieel verslag met balans, winst- en verliesrekening, toelichting. NIET hetzelfde als een jaaropgave (loonopgave).",
     "extract_fields": []
+  },
+  "jaaropgave": {
+    "keywords": ["jaaropgave", "loonopgave", "jaarloonopgave", "overzicht jaarloon"],
+    "category": "Inkomen",
+    "submap": "Inkomen",
+    "persoon_type": "A_or_B",
+    "inkomen_type": "loondienst",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Jaaropgave / loonopgave — jaarlijks overzicht van loon en inhoudingen van een werkgever. Bevat bruto jaarloon, loonheffing, premies. NIET hetzelfde als een jaarrekening (bedrijfsverslag).",
+    "extract_fields": ["Werkgever", "Bruto jaarloon", "Loonheffing", "Jaar"]
   },
   "ib60": {
     "keywords": ["ib60", "ib-60", "ib 60"],

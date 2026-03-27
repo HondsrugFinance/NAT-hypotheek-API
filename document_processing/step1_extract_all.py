@@ -50,9 +50,17 @@ Aanvrager: {aanvrager}{partner_text}
 ## Stap 1: Classificatie
 Bepaal wat voor document dit is. Kies uit deze lijst:
 {types_list}
+- "jaaropgave": loonopgave van werkgever voor de belastingdienst (NIET hetzelfde als jaarrekening)
 - "onbekend": als het niet matcht
 
-Bepaal ook of het bij de aanvrager, partner of gezamenlijk hoort.
+KRITIEKE CLASSIFICATIEREGELS:
+- De TITEL of KOPTEKST van het document bepaalt het type. "Ontruimingsverklaring" = ontruimingsverklaring,
+  ook als er paspoortgegevens in staan. "Explainformulier" = explainformulier, niet paspoort.
+- Een JAAROPGAVE (loonopgave) is NIET een JAARREKENING (bedrijfsverslag).
+- Een VERKOOPBROCHURE (foto's, vraagprijs) is GEEN verkoopovereenkomst.
+- Bij paspoort/ID van iemand die niet aanvrager of partner is → persoon="ex-partner".
+
+Bepaal ook of het bij de aanvrager, partner, gezamenlijk of ex-partner hoort.
 Let op gehuwde namen: "Slinger-Aap" kan matchen op "Slinger" (aanvrager) of "Aap" (partner meisjesnaam).
 Let op: "Burg. van [stad]" op een paspoort betekent Burgemeester van [stad] → afgifteplaats = [stad].
 

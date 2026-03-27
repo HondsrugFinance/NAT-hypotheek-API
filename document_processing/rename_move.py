@@ -39,13 +39,14 @@ TYPE_LABELS = {
     "inschrijving_burgerlijke_stand": "Echtscheiding - Inschrijving burgerlijke stand",
     "akte_van_verdeling": "Echtscheiding - Akte van verdeling",
     "bkr": "BKR",
+    "jaaropgave": "Jaaropgave",
     "toekenningsbesluit_uitkering": "Toekenningsbesluit",
     "betaalspecificatie_uitkering": "Betaalspecificatie",
     "arbeidsmarktscan": "Arbeidsmarktscan",
 }
 
 # Documenten waar het jaar achteraan komt (meerdere jaren per persoon)
-YEAR_SUFFIX_TYPES = {"ib_aangifte", "jaarrapport", "ib60"}
+YEAR_SUFFIX_TYPES = {"ib_aangifte", "jaarrapport", "ib60", "jaaropgave"}
 
 # Documenten met periode (maand)
 PERIOD_PREFIX_TYPES = {"salarisstrook", "betaalspecificatie_uitkering"}
@@ -101,15 +102,30 @@ def build_filename_v2(
 
     # Bepaal persoonsnaam
     naam = ""
+    is_ex_partner = persoon == "ex-partner"
+
     if persoon == "aanvrager":
         naam = dossier_context.get("aanvrager_naam", "").strip()
     elif persoon == "partner":
         naam = dossier_context.get("partner_naam", "").strip()
+    elif persoon == "ex-partner":
+        # Probeer naam uit extractie te halen
+        for key in ["achternaam", "voornaam", "naam", "volledige_naam"]:
+            val = extraction_data.get(key) or extraction_data.get("persoonsgegevens", {}).get(key)
+            if val and isinstance(val, str):
+                naam = val.strip()
+                break
+        if not naam:
+            naam = "ex-partner"
 
     if not naam and persoon == "aanvrager":
         naam = "Aanvrager"
     elif not naam and persoon == "partner":
         naam = "Partner"
+
+    # Bij ex-partner: prefix toevoegen aan label
+    if is_ex_partner:
+        label = f"{label} ex-partner"
 
     # Haal jaar/periode uit extractie
     jaar = _extract_jaar(extraction_data)
