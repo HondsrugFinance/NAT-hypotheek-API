@@ -75,8 +75,12 @@ def samenvatting_email_body(
     """
     signature = _signature_html(sender_email)
 
+    # Font-wrapper: Calibri 11pt (voorkomt Outlook default Aptos)
+    font_style = 'font-family: Calibri, sans-serif; font-size: 11pt;'
+
     if has_partner:
         return f"""\
+<div style="{font_style}">
 <p>Beste {klant_naam},</p>
 
 <p>Zoals besproken stuur ik jullie hierbij de samenvatting van de hypotheekberekening.</p>
@@ -89,10 +93,12 @@ def samenvatting_email_body(
 
 {signature}
 
-<p style="font-size: 11px; color: #888;"><em>Dit bericht is automatisch gegenereerd.
-De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>"""
+<p style="font-size: 9pt; color: #888;"><em>Dit bericht is automatisch gegenereerd.
+De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>
+</div>"""
     else:
         return f"""\
+<div style="{font_style}">
 <p>Beste {klant_naam},</p>
 
 <p>Zoals besproken stuur ik je hierbij de samenvatting van de hypotheekberekening.</p>
@@ -105,5 +111,6 @@ De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend 
 
 {signature}
 
-<p style="font-size: 11px; color: #888;"><em>Dit bericht is automatisch gegenereerd.
-De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>"""
+<p style="font-size: 9pt; color: #888;"><em>Dit bericht is automatisch gegenereerd.
+De bijgevoegde samenvatting is een indicatieve berekening en vormt geen bindend aanbod.</em></p>
+</div>"""
