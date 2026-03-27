@@ -140,8 +140,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
 
         try:
             await _sb_update("documents", {"id": f"eq.{document_id}"}, {"status": "processing"})
-        except Exception as e:
-            logger.warning("Status update naar 'processing' mislukt: %s", e)
+        except Exception as _ex:
+            logger.warning("Status update naar 'processing' mislukt: %s", _ex)
 
         dossiers = await _sb_get("dossiers", {
             "select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url",
@@ -221,8 +221,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                     "classification_confidence": confidence,
                     "classification_reasoning": classification["reasoning"],
                 })
-            except Exception as e:
-                logger.warning("Document status update mislukt: %s", e)
+            except Exception as _ex:
+                logger.warning("Document status update mislukt: %s", _ex)
 
             result["steps"]["step1"] = {"classification": classification, "input_method": "uwv_snelroute", "duration_ms": 0}
 
@@ -238,8 +238,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                     combined_result = await process_combined_text(pdf_text, doc["bestandsnaam"], context)
                 else:
                     combined_result = await process_combined_vision(file_bytes, mime_type, context)
-            except Exception as e:
-                logger.warning("Gecombineerde stap mislukt: %s — fallback naar apart", e)
+            except Exception as _ex:
+                logger.warning("Gecombineerde stap mislukt: %s — fallback naar apart", _ex)
 
             if combined_result:
                 step1_result = combined_result
@@ -270,8 +270,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                         persoon = classification.get("persoon", "gezamenlijk")
                         confidence = classification.get("confidence", 0.5)
                         input_method = "azure_di"
-                except Exception as e:
-                    logger.warning("Azure DI fallback mislukt: %s", e)
+                except Exception as _ex:
+                    logger.warning("Azure DI fallback mislukt: %s", _ex)
 
             step1_ms = int((time.monotonic() - step1_start) * 1000)
 
@@ -311,8 +311,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
 
             try:
                 await _sb_update("documents", {"id": f"eq.{document_id}"}, doc_update)
-            except Exception as e:
-                logger.error("Document status update mislukt (doorgaan): %s — data: %s", e, doc_update)
+            except Exception as _ex:
+                logger.error("Document status update mislukt (doorgaan): %s — data: %s", _ex, doc_update)
 
             result["steps"]["step1"] = {
                 "classification": classification,
@@ -357,9 +357,9 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
 
                     result["steps"]["ibl"] = ibl_result
                     logger.info("IBL: toetsinkomen EUR %.2f (%d werkgevers)", totaal, len(ibl_results))
-            except Exception as e:
-                logger.error("IBL mislukt: %s", e)
-                result["steps"]["ibl_error"] = str(e)
+            except Exception as _ex:
+                logger.error("IBL mislukt: %s", _ex)
+                result["steps"]["ibl_error"] = str(_ex)
 
         # === STAP 2: Structurering (niet voor UWV, die gaat via IBL) ===
         if document_type != "uwv_verzekeringsbericht" and document_type != "onbekend":
@@ -417,9 +417,9 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                     "suggesties": step2_result.get("suggesties", []),
                     "duration_ms": step2_ms,
                 }
-            except Exception as e:
-                logger.error("Stap 2 mislukt: %s", e)
-                result["steps"]["step2_error"] = str(e)
+            except Exception as _ex:
+                logger.error("Stap 2 mislukt: %s", _ex)
+                result["steps"]["step2_error"] = str(_ex)
 
         # === Hernoem en verplaats ===
         new_filename = None
@@ -438,8 +438,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
                 try:
                     move_result = await move_from_inbox(hoofdpad, doc["bestandsnaam"], new_filename)
                     new_pad = move_result.get("sharepoint_pad", "")
-                except Exception as e:
-                    logger.warning("Verplaatsen mislukt: %s", e)
+                except Exception as _ex:
+                    logger.warning("Verplaatsen mislukt: %s", _ex)
 
         # === Update document status ===
         final_updates = {"status": "extracted"}
@@ -453,8 +453,8 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
         final_updates["processing_duration_ms"] = duration_ms
         try:
             await _sb_update("documents", {"id": f"eq.{document_id}"}, final_updates)
-        except Exception as e:
-            logger.error("Final document update mislukt (doorgaan): %s", e)
+        except Exception as _ex:
+            logger.error("Final document update mislukt (doorgaan): %s", _ex)
 
         result["status"] = "extracted"
         result["document_type"] = document_type
@@ -467,11 +467,10 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
             try:
                 await _run_dossier_analysis(dossier_id, context)
                 result["steps"]["step3"] = "completed"
-            except Exception as e:
-                logger.error("Stap 3 mislukt: %s", e)
+            except Exception as _ex:
+                logger.error("Stap 3 mislukt: %s", _ex)
         else:
             result["steps"]["step3"] = "skipped (batch)"
-            result["steps"]["step3_error"] = str(e)
 
         logger.info("Pipeline V2 voltooid: %s → %s (%dms)", doc["bestandsnaam"], document_type, duration_ms)
         return result
@@ -541,8 +540,8 @@ async def _find_pensioen_bijdrage(dossier_id: str, persoon: str) -> float:
                             return val
                     except (ValueError, TypeError):
                         continue
-    except Exception as e:
-        logger.warning("Pensioenbijdrage ophalen mislukt: %s", e)
+    except Exception as _ex:
+        logger.warning("Pensioenbijdrage ophalen mislukt: %s", _ex)
 
     return 0.0
 
