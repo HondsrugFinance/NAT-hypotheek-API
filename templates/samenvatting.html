@@ -844,12 +844,13 @@
     <div class="group-label">Leningdelen</div>
     <table class="data-table{% if ml.lening_delen|length > 5 %} compact{% endif %}">
       <colgroup>
-        <col style="width: 18%">
         <col style="width: 16%">
-        <col style="width: 12%">
+        <col style="width: 15%">
+        <col style="width: 11%">
         <col style="width: 10%">
-        <col style="width: 10%">
-        <col style="width: 16%">
+        <col style="width: 9%">
+        <col style="width: 11%">
+        <col style="width: 14%">
       </colgroup>
       <thead>
         <tr>
@@ -858,6 +859,7 @@
           <th>Looptijd</th>
           <th>Rente</th>
           <th>RVP</th>
+          <th>Aftrekbaar</th>
           <th>Bedrag</th>
         </tr>
       </thead>
@@ -869,6 +871,7 @@
           <td>{{ deel.looptijd }}</td>
           <td>{{ deel.rente }}</td>
           <td>{{ deel.rvp }}</td>
+          <td>{{ deel.aftrekbaar|default('Ja') }}</td>
           <td style="text-align:right">{{ deel.bedrag }}</td>
         </tr>
         {% endfor %}
