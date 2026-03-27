@@ -21,7 +21,7 @@ from document_processing.step1_extract_all import extract_all_vision, extract_al
 from document_processing.step2_structure import structure_and_compare
 from document_processing.step3_dossier_analysis import analyze_dossier
 from document_processing.step_combined import process_combined_vision, process_combined_text, SIMPLE_DOCUMENTS
-from document_processing.rename_move import build_filename, move_from_inbox
+from document_processing.rename_move import build_filename, build_filename_v2, move_from_inbox
 from sharepoint import client as sp_client
 
 logger = logging.getLogger("nat-api.pipeline-v2")
@@ -426,13 +426,20 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
         new_filename = None
         new_pad = None
         if document_type != "onbekend":
-            dossiernummer = dossier.get("dossiernummer", "0000-0000")
-            achternaam = context.get("aanvrager_achternaam", "Onbekend")
-            if persoon == "partner" and context.get("partner_achternaam"):
-                achternaam = context["partner_achternaam"]
-
+            heeft_partner = bool(context.get("partner_naam"))
             ext = os.path.splitext(doc["bestandsnaam"])[1] or ".pdf"
-            new_filename = build_filename(dossiernummer, document_type, achternaam, ext)
+
+            # Verzamel extractie data voor bestandsnaam
+            extraction_data = {}
+            if step1_result and step1_result.get("extracted_data"):
+                extraction_data = step1_result["extracted_data"]
+            if combined_result and combined_result.get("structured_fields"):
+                extraction_data.update(combined_result["structured_fields"])
+
+            new_filename = build_filename_v2(
+                document_type, persoon, heeft_partner,
+                extraction_data, context, ext,
+            )
 
             if "/_inbox/" in sharepoint_pad:
                 hoofdpad = sharepoint_pad.split("/_inbox/")[0]
