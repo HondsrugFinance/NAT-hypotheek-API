@@ -307,6 +307,33 @@ def build_filename(
     return f"{dossiernummer}_{clean_type}_{clean_naam}{ext}"
 
 
+async def _unique_filename(hoofdpad: str, filename: str) -> str:
+    """Zorg dat de bestandsnaam uniek is in de map. Voeg (1), (2) etc. toe als nodig."""
+    try:
+        items = await sp_client.list_folder(hoofdpad)
+        existing_names = {item.get("name", "") for item in items}
+    except Exception:
+        return filename  # Map bestaat niet of is leeg, naam is uniek
+
+    if filename not in existing_names:
+        return filename
+
+    # Splits naam en extensie
+    if "." in filename:
+        base, ext = filename.rsplit(".", 1)
+        ext = f".{ext}"
+    else:
+        base = filename
+        ext = ""
+
+    counter = 1
+    while True:
+        candidate = f"{base} ({counter}){ext}"
+        if candidate not in existing_names:
+            return candidate
+        counter += 1
+
+
 async def move_from_inbox(
     hoofdpad: str,
     inbox_filename: str,
@@ -314,6 +341,9 @@ async def move_from_inbox(
 ) -> dict:
     """Verplaats een bestand van _inbox naar de hoofdmap met nieuwe naam."""
     inbox_pad = f"{hoofdpad}/_inbox"
+
+    # Zorg dat bestandsnaam uniek is (nooit overschrijven)
+    new_filename = await _unique_filename(hoofdpad, new_filename)
 
     content = await sp_client.download_file(f"{inbox_pad}/{inbox_filename}")
 
