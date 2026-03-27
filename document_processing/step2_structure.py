@@ -71,6 +71,16 @@ Partner: {partner or 'geen'}
 
 ## Documenttype-specifieke instructies
 
+### Bij paspoort / ID-kaart:
+- BSN (burgerservicenummer): ALTIJD exact 9 cijfers. Als het minder of meer is, is het GEEN BSN.
+  Meld dit als waarschuwing: "BSN heeft [X] cijfers, moet 9 zijn — controleer of dit een BSN is"
+- Documentnummer: kan NOOIT een klinker bevatten (geen A, E, I, O of U).
+  Als je een klinker ziet, is het waarschijnlijk een OCR-fout:
+  O → 0 (nul), I → 1 (één). Corrigeer dit automatisch en meld het als waarschuwing.
+- "Burg. van [stad]" = Burgemeester van [stad] → afgifteplaats = [stad]
+- Geslacht: M of V (niet M/F of V/F)
+- Voorletters: afleiden uit voornamen (eerste letters + punten)
+
 ### Bij werkgeversverklaring:
 - BEREKEN het totale WGV toetsinkomen: de SOM van ALLE genummerde posten (1 t/m 10 of meer).
   Dit zijn: bruto jaarsalaris + vakantietoeslag + 13e maand + eindejaarsuitkering + ORT +

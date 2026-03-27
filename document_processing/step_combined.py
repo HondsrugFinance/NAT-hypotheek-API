@@ -77,7 +77,9 @@ Speciale instructies:
   "Ouderdomspensioen", "Pensioenpremie WN", "Premie ABP Pensioen/NP", etc.)
   Tel ALLE pensioen-inhoudingen op. Sla op als "maandelijksePensioenbijdrage".
   NIET meetellen: WGA-Hiaat, WIA-excedent, PAWW.
-- Bij paspoort: "Burg. van [stad]" = afgifteplaats [stad]. Geslacht uit V/F of M/F.
+- Bij paspoort/ID: "Burg. van [stad]" = afgifteplaats [stad]. Geslacht: M of V.
+  BSN is ALTIJD 9 cijfers — als het minder is, is het geen BSN.
+  Documentnummer bevat NOOIT klinkers (A,E,I,O,U). O→0, I→1 bij OCR-fouten.
 - Bij pensioenspecificatie: bereken "ouderdomspensioenTotaalExclAow" (alle fondsen behalve SVB),
   "aowBedrag" apart. Nabestaandenpensioen: bepaal scenario (voor/na pensionering) op basis van AOW-datum.
 
