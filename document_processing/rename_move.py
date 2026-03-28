@@ -235,11 +235,11 @@ def _extract_jaar(data: dict) -> str | None:
 
 def _extract_periode(data: dict) -> str | None:
     """Extraheer periode (YYYY-MM) uit extractie data."""
-    for key in ["salarisperiode", "periode", "salarisPerdiode"]:
+    for key in ["salarisperiode", "periode", "salarisPerdiode", "salarisPerdiode", "loonperiode"]:
         val = data.get(key)
         if val:
             s = str(val).strip()
-            # Formaat: "2026-03" of "03/2026" of "2026-03-01"
+            # Formaat: "2026-03" of "2026-03-01" of "03/2026" of "2026-02-23"
             m = re.search(r"(\d{4})-(\d{2})", s)
             if m:
                 return f"{m.group(1)}-{m.group(2)}"
@@ -250,8 +250,19 @@ def _extract_periode(data: dict) -> str | None:
     # Zoek in datums sectie
     datums = data.get("datums", {})
     if isinstance(datums, dict):
-        for key in ["salarisperiode", "periode"]:
+        for key in ["salarisperiode", "periode", "loonperiode"]:
             val = datums.get(key)
+            if val:
+                s = str(val).strip()
+                m = re.search(r"(\d{4})-(\d{2})", s)
+                if m:
+                    return f"{m.group(1)}-{m.group(2)}"
+
+    # Zoek in financieel sectie
+    financieel = data.get("financieel", {})
+    if isinstance(financieel, dict):
+        for key in ["periode", "loonperiode", "salarisperiode"]:
+            val = financieel.get(key)
             if val:
                 s = str(val).strip()
                 m = re.search(r"(\d{4})-(\d{2})", s)

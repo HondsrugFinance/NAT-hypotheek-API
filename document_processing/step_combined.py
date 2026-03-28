@@ -65,8 +65,12 @@ KRITIEKE CLASSIFICATIEREGELS:
   is het een ontruimingsverklaring — ook als er paspoortgegevens in staan.
   Een explainformulier met paspoortgegevens is een explainformulier, geen paspoort.
   Een hypotheekaanvraag met adresgegevens is een hypotheekaanvraag, geen koopovereenkomst.
-- Een JAAROPGAVE (loonopgave van werkgever voor de belastingdienst) is NIET hetzelfde als een JAARREKENING
-  (financieel verslag van een onderneming). Classificeer als "jaaropgave" als het een loonopgave betreft.
+- Een JAAROPGAVE (loonopgave van werkgever voor de belastingdienst, jaaroverzicht van alle 12 maanden)
+  is NIET hetzelfde als een JAARREKENING (financieel verslag van een onderneming) en ook NIET hetzelfde
+  als een SALARISSTROOK (maandelijks overzicht van één loonperiode).
+  Onderscheid: salarisstrook = één maand/periode, jaaropgave = heel jaar, jaarrekening = bedrijfsverslag.
+  Als het document EEN loonperiode betreft (bijv. "periode 02/2026" of "november 2025") → salarisstrook.
+  Als het document een JAAROVERZICHT is (bijv. "Jaaropgave 2024", totaal bruto jaarloon) → jaaropgave.
 - Een VERKOOPBROCHURE (foto's, beschrijving, vraagprijs, makelaar) is GEEN verkoopovereenkomst.
 - Een RIJBEWIJS is GEEN ID-kaart en GEEN paspoort. Classificeer als "rijbewijs".
 - Een NHG BEHEERTOETS (toetsing of hypotheek voldoet aan NHG beheercriteria) is GEEN IBL-resultaat
@@ -80,8 +84,11 @@ KRITIEKE CLASSIFICATIEREGELS:
 - GETEKEND vs BLANCO: meld in document_specifiek of het document handtekeningen bevat
   (handtekening_aanwezig: true/false). Dit is relevant voor explainformulieren, ontruimingsverklaringen,
   koopovereenkomsten.
-- Bij OHA-dossiers (partner uitkopen): als een paspoort/ID/rijbewijs op naam staat van iemand die
-  NIET de aanvrager of partner is, classificeer als persoon="ex-partner".
+- PERSOON BEPALEN: vergelijk de naam op het document met de dossiercontext.
+  Als de naam MATCHT met aanvrager → persoon="aanvrager".
+  Als de naam MATCHT met partner → persoon="partner".
+  Als de naam NIET matcht met aanvrager EN NIET met partner → persoon="ex-partner".
+  Dit geldt voor ALLE documenten, niet alleen paspoort/ID.
 
 ### B. Volledige extractie
 Extraheer ALLE informatie: elk veld, bedrag, datum, naam, adres, percentage.

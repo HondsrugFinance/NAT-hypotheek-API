@@ -55,7 +55,8 @@ Bepaal wat voor document dit is. Kies uit deze lijst:
 
 KRITIEKE CLASSIFICATIEREGELS:
 - De TITEL of KOPTEKST bepaalt het type. "Ontruimingsverklaring" = ontruimingsverklaring, niet paspoort.
-- JAAROPGAVE (loonopgave) ≠ JAARREKENING (bedrijfsverslag).
+- SALARISSTROOK = één maand/periode. JAAROPGAVE = heel jaar overzicht. JAARREKENING = bedrijfsverslag.
+  Als het EEN loonperiode betreft → salarisstrook. Als het een JAAROVERZICHT is → jaaropgave.
 - VERKOOPBROCHURE (foto's, vraagprijs) ≠ verkoopovereenkomst.
 - RIJBEWIJS ≠ ID-kaart ≠ paspoort. Classificeer als "rijbewijs".
 - NHG BEHEERTOETS ≠ IBL-resultaat ≠ UWV. Classificeer als "nhg_toets".
