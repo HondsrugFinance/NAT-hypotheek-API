@@ -182,6 +182,62 @@ async def process_all_pending(dossier_id: str, request: Request):
     succeeded = sum(1 for r in clean_results if r.get("status") == "extracted")
     failed = sum(1 for r in clean_results if r.get("status") == "error")
 
+    # IBL herberekening: als UWV eerder dan loonstrook verwerkt is, was pensioenbijdrage 0
+    ibl_rerun = None
+    try:
+        from document_processing.pipeline_v2 import _find_pensioen_bijdrage, _sb_headers as _pipe_headers
+        from document_processing import ibl_runner
+
+        SUPABASE_URL_PIPE = os.environ.get("SUPABASE_URL", "")
+        pipe_h = {"apikey": SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY}", "Content-Type": "application/json"}
+
+        # Zoek IBL resultaten met pensioenbijdrage=0
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL_PIPE}/rest/v1/extracted_fields",
+                headers=pipe_h,
+                params={
+                    "select": "id,persoon,fields",
+                    "dossier_id": f"eq.{dossier_id}",
+                    "sectie": "eq.inkomen_ibl",
+                },
+            )
+            resp.raise_for_status()
+            ibl_rows = resp.json()
+
+        for ibl_row in ibl_rows:
+            fields = ibl_row.get("fields", {})
+            pensioen_used = fields.get("maandelijksePensioenbijdrage", 0)
+            if pensioen_used == 0 or pensioen_used == 0.0:
+                persoon = ibl_row.get("persoon", "aanvrager")
+                # Check of er nu wél een pensioenbijdrage beschikbaar is
+                pensioen = await _find_pensioen_bijdrage(dossier_id, persoon)
+                if pensioen > 0:
+                    logger.info("IBL herberekening: pensioenbijdrage %.2f gevonden voor %s (was 0)", pensioen, persoon)
+                    # Zoek het UWV document
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        resp = await client.get(
+                            f"{SUPABASE_URL_PIPE}/rest/v1/documents",
+                            headers=pipe_h,
+                            params={
+                                "select": "id",
+                                "dossier_id": f"eq.{dossier_id}",
+                                "document_type": "eq.uwv_verzekeringsbericht",
+                                "persoon": f"eq.{persoon}",
+                                "limit": "1",
+                            },
+                        )
+                        resp.raise_for_status()
+                        uwv_docs = resp.json()
+
+                    if uwv_docs:
+                        # Herverwerk UWV met force
+                        rerun_result = await process_document_v2(uwv_docs[0]["id"], force=True, skip_step3=True)
+                        ibl_rerun = f"herberekend voor {persoon} met pensioen {pensioen}"
+                        logger.info("IBL herberekening voltooid: %s", ibl_rerun)
+    except Exception as e:
+        logger.warning("IBL herberekening check mislukt: %s", e)
+
     # Stap 3: dossier-analyse één keer aan het einde
     step3_result = None
     try:
@@ -207,6 +263,7 @@ async def process_all_pending(dossier_id: str, request: Request):
         "processed": len(clean_results),
         "succeeded": succeeded,
         "failed": failed,
+        "ibl_rerun": ibl_rerun,
         "step3": step3_result,
         "results": clean_results,
     }

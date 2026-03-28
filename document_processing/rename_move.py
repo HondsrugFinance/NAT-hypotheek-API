@@ -201,8 +201,10 @@ def build_filename_v2(
         return _sanitize(filename) + ext
 
     # === Standaard: Type - Naam (of alleen Type bij alleenstaand) ===
-    if heeft_partner:
+    if heeft_partner and naam and naam not in ("", "Aanvrager", "Partner") and persoon != "gezamenlijk":
         filename = f"{label} - {naam}{suffix}"
+    elif heeft_partner and persoon == "gezamenlijk":
+        filename = f"{label}{suffix}"
     else:
         filename = f"{label}{suffix}"
 
