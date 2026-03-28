@@ -54,11 +54,16 @@ Bepaal wat voor document dit is. Kies uit deze lijst:
 - "onbekend": als het niet matcht
 
 KRITIEKE CLASSIFICATIEREGELS:
-- De TITEL of KOPTEKST van het document bepaalt het type. "Ontruimingsverklaring" = ontruimingsverklaring,
-  ook als er paspoortgegevens in staan. "Explainformulier" = explainformulier, niet paspoort.
-- Een JAAROPGAVE (loonopgave) is NIET een JAARREKENING (bedrijfsverslag).
-- Een VERKOOPBROCHURE (foto's, vraagprijs) is GEEN verkoopovereenkomst.
-- Bij paspoort/ID van iemand die niet aanvrager of partner is → persoon="ex-partner".
+- De TITEL of KOPTEKST bepaalt het type. "Ontruimingsverklaring" = ontruimingsverklaring, niet paspoort.
+- JAAROPGAVE (loonopgave) ≠ JAARREKENING (bedrijfsverslag).
+- VERKOOPBROCHURE (foto's, vraagprijs) ≠ verkoopovereenkomst.
+- RIJBEWIJS ≠ ID-kaart ≠ paspoort. Classificeer als "rijbewijs".
+- NHG BEHEERTOETS ≠ IBL-resultaat ≠ UWV. Classificeer als "nhg_toets".
+- E-mail/brief met toelichting = "toelichting", niet "email_correspondentie".
+- KADASTER: "kadaster_eigendom" (eigenaar) vs "kadaster_hypotheek" (hypotheken).
+- UWV: ALLEEN echt verzekeringsbericht met loongegevens. Geen IBL, NHG of aanvraagformulier.
+- GETEKEND vs BLANCO: meld handtekening_aanwezig in document_specifiek.
+- Bij paspoort/ID/rijbewijs van iemand die niet aanvrager of partner is → persoon="ex-partner".
 
 Bepaal ook of het bij de aanvrager, partner, gezamenlijk of ex-partner hoort.
 Let op gehuwde namen: "Slinger-Aap" kan matchen op "Slinger" (aanvrager) of "Aap" (partner meisjesnaam).

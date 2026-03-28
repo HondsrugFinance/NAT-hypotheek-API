@@ -39,7 +39,13 @@ TYPE_LABELS = {
     "inschrijving_burgerlijke_stand": "Echtscheiding - Inschrijving burgerlijke stand",
     "akte_van_verdeling": "Echtscheiding - Akte van verdeling",
     "bkr": "BKR",
+    "rijbewijs": "Rijbewijs",
     "jaaropgave": "Jaaropgave",
+    "nhg_toets": "Echtscheiding - NHG toets",
+    "toelichting": "Toelichting",
+    "ontruimingsverklaring": "Echtscheiding - Ontruimingsverklaring",
+    "kadaster_eigendom": "Kadaster - Eigendom",
+    "kadaster_hypotheek": "Kadaster - Hypotheek",
     "toekenningsbesluit_uitkering": "Toekenningsbesluit",
     "betaalspecificatie_uitkering": "Betaalspecificatie",
     "arbeidsmarktscan": "Arbeidsmarktscan",
@@ -133,13 +139,30 @@ def build_filename_v2(
     bedrijfsnaam = _extract_bedrijfsnaam(extraction_data)
     adres = _extract_adres(extraction_data)
     geldverstrekker = _extract_geldverstrekker(extraction_data)
+    is_getekend = _detect_getekend(extraction_data)
+    is_calcasa = _detect_calcasa(extraction_data)
+
+    # === Getekend/blanco suffix voor relevante documenten ===
+    suffix = ""
+    if document_type in ("explainformulier", "explainformulier_oha",
+                         "explainformulier_ontslag_hoofdelijke_aansprakelijkheid",
+                         "ontruimingsverklaring", "koopovereenkomst",
+                         "verkoopovereenkomst", "akte_van_verdeling"):
+        if is_getekend is True:
+            suffix = " - getekend"
+        elif is_getekend is False:
+            suffix = " - blanco"
+
+    # === Taxatierapport: calcasa/desktoptaxatie ===
+    if document_type == "taxatierapport" and is_calcasa:
+        label = "Taxatierapport calcasa"
 
     # === Woningdocumenten: Type - Adres ===
     if document_type in WONING_TYPES:
         if adres:
-            filename = f"{label} - {adres}"
+            filename = f"{label} - {adres}{suffix}"
         else:
-            filename = label
+            filename = f"{label}{suffix}"
         return _sanitize(filename) + ext
 
     # === Hypotheekoverzicht: Type - Geldverstrekker ===
@@ -179,9 +202,9 @@ def build_filename_v2(
 
     # === Standaard: Type - Naam (of alleen Type bij alleenstaand) ===
     if heeft_partner:
-        filename = f"{label} - {naam}"
+        filename = f"{label} - {naam}{suffix}"
     else:
-        filename = label
+        filename = f"{label}{suffix}"
 
     return _sanitize(filename) + ext
 
@@ -307,6 +330,59 @@ def _extract_geldverstrekker(data: dict) -> str | None:
             if val and isinstance(val, str):
                 return val.strip()
     return None
+
+
+def _detect_getekend(data: dict) -> bool | None:
+    """Detecteer of een document getekend of blanco is. Returns True/False/None."""
+    # Zoek in opvallend/document_specifiek
+    for section in ["document_specifiek", "opvallend"]:
+        section_data = data.get(section, {})
+        if isinstance(section_data, dict):
+            for key in ["handtekening_aanwezig", "getekend", "ondertekend"]:
+                val = section_data.get(key)
+                if val is True or val == "True" or val == "ja" or val == "Ja":
+                    return True
+                if val is False or val == "False" or val == "nee" or val == "Nee":
+                    return False
+        elif isinstance(section_data, list):
+            for item in section_data:
+                if isinstance(item, str):
+                    lower = item.lower()
+                    if "getekend" in lower or "ondertekend" in lower:
+                        return True
+                    if "blanco" in lower or "niet getekend" in lower or "niet ondertekend" in lower:
+                        return False
+
+    # Check structured_fields
+    for key in ["handtekeningAanwezig", "getekend", "ondertekend"]:
+        val = data.get(key)
+        if val is True:
+            return True
+        if val is False:
+            return False
+
+    return None
+
+
+def _detect_calcasa(data: dict) -> bool:
+    """Detecteer of een taxatierapport een Calcasa desktoptaxatie is."""
+    for section in ["document_specifiek", "persoonsgegevens"]:
+        section_data = data.get(section, {})
+        if isinstance(section_data, dict):
+            for key, val in section_data.items():
+                if isinstance(val, str) and "calcasa" in val.lower():
+                    return True
+                if isinstance(val, str) and "desktop" in val.lower() and "taxatie" in val.lower():
+                    return True
+
+    # Check structured fields
+    for key in ["documentType", "document_type", "taxatieOrganisatie"]:
+        val = data.get(key)
+        if isinstance(val, str):
+            if "calcasa" in val.lower() or "desktop" in val.lower():
+                return True
+
+    return False
 
 
 # === Oude functie behouden voor backward compatibility ===

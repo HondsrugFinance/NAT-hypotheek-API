@@ -16,8 +16,18 @@
     "persoon_type": "A_or_B",
     "validity_months": null,
     "check_verloopdatum": true,
-    "description": "Geldige identiteitskaart (voor en achterkant)",
+    "description": "Geldige identiteitskaart (voor en achterkant). NIET hetzelfde als een rijbewijs — een rijbewijs is GEEN geldig legitimatiebewijs voor een hypotheekaanvraag.",
     "extract_fields": ["Volledige naam", "Geboortedatum", "Geboorteplaats", "Documentnummer", "Nationaliteit", "Verloopdatum"]
+  },
+  "rijbewijs": {
+    "keywords": ["rijbewijs", "driving license", "rijbewijs"],
+    "category": "Identificatie",
+    "submap": "Identificatie",
+    "persoon_type": "A_or_B",
+    "validity_months": null,
+    "check_verloopdatum": true,
+    "description": "Rijbewijs — GEEN geldig legitimatiebewijs voor een hypotheekaanvraag. Classificeer apart van paspoort/ID-kaart. Kan wel persoonsgegevens bevatten.",
+    "extract_fields": ["Volledige naam", "Geboortedatum", "Geboorteplaats", "Documentnummer", "Verloopdatum"]
   },
   "salarisstrook": {
     "keywords": ["salarisstrook", "salaris", "loon", "loonstrook", "payslip", "salarisbewijs"],
@@ -319,5 +329,55 @@
     "check_verloopdatum": false,
     "description": "BKR uitdraai",
     "extract_fields": []
+  },
+  "nhg_toets": {
+    "keywords": ["nhg toets", "nhg beheertoets", "nhg beheercriteria", "nationale hypotheek garantie toets", "nhg toetsing"],
+    "category": "Overig",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "NHG beheertoets — toetsing of de hypotheek voldoet aan de NHG beheercriteria. Wordt vaak opgevraagd bij uitkoop/OHA en scheidingen. Dit is NIET een IBL-resultaat of UWV-bericht.",
+    "extract_fields": ["Resultaat", "Toetsdatum", "Hypotheekbedrag"]
+  },
+  "toelichting": {
+    "keywords": ["toelichting", "motivatie", "uitleg"],
+    "category": "Overig",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Toelichting of motivatiebrief — aanvullende uitleg bij de hypotheekaanvraag, bijv. toelichting op BKR-registratie, inkomenssituatie, etc. Kan een e-mail of brief zijn die als bijlage bij de aanvraag zit.",
+    "extract_fields": []
+  },
+  "ontruimingsverklaring": {
+    "keywords": ["ontruimingsverklaring", "ontruiming"],
+    "category": "Overig",
+    "submap": "Overig",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Ontruimingsverklaring — verklaring dat een medebewoner de woning zal verlaten. Bevat vaak paspoortgegevens van de medebewoner maar is GEEN paspoort. Classificeer als ontruimingsverklaring.",
+    "extract_fields": ["Achternaam", "Voorletters", "Geboortedatum", "Adres", "Leningnummer"]
+  },
+  "kadaster_eigendom": {
+    "keywords": ["kadaster eigendom", "eigendomsinformatie", "kadastrale eigendom"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Kadaster eigendomsinformatie — overzicht van eigendom van een perceel/woning.",
+    "extract_fields": ["Adres", "Eigenaar", "Aandeel", "Kadastrale aanduiding"]
+  },
+  "kadaster_hypotheek": {
+    "keywords": ["kadaster hypotheek", "hypothecaire inschrijving", "kadastrale hypotheek"],
+    "category": "Woning",
+    "submap": "Woning",
+    "persoon_type": "AB",
+    "validity_months": null,
+    "check_verloopdatum": false,
+    "description": "Kadaster hypotheekregistratie — overzicht van hypothecaire inschrijvingen op een perceel/woning.",
+    "extract_fields": ["Adres", "Geldverstrekker", "Inschrijving bedrag", "Datum"]
   }
 }

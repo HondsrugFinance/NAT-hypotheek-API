@@ -68,10 +68,20 @@ KRITIEKE CLASSIFICATIEREGELS:
 - Een JAAROPGAVE (loonopgave van werkgever voor de belastingdienst) is NIET hetzelfde als een JAARREKENING
   (financieel verslag van een onderneming). Classificeer als "jaaropgave" als het een loonopgave betreft.
 - Een VERKOOPBROCHURE (foto's, beschrijving, vraagprijs, makelaar) is GEEN verkoopovereenkomst.
-- Bij OHA-dossiers (partner uitkopen): als een paspoort/ID op naam staat van iemand die NIET de aanvrager
-  of partner is, classificeer als persoon="ex-partner".
-- Als het document op naam staat van de ex-partner (herkenbaar uit echtscheidingsstukken of omdat de naam
-  niet matcht met aanvrager/partner), gebruik persoon="ex-partner".
+- Een RIJBEWIJS is GEEN ID-kaart en GEEN paspoort. Classificeer als "rijbewijs".
+- Een NHG BEHEERTOETS (toetsing of hypotheek voldoet aan NHG beheercriteria) is GEEN IBL-resultaat
+  en GEEN UWV-bericht. Classificeer als "nhg_toets". Komt vaak voor bij uitkoop/OHA.
+- Een e-mail of brief met toelichting (bijv. toelichting op BKR) is een "toelichting", niet "email_correspondentie".
+- KADASTER documenten: onderscheid "kadaster_eigendom" (wie is eigenaar) van "kadaster_hypotheek"
+  (welke hypotheken rusten op het perceel).
+- UWV: ALLEEN een echt UWV verzekeringsbericht (met loongegevens per periode) mag als
+  "uwv_verzekeringsbericht" geclassificeerd worden. Een IBL-berekening, NHG-toets of aanvraagformulier
+  is GEEN UWV-bericht.
+- GETEKEND vs BLANCO: meld in document_specifiek of het document handtekeningen bevat
+  (handtekening_aanwezig: true/false). Dit is relevant voor explainformulieren, ontruimingsverklaringen,
+  koopovereenkomsten.
+- Bij OHA-dossiers (partner uitkopen): als een paspoort/ID/rijbewijs op naam staat van iemand die
+  NIET de aanvrager of partner is, classificeer als persoon="ex-partner".
 
 ### B. Volledige extractie
 Extraheer ALLE informatie: elk veld, bedrag, datum, naam, adres, percentage.
