@@ -178,13 +178,17 @@ async def process_document_v2(document_id: str, force: bool = False, skip_step3:
         logger.info("Stap 0: input_method=%s, tekst=%s", input_method, "ja" if pdf_text else "nee")
 
         # === UWV snelroute: detecteer op basis van PDF tekst ===
+        # STRENG: alleen echte UWV verzekeringsbericht, niet documenten die "uwv" noemen
         is_uwv = False
         combined_result = None  # Wordt gezet bij gecombineerde stap 1+2
         if pdf_text:
             text_lower = pdf_text.lower()
-            if "uwv" in text_lower and ("verzekeringsbericht" in text_lower or "loongegevens" in text_lower):
+            # Moet de specifieke UWV header bevatten EN loongegevens met SV-loon
+            has_uwv_header = "printversie verzekeringsbericht" in text_lower
+            has_loongegevens = "loongegevens" in text_lower and "sv-loon" in text_lower
+            if has_uwv_header or has_loongegevens:
                 is_uwv = True
-                logger.info("UWV snelroute: document herkend als UWV Verzekeringsbericht via tekst")
+                logger.info("UWV snelroute: document herkend via header/loongegevens")
 
         if is_uwv:
             # Skip stap 1 (Claude) — direct naar IBL-tool

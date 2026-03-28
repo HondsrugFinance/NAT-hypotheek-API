@@ -88,7 +88,11 @@ KRITIEKE CLASSIFICATIEREGELS:
   Als de naam MATCHT met aanvrager → persoon="aanvrager".
   Als de naam MATCHT met partner → persoon="partner".
   Als de naam NIET matcht met aanvrager EN NIET met partner → persoon="ex-partner".
-  Dit geldt voor ALLE documenten, niet alleen paspoort/ID.
+  UITZONDERING: UPO (pensioenspecificatie), loonstrook, werkgeversverklaring, jaaropgave en
+  UWV-bericht zijn ALTIJD van de persoon die in het document staat — deze zijn NOOIT
+  "ex-partner". Een UPO kan nabestaandenpensioen voor een ex-partner bevatten, maar het
+  document is van de aanvrager of partner. Alleen legitimatiebewijzen (paspoort, ID-kaart,
+  rijbewijs) en echtscheidingsdocumenten (ontruimingsverklaring) kunnen ex-partner zijn.
 
 ### B. Volledige extractie
 Extraheer ALLE informatie: elk veld, bedrag, datum, naam, adres, percentage.

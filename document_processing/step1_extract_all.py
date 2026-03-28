@@ -64,7 +64,8 @@ KRITIEKE CLASSIFICATIEREGELS:
 - KADASTER: "kadaster_eigendom" (eigenaar) vs "kadaster_hypotheek" (hypotheken).
 - UWV: ALLEEN echt verzekeringsbericht met loongegevens. Geen IBL, NHG of aanvraagformulier.
 - GETEKEND vs BLANCO: meld handtekening_aanwezig in document_specifiek.
-- Bij paspoort/ID/rijbewijs van iemand die niet aanvrager of partner is → persoon="ex-partner".
+- Bij paspoort/ID/rijbewijs/ontruimingsverklaring van iemand die niet aanvrager of partner is → persoon="ex-partner".
+  UPO, loonstrook, WGV, jaaropgave, UWV zijn ALTIJD van de genoemde persoon — nooit "ex-partner".
 
 Bepaal ook of het bij de aanvrager, partner, gezamenlijk of ex-partner hoort.
 Let op gehuwde namen: "Slinger-Aap" kan matchen op "Slinger" (aanvrager) of "Aap" (partner meisjesnaam).
