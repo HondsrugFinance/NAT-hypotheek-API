@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from document_processing.pipeline_v2 import process_document_v2
+from document_processing.import_service import get_available_imports
 from document_processing.schemas import ProcessRequest, ApplyToAanvraagRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
@@ -349,6 +350,26 @@ async def reject_extraction(dossier_id: str, extraction_id: str, request: Reques
         raise HTTPException(404, "Extractie niet gevonden")
 
     return {"status": "rejected", "extraction_id": extraction_id}
+
+
+@router.get("/{dossier_id}/available-imports")
+async def available_imports(dossier_id: str, request: Request, aanvraag_id: str = None):
+    """Haal beschikbare imports op: vergelijk extracties met huidige aanvraag data.
+
+    Query params:
+        aanvraag_id: optioneel, als je wilt vergelijken met een specifieke aanvraag
+
+    Returns:
+        Overzicht van beschikbare velden met status (nieuw/bevestigd/afwijkend)
+        + dossier-analyse samenvatting + inkomen vergelijking
+    """
+    token = _extract_token(request)
+    try:
+        result = await get_available_imports(dossier_id, aanvraag_id, token)
+        return result
+    except Exception as _ex:
+        logger.error("Available imports mislukt: %s", _ex)
+        raise HTTPException(500, f"Imports ophalen mislukt: {_ex}")
 
 
 @router.post("/{dossier_id}/apply-to-aanvraag")
