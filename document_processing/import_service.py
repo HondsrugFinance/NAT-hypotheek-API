@@ -1,17 +1,15 @@
 """Import service — vergelijk extracties met aanvraag/berekening en importeer velden.
 
-Drie functies:
-1. available_imports() — wat is er beschikbaar vs wat is er al ingevuld
-2. import_fields() — importeer geselecteerde velden naar aanvraag
-3. compare_field() — vergelijk een enkel veld
+Twee contexten:
+- "aanvraag": alle velden, target_aanvraag paden (voor AanvraagData structuur)
+- "berekening": subset, target_berekening paden (voor invoer structuur)
 
-Alleen velden die daadwerkelijk in een hypotheekaanvraag ingevuld kunnen worden
-zijn importeerbaar. De rest blijft in de extractie-verzamelbak.
+Alleen velden die daadwerkelijk ingevuld kunnen worden zijn importeerbaar.
+De rest blijft in de extractie-verzamelbak.
 """
 
 import logging
 import os
-from datetime import datetime
 
 import httpx
 
@@ -23,131 +21,223 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 
 # ---------------------------------------------------------------------------
-# Veld-mapping: alleen velden relevant voor een hypotheekaanvraag
-# key = veldnaam zoals Claude het extraheert (camelCase)
-# value = (label_NL, display_categorie, target_path, value_type)
+# Veld-mapping: alleen velden relevant voor hypotheek-tool
 #
-# value_type: "text" (default), "date", "currency", "number", "boolean", "percent"
-#   Frontend gebruikt dit om waarden correct te formatteren.
+# Elk veld heeft:
+#   label          — Nederlandse leesbare naam
+#   categorie      — groepering in de UI
+#   value_type     — "text", "date", "currency", "number", "boolean", "percent"
+#   target_aanvraag  — pad in AanvraagData (voor aanvraag-pagina)
+#   target_berekening — pad in invoer (voor berekening-pagina), None = niet toonbaar
 #
-# target_path notatie:
-#   persoon.X        → {persoon}.persoon.X
-#   identiteit.X     → {persoon}.identiteit.X
-#   werkgever.X      → inkomen{Persoon}[0].loondienst.werkgever.X
-#   dienstverband.X  → inkomen{Persoon}[0].loondienst.dienstverband.X
-#   wgv.X            → inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.X
-#   loondienst.X     → inkomen{Persoon}[0].loondienst.X
-#   onderpand.X      → onderpand.X
-#   financiering.X   → financieringsopzet.X
-#   pensioen.X       → pensioen specifiek (frontend routing)
-#   hypotheek.X      → hypotheek specifiek (frontend routing)
-#   vermogen.X       → vermogenSectie specifiek
-#   verplichtingen.X → verplichtingen specifiek
+# target_aanvraag notatie:
+#   persoon.X, identiteit.X, werkgever.X, dienstverband.X, wgv.X,
+#   loondienst.X, onderpand.X, financiering.X, pensioen.X, hypotheek.X,
+#   vermogen.X, verplichtingen.X
+#
+# target_berekening notatie:
+#   klantGegevens.X{P}  — {P} wordt "Aanvrager" of "Partner" op basis van persoon
+#   inkomenGegevens.X{P} — idem
+#   inkomenGegevens.X    — geen persoon-suffix (bijv. erfpachtcanon)
+#   onderpand.X          — haalbaarheidsBerekeningen[0].onderpand.X
+#   berekeningen.X       — berekeningen[0].X
 # ---------------------------------------------------------------------------
-IMPORTABLE_FIELDS: dict[str, tuple[str, str, str, str]] = {
+IMPORTABLE_FIELDS: dict[str, dict] = {
     # --- Persoonsgegevens ---
-    "achternaam":       ("Achternaam", "Persoonsgegevens", "persoon.achternaam", "text"),
-    "voornamen":        ("Voornamen", "Persoonsgegevens", "persoon.voornamen", "text"),
-    "voorletters":      ("Voorletters", "Persoonsgegevens", "persoon.voorletters", "text"),
-    "roepnaam":         ("Roepnaam", "Persoonsgegevens", "persoon.roepnaam", "text"),
-    "geboortedatum":    ("Geboortedatum", "Persoonsgegevens", "persoon.geboortedatum", "date"),
-    "geboorteplaats":   ("Geboorteplaats", "Persoonsgegevens", "persoon.geboorteplaats", "text"),
-    "geboorteland":     ("Geboorteland", "Persoonsgegevens", "persoon.geboorteland", "text"),
-    "nationaliteit":    ("Nationaliteit", "Persoonsgegevens", "persoon.nationaliteit", "text"),
-    "geslacht":         ("Geslacht", "Persoonsgegevens", "persoon.geslacht", "text"),
-    "bsn":              ("BSN", "Persoonsgegevens", "persoon.bsn", "text"),
+    "achternaam":       {"label": "Achternaam", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.achternaam", "target_berekening": "klantGegevens.achternaam{P}"},
+    "voornamen":        {"label": "Voornamen", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.voornamen", "target_berekening": None},
+    "voorletters":      {"label": "Voorletters", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.voorletters", "target_berekening": None},
+    "roepnaam":         {"label": "Roepnaam", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.roepnaam", "target_berekening": "klantGegevens.roepnaam{P}"},
+    "geboortedatum":    {"label": "Geboortedatum", "categorie": "Persoonsgegevens", "value_type": "date",
+                         "target_aanvraag": "persoon.geboortedatum", "target_berekening": "klantGegevens.geboortedatum{P}"},
+    "geboorteplaats":   {"label": "Geboorteplaats", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.geboorteplaats", "target_berekening": None},
+    "geboorteland":     {"label": "Geboorteland", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.geboorteland", "target_berekening": None},
+    "nationaliteit":    {"label": "Nationaliteit", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.nationaliteit", "target_berekening": None},
+    "geslacht":         {"label": "Geslacht", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.geslacht", "target_berekening": None},
+    "bsn":              {"label": "BSN", "categorie": "Persoonsgegevens", "value_type": "text",
+                         "target_aanvraag": "persoon.bsn", "target_berekening": None},
 
     # --- Adres ---
-    "adresWerknemer":   ("Adres", "Adres", "persoon.adres", "text"),
+    "adresWerknemer":   {"label": "Adres", "categorie": "Adres", "value_type": "text",
+                         "target_aanvraag": "persoon.adres", "target_berekening": None},
 
     # --- Legitimatie ---
-    "documentnummer":       ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer", "text"),
-    "legitimatienummer":    ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer", "text"),
-    "geldigTot":            ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
-    "documentGeldigTot":    ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
-    "verloopdatum":         ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
-    "afgifteplaats":        ("Afgifteplaats", "Legitimatie", "identiteit.afgifteplaats", "text"),
-    "afgiftedatum":         ("Afgiftedatum", "Legitimatie", "identiteit.afgiftedatum", "date"),
+    "documentnummer":       {"label": "Documentnummer", "categorie": "Legitimatie", "value_type": "text",
+                             "target_aanvraag": "identiteit.legitimatienummer", "target_berekening": None},
+    "legitimatienummer":    {"label": "Documentnummer", "categorie": "Legitimatie", "value_type": "text",
+                             "target_aanvraag": "identiteit.legitimatienummer", "target_berekening": None},
+    "geldigTot":            {"label": "Geldig tot", "categorie": "Legitimatie", "value_type": "date",
+                             "target_aanvraag": "identiteit.geldigTot", "target_berekening": None},
+    "documentGeldigTot":    {"label": "Geldig tot", "categorie": "Legitimatie", "value_type": "date",
+                             "target_aanvraag": "identiteit.geldigTot", "target_berekening": None},
+    "verloopdatum":         {"label": "Geldig tot", "categorie": "Legitimatie", "value_type": "date",
+                             "target_aanvraag": "identiteit.geldigTot", "target_berekening": None},
+    "afgifteplaats":        {"label": "Afgifteplaats", "categorie": "Legitimatie", "value_type": "text",
+                             "target_aanvraag": "identiteit.afgifteplaats", "target_berekening": None},
+    "afgiftedatum":         {"label": "Afgiftedatum", "categorie": "Legitimatie", "value_type": "date",
+                             "target_aanvraag": "identiteit.afgiftedatum", "target_berekening": None},
 
     # --- Werkgever ---
-    "werkgeverNaam":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever", "text"),
-    "naamWerkgever":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever", "text"),
-    "functie":              ("Functie", "Werkgever", "dienstverband.functie", "text"),
-    "inDienstSinds":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds", "date"),
-    "datumInDienst":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds", "date"),
-    "kvkNummer":            ("KvK-nummer", "Werkgever", "werkgever.kvkNummer", "text"),
-    "adresWerkgever":       ("Adres werkgever", "Werkgever", "werkgever.adresWerkgever", "text"),
-    "vestigingsplaats":     ("Vestigingsplaats", "Werkgever", "werkgever.vestigingsplaats", "text"),
-    "dienstverbandType":    ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband", "text"),
-    "soortDienstverband":   ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband", "text"),
-    "proeftijd":            ("Proeftijd", "Werkgever", "dienstverband.proeftijd", "boolean"),
-    "loonbeslag":           ("Loonbeslag", "Werkgever", "dienstverband.loonbeslag", "boolean"),
+    "werkgeverNaam":        {"label": "Werkgever", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "werkgever.naamWerkgever", "target_berekening": None},
+    "naamWerkgever":        {"label": "Werkgever", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "werkgever.naamWerkgever", "target_berekening": None},
+    "functie":              {"label": "Functie", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "dienstverband.functie", "target_berekening": None},
+    "inDienstSinds":        {"label": "In dienst sinds", "categorie": "Werkgever", "value_type": "date",
+                             "target_aanvraag": "dienstverband.inDienstSinds", "target_berekening": None},
+    "datumInDienst":        {"label": "In dienst sinds", "categorie": "Werkgever", "value_type": "date",
+                             "target_aanvraag": "dienstverband.inDienstSinds", "target_berekening": None},
+    "kvkNummer":            {"label": "KvK-nummer", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "werkgever.kvkNummer", "target_berekening": None},
+    "adresWerkgever":       {"label": "Adres werkgever", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "werkgever.adresWerkgever", "target_berekening": None},
+    "vestigingsplaats":     {"label": "Vestigingsplaats", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "werkgever.vestigingsplaats", "target_berekening": None},
+    "dienstverbandType":    {"label": "Soort dienstverband", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "dienstverband.soortDienstverband", "target_berekening": None},
+    "soortDienstverband":   {"label": "Soort dienstverband", "categorie": "Werkgever", "value_type": "text",
+                             "target_aanvraag": "dienstverband.soortDienstverband", "target_berekening": None},
+    "proeftijd":            {"label": "Proeftijd", "categorie": "Werkgever", "value_type": "boolean",
+                             "target_aanvraag": "dienstverband.proeftijd", "target_berekening": None},
+    "loonbeslag":           {"label": "Loonbeslag", "categorie": "Werkgever", "value_type": "boolean",
+                             "target_aanvraag": "dienstverband.loonbeslag", "target_berekening": None},
 
     # --- Inkomen (WGV) ---
-    "brutoJaarsalaris":             ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris", "currency"),
-    "brutoSalaris":                 ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris", "currency"),
-    "vakantiegeld":                 ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag", "currency"),
-    "vakantiegeldBedrag":           ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag", "currency"),
-    "vakantiegeldPercentage":       ("Vakantiegeld %", "Inkomen", "wgv.vakantiegeldPercentage", "percent"),
-    "eindejaarsuitkering":          ("Eindejaarsuitkering", "Inkomen", "wgv.eindejaarsuitkering", "currency"),
-    "onregelmatigheidstoeslag":     ("Onregelmatigheidstoeslag", "Inkomen", "wgv.onregelmatigheidstoeslag", "currency"),
-    "overwerk":                     ("Overwerk", "Inkomen", "wgv.overwerk", "currency"),
-    "provisie":                     ("Provisie", "Inkomen", "wgv.provisie", "currency"),
-    "dertiendeMaand":               ("13e maand", "Inkomen", "wgv.dertiendeMaand", "currency"),
-    "compensatieUren":              ("Compensatie-uren", "Inkomen", "wgv.structureelFlexibelBudget", "currency"),
-    "totaalWgvInkomen":             ("Totaal WGV inkomen", "Inkomen", "wgv.totaalWgvInkomen", "currency"),
-    "structureelFlexibelBudget":    ("Structureel flexibel budget", "Inkomen", "wgv.structureelFlexibelBudget", "currency"),
-    "variabelBrutoJaarinkomen":     ("Variabel bruto jaarinkomen", "Inkomen", "wgv.variabelBrutoJaarinkomen", "currency"),
-    "vastToeslagOpHetInkomen":      ("Vaste toeslag", "Inkomen", "wgv.vastToeslagOpHetInkomen", "currency"),
-    "vebAfgelopen12Maanden":        ("VEB afgelopen 12 mnd", "Inkomen", "wgv.vebAfgelopen12Maanden", "currency"),
+    "brutoJaarsalaris":             {"label": "Bruto jaarsalaris", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.brutoSalaris", "target_berekening": None},
+    "brutoSalaris":                 {"label": "Bruto jaarsalaris", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.brutoSalaris", "target_berekening": None},
+    "vakantiegeld":                 {"label": "Vakantiegeld", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.vakantiegeldBedrag", "target_berekening": None},
+    "vakantiegeldBedrag":           {"label": "Vakantiegeld", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.vakantiegeldBedrag", "target_berekening": None},
+    "vakantiegeldPercentage":       {"label": "Vakantiegeld %", "categorie": "Inkomen", "value_type": "percent",
+                                     "target_aanvraag": "wgv.vakantiegeldPercentage", "target_berekening": None},
+    "eindejaarsuitkering":          {"label": "Eindejaarsuitkering", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.eindejaarsuitkering", "target_berekening": None},
+    "onregelmatigheidstoeslag":     {"label": "Onregelmatigheidstoeslag", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.onregelmatigheidstoeslag", "target_berekening": None},
+    "overwerk":                     {"label": "Overwerk", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.overwerk", "target_berekening": None},
+    "provisie":                     {"label": "Provisie", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.provisie", "target_berekening": None},
+    "dertiendeMaand":               {"label": "13e maand", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.dertiendeMaand", "target_berekening": None},
+    "compensatieUren":              {"label": "Compensatie-uren", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.structureelFlexibelBudget", "target_berekening": None},
+    "totaalWgvInkomen":             {"label": "Totaal WGV inkomen", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.totaalWgvInkomen",
+                                     "target_berekening": "inkomenGegevens.hoofdinkomen{P}"},
+    "structureelFlexibelBudget":    {"label": "Structureel flexibel budget", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.structureelFlexibelBudget", "target_berekening": None},
+    "variabelBrutoJaarinkomen":     {"label": "Variabel bruto jaarinkomen", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.variabelBrutoJaarinkomen", "target_berekening": None},
+    "vastToeslagOpHetInkomen":      {"label": "Vaste toeslag", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.vastToeslagOpHetInkomen", "target_berekening": None},
+    "vebAfgelopen12Maanden":        {"label": "VEB afgelopen 12 mnd", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "wgv.vebAfgelopen12Maanden", "target_berekening": None},
 
     # --- Inkomen (IBL) ---
-    "gemiddeldJaarToetsinkomen":    ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
-    "toetsinkomen":                 ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
-    "iblToetsinkomen":              ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
+    "gemiddeldJaarToetsinkomen":    {"label": "IBL toetsinkomen", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "loondienst.gemiddeldJaarToetsinkomen",
+                                     "target_berekening": "inkomenGegevens.hoofdinkomen{P}"},
+    "toetsinkomen":                 {"label": "IBL toetsinkomen", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "loondienst.gemiddeldJaarToetsinkomen",
+                                     "target_berekening": "inkomenGegevens.hoofdinkomen{P}"},
+    "iblToetsinkomen":              {"label": "IBL toetsinkomen", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "loondienst.gemiddeldJaarToetsinkomen",
+                                     "target_berekening": "inkomenGegevens.hoofdinkomen{P}"},
 
     # --- Pensioenbijdrage ---
-    "maandelijksePensioenbijdrage": ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage", "currency"),
-    "pensioenbijdrage":             ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage", "currency"),
-    "pensioenbijdragePercentage":   ("Pensioenbijdrage %", "Inkomen", "loondienst.pensioenbijdragePercentage", "percent"),
+    "maandelijksePensioenbijdrage": {"label": "Pensioenbijdrage (mnd)", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "loondienst.maandelijksePensioenbijdrage", "target_berekening": None},
+    "pensioenbijdrage":             {"label": "Pensioenbijdrage (mnd)", "categorie": "Inkomen", "value_type": "currency",
+                                     "target_aanvraag": "loondienst.maandelijksePensioenbijdrage", "target_berekening": None},
+    "pensioenbijdragePercentage":   {"label": "Pensioenbijdrage %", "categorie": "Inkomen", "value_type": "percent",
+                                     "target_aanvraag": "loondienst.pensioenbijdragePercentage", "target_berekening": None},
 
     # --- Onderpand / Woning ---
-    "koopprijs":            ("Koopsom", "Onderpand", "financiering.aankoopsomWoning", "currency"),
-    "aankoopsom":           ("Koopsom", "Onderpand", "financiering.aankoopsomWoning", "currency"),
-    "marktwaarde":          ("Marktwaarde", "Onderpand", "onderpand.marktwaarde", "currency"),
-    "wozWaarde":            ("WOZ-waarde", "Onderpand", "onderpand.wozWaarde", "currency"),
-    "energielabel":         ("Energielabel", "Onderpand", "onderpand.energielabel", "text"),
-    "bouwjaar":             ("Bouwjaar", "Onderpand", "onderpand.bouwjaar", "number"),
-    "woonoppervlakte":      ("Woonoppervlakte (m²)", "Onderpand", "onderpand.woonoppervlakte", "number"),
-    "leveringsdatum":       ("Leveringsdatum", "Onderpand", "onderpand.leveringsdatum", "date"),
-    "jaarlijkseErfpacht":   ("Erfpachtcanon (jaar)", "Onderpand", "onderpand.jaarlijkseErfpacht", "currency"),
-    "erfpacht":             ("Erfpacht", "Onderpand", "onderpand.erfpacht", "boolean"),
-    "taxatiedatum":         ("Taxatiedatum", "Onderpand", "onderpand.taxatiedatum", "date"),
-    "waardeNaVerbouwing":   ("Waarde na verbouwing", "Onderpand", "onderpand.marktwaardeNaVerbouwing", "currency"),
-    "totaalVerbouwingskosten": ("Verbouwingskosten", "Onderpand", "financiering.verbouwing", "currency"),
-    "vraagprijs":           ("Vraagprijs", "Onderpand", "onderpand.vraagprijs", "currency"),
+    "koopprijs":            {"label": "Koopsom", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "financiering.aankoopsomWoning",
+                             "target_berekening": "berekeningen.aankoopsomWoning"},
+    "aankoopsom":           {"label": "Koopsom", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "financiering.aankoopsomWoning",
+                             "target_berekening": "berekeningen.aankoopsomWoning"},
+    "marktwaarde":          {"label": "Marktwaarde", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "onderpand.marktwaarde",
+                             "target_berekening": "onderpand.marktwaarde"},
+    "wozWaarde":            {"label": "WOZ-waarde", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "onderpand.wozWaarde",
+                             "target_berekening": "berekeningen.wozWaarde"},
+    "energielabel":         {"label": "Energielabel", "categorie": "Onderpand", "value_type": "text",
+                             "target_aanvraag": "onderpand.energielabel",
+                             "target_berekening": "onderpand.energielabel"},
+    "bouwjaar":             {"label": "Bouwjaar", "categorie": "Onderpand", "value_type": "number",
+                             "target_aanvraag": "onderpand.bouwjaar", "target_berekening": None},
+    "woonoppervlakte":      {"label": "Woonoppervlakte (m\u00b2)", "categorie": "Onderpand", "value_type": "number",
+                             "target_aanvraag": "onderpand.woonoppervlakte", "target_berekening": None},
+    "leveringsdatum":       {"label": "Leveringsdatum", "categorie": "Onderpand", "value_type": "date",
+                             "target_aanvraag": "onderpand.leveringsdatum", "target_berekening": None},
+    "jaarlijkseErfpacht":   {"label": "Erfpachtcanon (jaar)", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "onderpand.jaarlijkseErfpacht",
+                             "target_berekening": "inkomenGegevens.erfpachtcanon"},
+    "erfpacht":             {"label": "Erfpacht", "categorie": "Onderpand", "value_type": "boolean",
+                             "target_aanvraag": "onderpand.erfpacht", "target_berekening": None},
+    "taxatiedatum":         {"label": "Taxatiedatum", "categorie": "Onderpand", "value_type": "date",
+                             "target_aanvraag": "onderpand.taxatiedatum", "target_berekening": None},
+    "waardeNaVerbouwing":   {"label": "Waarde na verbouwing", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "onderpand.marktwaardeNaVerbouwing", "target_berekening": None},
+    "totaalVerbouwingskosten": {"label": "Verbouwingskosten", "categorie": "Onderpand", "value_type": "currency",
+                                "target_aanvraag": "financiering.verbouwing",
+                                "target_berekening": "berekeningen.verbouwing"},
+    "vraagprijs":           {"label": "Vraagprijs", "categorie": "Onderpand", "value_type": "currency",
+                             "target_aanvraag": "onderpand.vraagprijs", "target_berekening": None},
 
     # --- Pensioen (UPO) ---
-    "ouderdomspensioenTotaalExclAow":  ("Ouderdomspensioen (excl AOW)", "Pensioen", "pensioen.ouderdomspensioen", "currency"),
-    "nabestaandenpensioenPartner":     ("Nabestaandenpensioen partner", "Pensioen", "pensioen.partnerpensioen", "currency"),
-    "nabestaandenpensioenKinderen":    ("Wezenpensioen", "Pensioen", "pensioen.wezenpensioen", "currency"),
+    "ouderdomspensioenTotaalExclAow":  {"label": "Ouderdomspensioen (excl AOW)", "categorie": "Pensioen", "value_type": "currency",
+                                         "target_aanvraag": "pensioen.ouderdomspensioen", "target_berekening": None},
+    "nabestaandenpensioenPartner":     {"label": "Nabestaandenpensioen partner", "categorie": "Pensioen", "value_type": "currency",
+                                         "target_aanvraag": "pensioen.partnerpensioen", "target_berekening": None},
+    "nabestaandenpensioenKinderen":    {"label": "Wezenpensioen", "categorie": "Pensioen", "value_type": "currency",
+                                         "target_aanvraag": "pensioen.wezenpensioen", "target_berekening": None},
 
     # --- Hypotheek (bestaand) ---
-    "geldverstrekker":      ("Geldverstrekker", "Hypotheek", "hypotheek.geldverstrekker", "text"),
-    "restschuld":           ("Restschuld", "Hypotheek", "hypotheek.restschuld", "currency"),
-    "oorspronkelijkBedrag": ("Oorspronkelijk bedrag", "Hypotheek", "hypotheek.oorspronkelijkBedrag", "currency"),
-    "maandlast":            ("Maandlast", "Hypotheek", "hypotheek.maandlast", "currency"),
-    "einddatumRentevast":   ("Einddatum rentevast", "Hypotheek", "hypotheek.einddatumRentevast", "date"),
-    "rentePercentage":      ("Rente %", "Hypotheek", "hypotheek.rentePercentage", "percent"),
+    "geldverstrekker":      {"label": "Geldverstrekker", "categorie": "Hypotheek", "value_type": "text",
+                             "target_aanvraag": "hypotheek.geldverstrekker", "target_berekening": None},
+    "restschuld":           {"label": "Restschuld", "categorie": "Hypotheek", "value_type": "currency",
+                             "target_aanvraag": "hypotheek.restschuld", "target_berekening": None},
+    "oorspronkelijkBedrag": {"label": "Oorspronkelijk bedrag", "categorie": "Hypotheek", "value_type": "currency",
+                             "target_aanvraag": "hypotheek.oorspronkelijkBedrag", "target_berekening": None},
+    "maandlast":            {"label": "Maandlast", "categorie": "Hypotheek", "value_type": "currency",
+                             "target_aanvraag": "hypotheek.maandlast", "target_berekening": None},
+    "einddatumRentevast":   {"label": "Einddatum rentevast", "categorie": "Hypotheek", "value_type": "date",
+                             "target_aanvraag": "hypotheek.einddatumRentevast", "target_berekening": None},
+    "rentePercentage":      {"label": "Rente %", "categorie": "Hypotheek", "value_type": "percent",
+                             "target_aanvraag": "hypotheek.rentePercentage", "target_berekening": None},
 
     # --- Bankgegevens ---
-    "iban":                 ("IBAN", "Bankgegevens", "vermogen.iban", "text"),
-    "rekeningnummer":       ("IBAN", "Bankgegevens", "vermogen.iban", "text"),
+    "iban":                 {"label": "IBAN", "categorie": "Bankgegevens", "value_type": "text",
+                             "target_aanvraag": "vermogen.iban", "target_berekening": None},
+    "rekeningnummer":       {"label": "IBAN", "categorie": "Bankgegevens", "value_type": "text",
+                             "target_aanvraag": "vermogen.iban", "target_berekening": None},
 
-    # --- Echtscheiding ---
-    "partneralimentatieBedrag":  ("Partneralimentatie", "Echtscheiding", "verplichtingen.partneralimentatie", "currency"),
-    "kinderalimentatieBedrag":   ("Kinderalimentatie", "Echtscheiding", "verplichtingen.kinderalimentatie", "currency"),
-    "datumScheiding":            ("Datum scheiding", "Echtscheiding", "persoon.datumEchtscheiding", "date"),
+    # --- Verplichtingen / Echtscheiding ---
+    "partneralimentatieBedrag":  {"label": "Partneralimentatie", "categorie": "Echtscheiding", "value_type": "currency",
+                                  "target_aanvraag": "verplichtingen.partneralimentatie",
+                                  "target_berekening": "inkomenGegevens.partneralimentatieBetalen{P}"},
+    "kinderalimentatieBedrag":   {"label": "Kinderalimentatie", "categorie": "Echtscheiding", "value_type": "currency",
+                                  "target_aanvraag": "verplichtingen.kinderalimentatie", "target_berekening": None},
+    "datumScheiding":            {"label": "Datum scheiding", "categorie": "Echtscheiding", "value_type": "date",
+                                  "target_aanvraag": "persoon.datumEchtscheiding", "target_berekening": None},
 }
 
 # Aliases: Nederlandse veldnamen (lowercase) → camelCase key in IMPORTABLE_FIELDS
@@ -185,49 +275,25 @@ _DUTCH_ALIASES: dict[str, str | None] = {
     "documentnummer": "documentnummer",
     "verloopdatum": "verloopdatum",
     # Niet-importeerbare velden (None = bewust overslaan)
-    "volledige naam": None,
-    "overige inkomensbestandsdelen": None,
-    "proeftijd verlopen": None,
-    "periode": None,
-    "bijzondere beloningen": None,
-    "pensioenfonds": None,
-    "bruto bedrag": None,
-    "ingangsdatum": None,
-    "adres": None,
-    "datum bankgarantie": None,
-    "ontbindende voorwaarden datum": None,
-    "registratiedatum": None,
-    "bank": None,
-    "saldo": None,
-    "datum": None,
-    "totaal vermogen": None,
-    "kredietverstrekker": None,
-    "type lening": None,
-    "einddatum": None,
-    "verdeling vermogen": None,
-    "datum afgifte": None,
-    "resultaat": None,
-    "toetsdatum": None,
-    "hypotheekbedrag": None,
-    "eigenaar": None,
-    "aandeel": None,
-    "kadastrale aanduiding": None,
-    "inschrijving bedrag": None,
-    "specificatie per post": None,
-    "leningnummer": None,
-    "bruto maandloon": None,
-    "loonheffing": None,
-    "jaar": None,
+    "volledige naam": None, "overige inkomensbestandsdelen": None,
+    "proeftijd verlopen": None, "periode": None, "bijzondere beloningen": None,
+    "pensioenfonds": None, "bruto bedrag": None, "ingangsdatum": None,
+    "adres": None, "datum bankgarantie": None, "ontbindende voorwaarden datum": None,
+    "registratiedatum": None, "bank": None, "saldo": None, "datum": None,
+    "totaal vermogen": None, "kredietverstrekker": None, "type lening": None,
+    "einddatum": None, "verdeling vermogen": None, "datum afgifte": None,
+    "resultaat": None, "toetsdatum": None, "hypotheekbedrag": None,
+    "eigenaar": None, "aandeel": None, "kadastrale aanduiding": None,
+    "inschrijving bedrag": None, "specificatie per post": None,
+    "leningnummer": None, "bruto maandloon": None, "loonheffing": None, "jaar": None,
 }
 
 
-def _resolve_field(name: str) -> tuple[str, str, str, str] | None:
-    """Resolve veldnaam naar (label, category, target, value_type) of None als niet importeerbaar."""
-    # Directe match (camelCase)
+def _resolve_field(name: str) -> dict | None:
+    """Resolve veldnaam naar mapping dict of None als niet importeerbaar."""
     if name in IMPORTABLE_FIELDS:
         return IMPORTABLE_FIELDS[name]
 
-    # Nederlandse alias (lowercase)
     lowered = name.lower().strip()
     alias = _DUTCH_ALIASES.get(lowered)
     if alias is not None and alias in IMPORTABLE_FIELDS:
@@ -257,14 +323,16 @@ def _sb_headers(access_token: str | None = None) -> dict:
 async def get_available_imports(
     dossier_id: str,
     aanvraag_id: str | None = None,
+    context: str = "aanvraag",
     access_token: str | None = None,
 ) -> dict:
     """Vergelijk beschikbare extracties met huidige aanvraag/berekening data.
 
-    Retourneert alleen velden die daadwerkelijk in een hypotheekaanvraag
-    ingevuld kunnen worden (gefilterd via IMPORTABLE_FIELDS mapping).
+    Args:
+        context: "aanvraag" of "berekening" — bepaalt welke velden en target-paden.
     """
     headers = _sb_headers(access_token)
+    target_key = "target_aanvraag" if context == "aanvraag" else "target_berekening"
 
     # Haal alle extracted_fields op voor dit dossier
     async with httpx.AsyncClient(timeout=10) as client:
@@ -297,19 +365,21 @@ async def get_available_imports(
         ibl_fields = resp.json()
         all_fields.extend(ibl_fields)
 
-    # Haal huidige aanvraag data op (als aanvraag_id gegeven)
+    # Haal huidige data op (aanvraag of berekening)
     huidige_data = {}
     if aanvraag_id:
+        table = "aanvragen" if context == "aanvraag" else "dossiers"
+        data_field = "data" if context == "aanvraag" else "invoer"
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/aanvragen",
+                f"{SUPABASE_URL}/rest/v1/{table}",
                 headers=headers,
-                params={"select": "data", "id": f"eq.{aanvraag_id}"},
+                params={"select": data_field, "id": f"eq.{aanvraag_id}"},
             )
             resp.raise_for_status()
             rows = resp.json()
             if rows:
-                huidige_data = rows[0].get("data", {}) or {}
+                huidige_data = rows[0].get(data_field, {}) or {}
 
     # Haal dossier-analyse op voor samenvatting
     async with httpx.AsyncClient(timeout=10) as client:
@@ -328,7 +398,7 @@ async def get_available_imports(
 
     # Bouw import-overzicht — alleen importeerbare velden
     imports = []
-    seen_fields: set[str] = set()  # Voorkom dubbelen (nieuwste wint)
+    seen_fields: set[str] = set()
 
     for ef in all_fields:
         sectie = ef.get("sectie", "")
@@ -341,12 +411,23 @@ async def get_available_imports(
             if waarde is None:
                 continue
 
-            # Filter: alleen importeerbare velden
             mapping = _resolve_field(veld)
             if mapping is None:
                 continue
 
-            label, category, target, value_type = mapping
+            # Filter: veld moet een target hebben voor deze context
+            target = mapping.get(target_key)
+            if target is None:
+                continue
+
+            label = mapping["label"]
+            category = mapping["categorie"]
+            value_type = mapping["value_type"]
+
+            # Resolve {P} placeholder
+            if "{P}" in target:
+                suffix = "Partner" if persoon == "partner" else "Aanvrager"
+                target = target.replace("{P}", suffix)
 
             # Dedup: nieuwste wint, per (persoon, target)
             dedup_key = f"{persoon}.{target}"
@@ -354,8 +435,12 @@ async def get_available_imports(
                 continue
             seen_fields.add(dedup_key)
 
-            # Vergelijk met huidige aanvraag data
-            waarde_huidig = _find_in_aanvraag(huidige_data, target, persoon)
+            # Vergelijk met huidige data
+            if context == "aanvraag":
+                waarde_huidig = _find_in_aanvraag(huidige_data, mapping["target_aanvraag"], persoon)
+            else:
+                waarde_huidig = _find_in_berekening(huidige_data, target, persoon)
+
             confidence = confidences.get(veld, 0.5)
 
             if waarde_huidig is None:
@@ -380,9 +465,7 @@ async def get_available_imports(
                 "bron_datum": created,
             })
 
-    # Sorteer in volgorde van invullen in de aanvraag tool:
-    # Klant → Adres → Legitimatie → Werkgever → Inkomen → Onderpand →
-    # Hypotheek → Pensioen → Bankgegevens → Echtscheiding
+    # Sorteer: persoon → categorie → label
     category_order = [
         "Persoonsgegevens", "Adres", "Legitimatie", "Werkgever", "Inkomen",
         "Onderpand", "Hypotheek", "Pensioen", "Bankgegevens", "Echtscheiding",
@@ -396,18 +479,17 @@ async def get_available_imports(
 
     imports.sort(key=sort_key)
 
-    # Samenvatting
     nieuw = sum(1 for i in imports if i["status"] == "nieuw")
     bevestigd = sum(1 for i in imports if i["status"] == "bevestigd")
     afwijkend = sum(1 for i in imports if i["status"] == "afwijkend")
 
-    # Dossier-analyse info
     analysis_data = analysis[0] if analysis else {}
     inkomen = analysis_data.get("inkomen_analyse", {})
 
     return {
         "dossier_id": dossier_id,
         "aanvraag_id": aanvraag_id,
+        "context": context,
         "documenten_verwerkt": analysis_data.get("documenten_verwerkt", len(all_fields)),
         "laatste_verwerking": analysis_data.get("updated_at"),
         "dossier_samenvatting": analysis_data.get("samenvatting"),
@@ -422,6 +504,10 @@ async def get_available_imports(
     }
 
 
+# ---------------------------------------------------------------------------
+# Find in aanvraag (AanvraagData structuur)
+# ---------------------------------------------------------------------------
+
 def _find_in_aanvraag(data: dict, target: str, persoon: str):
     """Zoek een veld in de aanvraag data via target path."""
     if not data:
@@ -431,21 +517,18 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
     if not field:
         return None
 
-    # --- persoon.X → {persoon}.persoon.X ---
     if prefix == "persoon":
         person_data = data.get(persoon if persoon != "gezamenlijk" else "aanvrager", {})
         sub = person_data.get("persoon", {})
         if isinstance(sub, dict) and field in sub:
             return sub[field]
 
-    # --- identiteit.X → {persoon}.identiteit.X ---
     elif prefix == "identiteit":
         person_data = data.get(persoon if persoon != "gezamenlijk" else "aanvrager", {})
         sub = person_data.get("identiteit", {})
         if isinstance(sub, dict) and field in sub:
             return sub[field]
 
-    # --- werkgever.X → inkomen{Persoon}[0].loondienst.werkgever.X ---
     elif prefix == "werkgever":
         inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
         for item in data.get(inkomen_key, []):
@@ -454,7 +537,6 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
                 if isinstance(werkgever, dict) and field in werkgever:
                     return werkgever[field]
 
-    # --- dienstverband.X → inkomen{Persoon}[0].loondienst.dienstverband.X ---
     elif prefix == "dienstverband":
         inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
         for item in data.get(inkomen_key, []):
@@ -463,7 +545,6 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
                 if isinstance(dv, dict) and field in dv:
                     return dv[field]
 
-    # --- wgv.X → inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.X ---
     elif prefix == "wgv":
         inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
         for item in data.get(inkomen_key, []):
@@ -472,7 +553,6 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
                 if isinstance(wgv, dict) and field in wgv:
                     return wgv[field]
 
-    # --- loondienst.X → inkomen{Persoon}[0].loondienst.X ---
     elif prefix == "loondienst":
         inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
         for item in data.get(inkomen_key, []):
@@ -481,19 +561,16 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
                 if isinstance(ld, dict) and field in ld:
                     return ld[field]
 
-    # --- onderpand.X ---
     elif prefix == "onderpand":
         onderpand = data.get("onderpand", {})
         if isinstance(onderpand, dict) and field in onderpand:
             return onderpand[field]
 
-    # --- financiering.X → financieringsopzet.X ---
     elif prefix == "financiering":
         fin = data.get("financieringsopzet", {})
         if isinstance(fin, dict) and field in fin:
             return fin[field]
 
-    # --- vermogen.X ---
     elif prefix == "vermogen":
         vs = data.get("vermogenSectie", {})
         if isinstance(vs, dict):
@@ -505,21 +582,66 @@ def _find_in_aanvraag(data: dict, target: str, persoon: str):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Find in berekening (invoer structuur)
+# ---------------------------------------------------------------------------
+
+def _find_in_berekening(data: dict, target: str, persoon: str):
+    """Zoek een veld in de berekening invoer via target path.
+
+    Target paden:
+      klantGegevens.achternaamAanvrager
+      inkomenGegevens.hoofdinkomenAanvrager
+      onderpand.marktwaarde → haalbaarheidsBerekeningen[0].onderpand.X
+      berekeningen.aankoopsomWoning → berekeningen[0].X
+    """
+    if not data:
+        return None
+
+    prefix, _, field = target.partition(".")
+    if not field:
+        return None
+
+    if prefix == "klantGegevens":
+        kg = data.get("klantGegevens", {})
+        if isinstance(kg, dict) and field in kg:
+            return kg[field]
+
+    elif prefix == "inkomenGegevens":
+        ig = data.get("inkomenGegevens", {})
+        if isinstance(ig, dict) and field in ig:
+            return ig[field]
+
+    elif prefix == "onderpand":
+        # haalbaarheidsBerekeningen[0].onderpand.X
+        hb = data.get("haalbaarheidsBerekeningen", [])
+        if hb and isinstance(hb[0], dict):
+            onderpand = hb[0].get("onderpand", {})
+            if isinstance(onderpand, dict) and field in onderpand:
+                return onderpand[field]
+
+    elif prefix == "berekeningen":
+        # berekeningen[0].X
+        ber = data.get("berekeningen", [])
+        if ber and isinstance(ber[0], dict) and field in ber[0]:
+            return ber[0][field]
+
+    return None
+
+
 def _values_match(val1, val2) -> bool:
     """Vergelijk twee waarden (flexibel: string vs number, hoofdletter-insensitief)."""
     if val1 == val2:
         return True
 
-    # String vergelijking
     s1 = str(val1).strip().lower()
     s2 = str(val2).strip().lower()
     if s1 == s2:
         return True
 
-    # Numerieke vergelijking (tolerantie 0.01)
     try:
-        n1 = float(str(val1).replace(",", ".").replace("€", "").replace(" ", ""))
-        n2 = float(str(val2).replace(",", ".").replace("€", "").replace(" ", ""))
+        n1 = float(str(val1).replace(",", ".").replace("\u20ac", "").replace(" ", ""))
+        n2 = float(str(val2).replace(",", ".").replace("\u20ac", "").replace(" ", ""))
         if abs(n1 - n2) < 0.01:
             return True
     except (ValueError, TypeError):

@@ -353,19 +353,23 @@ async def reject_extraction(dossier_id: str, extraction_id: str, request: Reques
 
 
 @router.get("/{dossier_id}/available-imports")
-async def available_imports(dossier_id: str, request: Request, aanvraag_id: str = None):
-    """Haal beschikbare imports op: vergelijk extracties met huidige aanvraag data.
+async def available_imports(
+    dossier_id: str,
+    request: Request,
+    aanvraag_id: str = None,
+    context: str = "aanvraag",
+):
+    """Haal beschikbare imports op: vergelijk extracties met huidige data.
 
     Query params:
-        aanvraag_id: optioneel, als je wilt vergelijken met een specifieke aanvraag
-
-    Returns:
-        Overzicht van beschikbare velden met status (nieuw/bevestigd/afwijkend)
-        + dossier-analyse samenvatting + inkomen vergelijking
+        aanvraag_id: ID van de aanvraag of berekening om mee te vergelijken
+        context: "aanvraag" (alle velden, AanvraagData) of "berekening" (subset, invoer)
     """
+    if context not in ("aanvraag", "berekening"):
+        context = "aanvraag"
     token = _extract_token(request)
     try:
-        result = await get_available_imports(dossier_id, aanvraag_id, token)
+        result = await get_available_imports(dossier_id, aanvraag_id, context, token)
         return result
     except Exception as _ex:
         logger.error("Available imports mislukt: %s", _ex)

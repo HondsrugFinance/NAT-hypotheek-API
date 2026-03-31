@@ -1,25 +1,26 @@
-# N2 — Import dialog fixes (aanvraag-selectie, formatting, importeer-functie)
+# N2 — Import op berekening- en aanvraag-niveau
 
 ## Context
 
-De ImportBanner en ImportDialog zijn gebouwd (N1), maar er zijn vijf problemen:
+De ImportBanner stond op dossier-niveau, maar de gebruiker wil bepalen waar gegevens naartoe gaan. De banner moet op **berekening-niveau** (Aankoop/Aanpassen) en **aanvraag-niveau** staan — niet op DossierDetail.
 
-1. **"Importeer" knop disabled / doet niets** — er is geen `aanvraag_id` context als de dialog vanuit DossierDetail geopend wordt
-2. **Onduidelijk waar gegevens heen gaan** — gebruiker moet zien naar welke berekening/aanvraag geïmporteerd wordt
-3. **Volgorde verkeerd** — moet de invulvolgorde van de aanvraag tool volgen (eerst aanvrager alles, dan partner alles, dan gezamenlijk)
-4. **Bouwjaar toont "€ 2.009"** — getallen worden onterecht als bedragen geformateerd. De API stuurt nu `value_type` mee ("currency", "date", "number", "text", "boolean", "percent")
-5. **Import-functie ontbreekt** — client-side merge naar aanvraag data
+De API ondersteunt nu twee contexten via `?context=`:
+- `?context=berekening` — alleen velden relevant voor de berekening (inkomen, naam, geboortedatum, onderpand, koopsom). Import gaat naar de pagina-state (`invoer`).
+- `?context=aanvraag` — alle velden (klantgegevens, legitimatie, werkgever, inkomen, onderpand, pensioen, hypotheek, etc.). Import gaat naar `aanvragen.data` in Supabase.
 
-De API response per veld is uitgebreid:
+Elke import-veld heeft nu een `target` pad dat aangeeft waar het in de datastructuur terecht komt.
+
+### API Response (per veld)
+
 ```typescript
 interface ImportVeld {
   veld: string;           // technische veldnaam
-  label: string;          // Nederlandse leesbare naam (bijv. "Bruto jaarsalaris")
-  categorie: string;      // groepering: Persoonsgegevens, Adres, Legitimatie, Werkgever, Inkomen, Onderpand, Hypotheek, Pensioen, Bankgegevens, Echtscheiding
+  label: string;          // Nederlandse leesbare naam
+  categorie: string;      // groepering: Persoonsgegevens, Inkomen, Onderpand, etc.
   sectie: string;         // bron-document: werkgeversverklaring, paspoort, etc.
   persoon: 'aanvrager' | 'partner' | 'gezamenlijk';
-  target: string;         // AanvraagData pad, bijv. "wgv.brutoSalaris"
-  value_type: string;     // "currency" | "date" | "number" | "text" | "boolean" | "percent" (NIEUW)
+  target: string;         // pad in de datastructuur (verschilt per context)
+  value_type: string;     // "currency" | "date" | "number" | "text" | "boolean" | "percent"
   waarde_extractie: any;
   waarde_huidig: any;
   status: 'nieuw' | 'bevestigd' | 'afwijkend';
@@ -28,91 +29,242 @@ interface ImportVeld {
 }
 ```
 
-De velden komen nu gesorteerd uit de API: eerst aanvrager (persoonsgegevens → adres → legitimatie → werkgever → inkomen → onderpand → ...), dan partner, dan gezamenlijk.
+### Target paden per context
+
+**Berekening** (`context=berekening`): target paden voor `invoer` structuur:
+| Target prefix | Voorbeeld | Waar in invoer |
+|---|---|---|
+| `klantGegevens.X` | `klantGegevens.achternaamAanvrager` | `invoer.klantGegevens.achternaamAanvrager` |
+| `inkomenGegevens.X` | `inkomenGegevens.hoofdinkomenAanvrager` | `invoer.inkomenGegevens.hoofdinkomenAanvrager` |
+| `onderpand.X` | `onderpand.energielabel` | `invoer.haalbaarheidsBerekeningen[0].onderpand.energielabel` |
+| `berekeningen.X` | `berekeningen.aankoopsomWoning` | `invoer.berekeningen[0].aankoopsomWoning` |
+
+**Aanvraag** (`context=aanvraag`): target paden voor `AanvraagData` structuur — zie het bestaande `applyFieldToAanvraag()` uit N1.
 
 ---
 
 ## Wat moet er aangepast worden
 
-### 1. Aanvraag-selectie: weet waar je importeert
+### 1. Verwijder ImportBanner van DossierDetail.tsx
 
-De import moet naar een specifieke aanvraag gaan. Momenteel weet de dialog niet welke.
-
-**In DossierDetail.tsx — haal beschikbare aanvragen op:**
+De banner op dossier-niveau verdwijnt. Optioneel: laat een subtiele tekstregel staan:
 
 ```tsx
-// Naast de bestaande aanvragen-query, geef de eerste aanvraag mee aan ImportBanner:
-const eerstAanvraag = aanvragen?.[0]; // de meest recente
-
-<ImportBanner
-  dossierId={primaryDossier.id}
-  aanvraagId={eersteAanvraag?.id}
-  aanvraagNaam={eersteAanvraag?.naam || eersteAanvraag?.type || 'Berekening'}
-/>
-```
-
-Als er meerdere aanvragen zijn, toon een dropdown in de ImportDialog header:
-
-```tsx
-// In ImportDialog, boven de velden:
-{aanvragen.length > 1 && (
-  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-    <span>Importeren naar:</span>
-    <Select value={selectedAanvraagId} onValueChange={setSelectedAanvraagId}>
-      <SelectTrigger className="w-[250px] h-8">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {aanvragen.map(a => (
-          <SelectItem key={a.id} value={a.id}>
-            {a.naam || a.type} — {formatDate(a.laatst_bewerkt)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-)}
-
-{aanvragen.length === 1 && (
-  <p className="text-sm text-muted-foreground mb-3">
-    Importeren naar: <strong>{aanvragen[0].naam || aanvragen[0].type}</strong>
+{/* Was: <ImportBanner dossierId={...} /> */}
+{/* Nu: alleen informatief */}
+{documentenVerwerkt > 0 && (
+  <p className="text-xs text-muted-foreground">
+    {documentenVerwerkt} documenten verwerkt
   </p>
 )}
 ```
 
-**Haal de aanvragen-lijst op via Supabase in de dialog:**
+### 2. Voeg ImportBanner toe aan Aankoop.tsx en Aanpassen.tsx
+
+Op de berekening-pagina's verschijnt de banner met `context=berekening`.
+
+**In Aankoop.tsx** (en vergelijkbaar in Aanpassen.tsx), voeg toe na de pagina-header:
 
 ```tsx
-// In ImportDialog, bij openen:
-useEffect(() => {
-  if (!open || !dossierId) return;
-  supabase
-    .from('aanvragen')
-    .select('id, naam, type, updated_at')
-    .eq('dossier_id', dossierId)
-    .order('updated_at', { ascending: false })
-    .then(({ data }) => {
-      if (data && data.length > 0) {
-        setAanvragen(data);
-        setSelectedAanvraagId(aanvraagId || data[0].id);
+{dossierId && (
+  <ImportBanner
+    dossierId={dossierId}
+    targetId={dossierId}  // voor berekening = dossier id
+    context="berekening"
+    onImported={(updates) => {
+      // Merge updates in invoer state
+      setInvoer(prev => applyBerekeningImports(prev, updates));
+    }}
+  />
+)}
+```
+
+### 3. Voeg ImportBanner toe aan de aanvraag-pagina
+
+Als de aanvraag-pagina bestaat (bijv. AanvraagDetail of vergelijkbaar), voeg daar de banner toe:
+
+```tsx
+{dossierId && aanvraagId && (
+  <ImportBanner
+    dossierId={dossierId}
+    targetId={aanvraagId}  // voor aanvraag = aanvraag id
+    context="aanvraag"
+    onImported={() => {
+      // Herlaad aanvraag data
+      refetchAanvraag();
+    }}
+  />
+)}
+```
+
+### 4. Hook: useAvailableImports.ts — context parameter
+
+Update de hook om `context` door te geven:
+
+```typescript
+export function useAvailableImports(
+  dossierId: string | undefined,
+  targetId?: string,  // aanvraag_id of dossier_id (berekening)
+  context: 'aanvraag' | 'berekening' = 'aanvraag'
+) {
+  const [data, setData] = useState<AvailableImports | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    if (!dossierId) return;
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const params = new URLSearchParams({ context });
+      if (targetId) params.set('aanvraag_id', targetId);
+
+      const resp = await window.fetch(
+        `${API_CONFIG.NAT_API_URL}/doc-processing/${dossierId}/available-imports?${params}`,
+        { headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}` } }
+      );
+
+      if (resp.ok) {
+        setData(await resp.json());
       }
-    });
-}, [open, dossierId]);
+    } catch { /* stil falen */ }
+    setLoading(false);
+  }, [dossierId, targetId, context]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  return { data, loading, refresh: fetchData };
+}
 ```
 
-**Wanneer aanvraag wijzigt → herlaad imports met die aanvraag_id:**
+### 5. ImportBanner.tsx — Props uitbreiden
 
 ```tsx
-// Wanneer selectedAanvraagId verandert, opnieuw ophalen
-useEffect(() => {
-  if (!selectedAanvraagId) return;
-  fetchImports(dossierId, selectedAanvraagId);
-}, [selectedAanvraagId]);
+interface ImportBannerProps {
+  dossierId: string;
+  targetId?: string;     // aanvraag_id of dossier_id
+  context: 'aanvraag' | 'berekening';
+  onImported?: (updates?: ImportUpdate[]) => void;
+}
 ```
 
-### 2. Waarde-formatting op basis van `value_type`
+De banner toont:
+- Berekening: "8 velden beschikbaar uit documenten"
+- Aanvraag: "46 velden beschikbaar uit documenten"
 
-Vervang de huidige formatting logica door een functie die `value_type` gebruikt:
+### 6. ImportDialog.tsx — Import-functie per context
+
+**Context = berekening**: de import wijzigt de React state, NIET Supabase direct:
+
+```tsx
+const handleImportBerekening = () => {
+  // Bouw een lijst van updates
+  const updates: ImportUpdate[] = [];
+  for (const item of data.imports) {
+    if (!selectedFields.has(fieldKey(item))) continue;
+    updates.push({ target: item.target, value: item.waarde_extractie });
+  }
+
+  // Geef terug aan parent via callback
+  onImported?.(updates);
+  toast.success(`${updates.length} velden geïmporteerd`);
+  onClose();
+};
+```
+
+In Aankoop.tsx de `onImported` callback:
+
+```tsx
+function applyBerekeningImports(
+  prev: AankoopInvoer,
+  updates: ImportUpdate[]
+): AankoopInvoer {
+  const next = { ...prev };
+
+  for (const { target, value } of updates) {
+    const [prefix, field] = target.split('.');
+
+    switch (prefix) {
+      case 'klantGegevens':
+        next.klantGegevens = { ...next.klantGegevens, [field]: value };
+        break;
+
+      case 'inkomenGegevens':
+        next.inkomenGegevens = { ...next.inkomenGegevens, [field]: value };
+        break;
+
+      case 'onderpand': {
+        // haalbaarheidsBerekeningen[0].onderpand.X
+        const hb = [...next.haalbaarheidsBerekeningen];
+        if (hb[0]) {
+          hb[0] = {
+            ...hb[0],
+            onderpand: { ...hb[0].onderpand, [field]: value },
+          };
+        }
+        next.haalbaarheidsBerekeningen = hb;
+        break;
+      }
+
+      case 'berekeningen': {
+        // berekeningen[0].X
+        const ber = [...(next.berekeningen || [])];
+        if (ber[0]) {
+          ber[0] = { ...ber[0], [field]: value };
+        }
+        next.berekeningen = ber;
+        break;
+      }
+    }
+  }
+
+  return next;
+}
+```
+
+**Context = aanvraag**: de import schrijft naar Supabase (bestaande logica):
+
+```tsx
+const handleImportAanvraag = async () => {
+  if (!targetId || selectedFields.size === 0) return;
+
+  setImporting(true);
+  try {
+    const { data: aanvraag, error } = await supabase
+      .from('aanvragen')
+      .select('data')
+      .eq('id', targetId)
+      .single();
+
+    if (error || !aanvraag) throw new Error('Aanvraag niet gevonden');
+
+    const updatedData = JSON.parse(JSON.stringify(aanvraag.data || {}));
+
+    for (const item of data.imports) {
+      if (!selectedFields.has(fieldKey(item))) continue;
+      applyFieldToAanvraag(updatedData, item);
+    }
+
+    const { error: saveError } = await supabase
+      .from('aanvragen')
+      .update({ data: updatedData, updated_at: new Date().toISOString() })
+      .eq('id', targetId);
+
+    if (saveError) throw saveError;
+
+    toast.success(`${selectedFields.size} velden geïmporteerd`);
+    onClose();
+    onImported?.();
+  } catch (err) {
+    toast.error('Importeren mislukt: ' + (err as Error).message);
+  } finally {
+    setImporting(false);
+  }
+};
+```
+
+De `applyFieldToAanvraag()` functie is dezelfde als in de vorige N2 prompt — met switch op target prefix (persoon, identiteit, werkgever, dienstverband, wgv, loondienst, onderpand, financiering, vermogen).
+
+### 7. Waarde-formatting op basis van `value_type`
 
 ```tsx
 function formatDisplayValue(value: any, valueType?: string): string {
@@ -120,19 +272,19 @@ function formatDisplayValue(value: any, valueType?: string): string {
 
   switch (valueType) {
     case 'date':
-      // YYYY-MM-DD → DD-MM-YYYY
       if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
         const [y, m, d] = value.substring(0, 10).split('-');
         return `${d}-${m}-${y}`;
       }
       return String(value);
 
-    case 'currency':
+    case 'currency': {
       const num = typeof value === 'number' ? value : parseFloat(String(value).replace(/[€\s.]/g, '').replace(',', '.'));
       if (!isNaN(num)) {
         return `€ ${num.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
       }
       return String(value);
+    }
 
     case 'percent':
       return `${value}%`;
@@ -143,264 +295,26 @@ function formatDisplayValue(value: any, valueType?: string): string {
       return String(value);
 
     case 'number':
-      // Gewoon getal, GEEN € teken (bijv. bouwjaar 2009, woonoppervlakte 127)
-      if (typeof value === 'number') {
-        return value.toLocaleString('nl-NL');
-      }
+      if (typeof value === 'number') return value.toLocaleString('nl-NL');
       return String(value);
 
-    case 'text':
     default:
       return String(value);
   }
 }
 ```
 
-**Gebruik in de veldenlijst:**
-```tsx
-<span>{formatDisplayValue(item.waarde_extractie, item.value_type)}</span>
-```
+### 8. Scrollbare dialog + groepering
 
-### 3. Groepering op `persoon` → `categorie`
+Zelfde als vorige prompt — scrollbaar met `max-h-[60vh] overflow-y-auto`, groepering op persoon → categorie, header/footer vast.
 
-De API sorteert al correct (aanvrager eerst, dan partner, dan gezamenlijk). Groepeer in de UI op **persoon** als eerste niveau, dan **categorie**:
+### 9. ImportUpdate type
 
-```tsx
-const grouped = useMemo(() => {
-  if (!data?.imports) return [];
-
-  const persoonLabels: Record<string, string> = {
-    aanvrager: 'Aanvrager',
-    partner: 'Partner',
-    gezamenlijk: 'Gezamenlijk',
-  };
-
-  // Groepeer: persoon → categorie → items
-  const groups: { title: string; items: ImportVeld[] }[] = [];
-  let currentKey = '';
-
-  for (const item of data.imports) {
-    const persLabel = persoonLabels[item.persoon] || item.persoon;
-    const key = `${persLabel} — ${item.categorie}`;
-    if (key !== currentKey) {
-      groups.push({ title: key, items: [] });
-      currentKey = key;
-    }
-    groups[groups.length - 1].items.push(item);
-  }
-
-  return groups;
-}, [data?.imports]);
-```
-
-Render:
-```tsx
-{grouped.map(group => (
-  <div key={group.title} className="mb-4">
-    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-      {group.title}
-    </h4>
-    {group.items.map(item => (
-      <ImportRow key={fieldKey(item)} item={item} ... />
-    ))}
-  </div>
-))}
-```
-
-### 4. Import-functie: `applyFieldToAanvraag()`
-
-Het `target` pad bepaalt waar de waarde in AanvraagData terecht komt.
-
-```tsx
-function applyFieldToAanvraag(data: any, item: ImportVeld) {
-  const { target, persoon, waarde_extractie } = item;
-  const [prefix, field] = target.split('.');
-
-  const personKey = persoon === 'partner' ? 'partner' : 'aanvrager';
-
-  switch (prefix) {
-    case 'persoon': {
-      if (!data[personKey]) data[personKey] = {};
-      if (!data[personKey].persoon) data[personKey].persoon = {};
-      data[personKey].persoon[field] = waarde_extractie;
-      break;
-    }
-
-    case 'identiteit': {
-      if (!data[personKey]) data[personKey] = {};
-      if (!data[personKey].identiteit) data[personKey].identiteit = {};
-      data[personKey].identiteit[field] = waarde_extractie;
-      break;
-    }
-
-    case 'werkgever': {
-      const inkomenKey = personKey === 'partner' ? 'inkomenPartner' : 'inkomenAanvrager';
-      if (!data[inkomenKey]) data[inkomenKey] = [];
-      if (data[inkomenKey].length === 0) {
-        data[inkomenKey].push({ id: crypto.randomUUID(), type: 'loondienst', loondienst: { werkgever: {} } });
-      }
-      const item0 = data[inkomenKey][0];
-      if (!item0.loondienst) item0.loondienst = {};
-      if (!item0.loondienst.werkgever) item0.loondienst.werkgever = {};
-      item0.loondienst.werkgever[field] = waarde_extractie;
-      break;
-    }
-
-    case 'dienstverband': {
-      const inkomenKey = personKey === 'partner' ? 'inkomenPartner' : 'inkomenAanvrager';
-      if (!data[inkomenKey]) data[inkomenKey] = [];
-      if (data[inkomenKey].length === 0) {
-        data[inkomenKey].push({ id: crypto.randomUUID(), type: 'loondienst', loondienst: { dienstverband: {} } });
-      }
-      const item0 = data[inkomenKey][0];
-      if (!item0.loondienst) item0.loondienst = {};
-      if (!item0.loondienst.dienstverband) item0.loondienst.dienstverband = {};
-      item0.loondienst.dienstverband[field] = waarde_extractie;
-      break;
-    }
-
-    case 'wgv': {
-      const inkomenKey = personKey === 'partner' ? 'inkomenPartner' : 'inkomenAanvrager';
-      if (!data[inkomenKey]) data[inkomenKey] = [];
-      if (data[inkomenKey].length === 0) {
-        data[inkomenKey].push({ id: crypto.randomUUID(), type: 'loondienst', loondienst: { werkgeversverklaringCalc: {} } });
-      }
-      const item0 = data[inkomenKey][0];
-      if (!item0.loondienst) item0.loondienst = {};
-      if (!item0.loondienst.werkgeversverklaringCalc) item0.loondienst.werkgeversverklaringCalc = {};
-      item0.loondienst.werkgeversverklaringCalc[field] = waarde_extractie;
-      break;
-    }
-
-    case 'loondienst': {
-      const inkomenKey = personKey === 'partner' ? 'inkomenPartner' : 'inkomenAanvrager';
-      if (!data[inkomenKey]) data[inkomenKey] = [];
-      if (data[inkomenKey].length === 0) {
-        data[inkomenKey].push({ id: crypto.randomUUID(), type: 'loondienst', loondienst: {} });
-      }
-      const item0 = data[inkomenKey][0];
-      if (!item0.loondienst) item0.loondienst = {};
-      item0.loondienst[field] = waarde_extractie;
-      break;
-    }
-
-    case 'onderpand': {
-      if (!data.onderpand) data.onderpand = {};
-      data.onderpand[field] = waarde_extractie;
-      break;
-    }
-
-    case 'financiering': {
-      if (!data.financieringsopzet) data.financieringsopzet = {};
-      data.financieringsopzet[field] = waarde_extractie;
-      break;
-    }
-
-    case 'vermogen': {
-      if (field === 'iban') {
-        if (!data.vermogenSectie) data.vermogenSectie = {};
-        if (!data.vermogenSectie.iban) data.vermogenSectie.iban = {};
-        const ibanKey = personKey === 'partner' ? 'ibanPartner' : 'ibanAanvrager';
-        data.vermogenSectie.iban[ibanKey] = waarde_extractie;
-      }
-      break;
-    }
-
-    default:
-      console.warn(`Import: onbekend target prefix "${prefix}" voor veld "${item.veld}"`);
-  }
+```typescript
+interface ImportUpdate {
+  target: string;   // bijv. "klantGegevens.achternaamAanvrager"
+  value: any;
 }
-```
-
-### 5. "Importeer geselecteerde" knop handler
-
-```tsx
-const [importing, setImporting] = useState(false);
-
-const handleImport = async () => {
-  if (!selectedAanvraagId || selectedFields.size === 0) return;
-
-  setImporting(true);
-  try {
-    // 1. Haal huidige aanvraag data op
-    const { data: aanvraag, error } = await supabase
-      .from('aanvragen')
-      .select('data')
-      .eq('id', selectedAanvraagId)
-      .single();
-
-    if (error || !aanvraag) throw new Error('Aanvraag niet gevonden');
-
-    // 2. Deep copy en merge geselecteerde velden
-    const updatedData = JSON.parse(JSON.stringify(aanvraag.data || {}));
-
-    for (const importItem of data.imports) {
-      if (!selectedFields.has(fieldKey(importItem))) continue;
-      applyFieldToAanvraag(updatedData, importItem);
-    }
-
-    // 3. Opslaan
-    const { error: saveError } = await supabase
-      .from('aanvragen')
-      .update({ data: updatedData, updated_at: new Date().toISOString() })
-      .eq('id', selectedAanvraagId);
-
-    if (saveError) throw saveError;
-
-    toast.success(`${selectedFields.size} velden geïmporteerd`);
-    onClose();
-    refresh?.();  // callback om banner te refreshen
-  } catch (err) {
-    toast.error('Importeren mislukt: ' + (err as Error).message);
-  } finally {
-    setImporting(false);
-  }
-};
-```
-
-### 6. Scrollbare dialog
-
-Zorg dat de veldenlijst scrollbaar is maar header en footer vast staan:
-
-```tsx
-<DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-  {/* Header: titel + badges + aanvraag-selectie */}
-  <DialogHeader>
-    <DialogTitle>Beschikbare gegevens uit documenten</DialogTitle>
-    {/* badges + aanvraag selectie */}
-  </DialogHeader>
-
-  {/* Scrollbare veldenlijst */}
-  <div className="flex-1 overflow-y-auto pr-2 min-h-0">
-    {grouped.map(group => (
-      // ... groepen met velden
-    ))}
-  </div>
-
-  {/* Footer: selecteer alle + importeer knop */}
-  <div className="flex items-center justify-between pt-4 border-t">
-    <label className="flex items-center gap-2 text-sm cursor-pointer">
-      <Checkbox checked={allNewSelected} onCheckedChange={toggleAllNew} />
-      Selecteer alle nieuwe
-    </label>
-    <div className="flex gap-2">
-      <Button variant="outline" onClick={onClose}>Annuleren</Button>
-      <Button onClick={handleImport} disabled={selectedFields.size === 0 || importing}>
-        {importing ? 'Importeren...' : `Importeer geselecteerde (${selectedFields.size})`}
-      </Button>
-    </div>
-  </div>
-</DialogContent>
-```
-
-### 7. Banner tekst verduidelijken
-
-```tsx
-// In ImportBanner.tsx:
-<p className="font-medium">
-  {data.documenten_verwerkt} documenten verwerkt — {data.samenvatting.nieuw} nieuwe velden beschikbaar
-  {aanvraagNaam && <span className="text-muted-foreground"> voor {aanvraagNaam}</span>}
-</p>
 ```
 
 ---
@@ -409,23 +323,24 @@ Zorg dat de veldenlijst scrollbaar is maar header en footer vast staan:
 
 | # | Check | Verwacht |
 |---|-------|----------|
-| 1 | Open dossier met 1 aanvraag | Dialog toont "Importeren naar: Hypotheek verhogen" |
-| 2 | Open dossier met 2+ aanvragen | Dropdown om aanvraag te kiezen |
-| 3 | Bouwjaar | Toont "2.009" (getal), NIET "€ 2.009" |
-| 4 | Woonoppervlakte | Toont "127" (getal), NIET "€ 127" |
-| 5 | Datums | DD-MM-YYYY (bijv. "01-05-1983") |
-| 6 | Bedragen | € met duizendtallen (bijv. "€ 42.768") |
-| 7 | Volgorde | Aanvrager eerst (persoon → adres → legitimatie → werkgever → inkomen → onderpand), dan partner |
-| 8 | Selecteer velden + klik "Importeer" | Toast "X velden geïmporteerd" + dialog sluit |
-| 9 | Heropen dialog | Geïmporteerde velden staan als "bevestigd" |
-| 10 | Boolean waarden | "Ja" / "Nee" |
-| 11 | Geen TypeScript fouten | `npm run build` slaagt |
+| 1 | DossierDetail | Geen ImportBanner meer (optioneel: "38 documenten verwerkt" tekst) |
+| 2 | Aankoop pagina (berekening) | Banner met ~8-10 velden (naam, geboortedatum, inkomen, onderpand) |
+| 3 | Aanvraag pagina | Banner met ~46 velden (alles) |
+| 4 | Berekening: importeer inkomen | Waarde verschijnt direct in het formulier |
+| 5 | Aanvraag: importeer legitimatie | Waarde opgeslagen in Supabase, zichtbaar na heropen |
+| 6 | Bouwjaar | Toont "2.009" (getal), NIET "€ 2.009" |
+| 7 | Datums | DD-MM-YYYY |
+| 8 | Bedragen | € met duizendtallen |
+| 9 | Volgorde | Aanvrager eerst, dan partner, dan gezamenlijk |
+| 10 | Geen TypeScript fouten | `npm run build` slaagt |
 
 ## Samenvatting bestanden
 
 | Bestand | Actie | Wijziging |
 |---------|-------|-----------|
-| `src/components/dossier/ImportDialog.tsx` | Wijzig | Scrollbaar, aanvraag-selectie, formatting op value_type, import-functie, groepering persoon→categorie |
-| `src/components/dossier/ImportBanner.tsx` | Wijzig | aanvraagId/aanvraagNaam props, verduidelijking tekst |
-| `src/hooks/useAvailableImports.ts` | Wijzig | Interface update met value_type |
-| `src/pages/DossierDetail.tsx` | Wijzig | Geef aanvraagId mee aan ImportBanner |
+| `src/pages/DossierDetail.tsx` | Wijzig | Verwijder ImportBanner, optioneel subtiele tekst |
+| `src/pages/Aankoop.tsx` | Wijzig | ImportBanner toevoegen met context="berekening", onImported callback |
+| `src/pages/Aanpassen.tsx` | Wijzig | Idem als Aankoop |
+| `src/hooks/useAvailableImports.ts` | Wijzig | context parameter toevoegen |
+| `src/components/dossier/ImportBanner.tsx` | Wijzig | context/targetId/onImported props |
+| `src/components/dossier/ImportDialog.tsx` | Wijzig | Twee import-modes (berekening=state, aanvraag=Supabase), formatting, scrollbaar |
