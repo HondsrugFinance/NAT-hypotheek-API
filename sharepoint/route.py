@@ -313,6 +313,10 @@ async def webhook_dossier_created(request: Request):
 
     Supabase stuurt een POST met het nieuwe record in de body.
     Beveiligd met X-Webhook-Secret header.
+
+    Deduplicatie op twee niveaus:
+    1. Per dossier: atomic "pending" claim voorkomt dubbele map per dossier
+    2. Per klant: als dezelfde klant_naam al een SharePoint map heeft → hergebruik die
     """
     # Auth check
     secret = request.headers.get("X-Webhook-Secret", "")
@@ -329,6 +333,12 @@ async def webhook_dossier_created(request: Request):
     except Exception:
         raise HTTPException(400, "Ongeldige JSON payload")
 
+    # Alleen INSERT events verwerken (niet UPDATE/DELETE)
+    event_type = payload.get("type", "")
+    if event_type and event_type != "INSERT":
+        logger.info("Webhook: event type %s genegeerd (alleen INSERT)", event_type)
+        return {"status": "skipped", "reason": f"event_type_{event_type}"}
+
     # Supabase webhook format: { "type": "INSERT", "table": "dossiers", "record": {...} }
     record = payload.get("record", {})
     dossier_id = record.get("id")
@@ -343,8 +353,29 @@ async def webhook_dossier_created(request: Request):
         logger.info("Webhook: dossier %s heeft nog geen dossiernummer of klantnaam — skip", dossier_id)
         return {"status": "skipped", "reason": "incomplete_data"}
 
-    # Deduplicatie: claim dit dossier door sharepoint_url te zetten op "pending"
-    # Alleen als sharepoint_url nog NULL is (atomic conditional update)
+    # ─── Niveau 1: Check of dezelfde klant al een SharePoint map heeft ───
+    # Als een ander dossier met dezelfde klant_naam al een sharepoint_url heeft,
+    # hergebruik die URL in plaats van een nieuwe map aan te maken.
+    existing_url = await _find_existing_klantmap(dossier_id, klant_naam)
+    if existing_url:
+        logger.info(
+            "Webhook: klant '%s' heeft al een SharePoint map — hergebruik voor dossier %s",
+            klant_naam, dossier_id,
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.patch(
+                    f"{SUPABASE_URL}/rest/v1/dossiers",
+                    headers=supabase_headers(None),
+                    params={"id": f"eq.{dossier_id}", "sharepoint_url": "is.null"},
+                    json={"sharepoint_url": existing_url},
+                )
+        except Exception as e:
+            logger.warning("Webhook: hergebruik URL opslaan mislukt: %s", e)
+        return {"status": "reused", "sharepoint_url": existing_url}
+
+    # ─── Niveau 2: Atomic claim per dossier (voorkomt dubbele webhook) ───
+    # Zet sharepoint_url op "pending", alleen als nog NULL
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.patch(
@@ -372,13 +403,16 @@ async def webhook_dossier_created(request: Request):
     except GraphAPIError as e:
         logger.error("Webhook: klantmap aanmaken mislukt voor %s: %s", dossier_id, e.message)
         # Reset sharepoint_url naar NULL zodat het opnieuw geprobeerd kan worden
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.patch(
-                f"{SUPABASE_URL}/rest/v1/dossiers",
-                headers=supabase_headers(None),
-                params={"id": f"eq.{dossier_id}"},
-                json={"sharepoint_url": None},
-            )
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.patch(
+                    f"{SUPABASE_URL}/rest/v1/dossiers",
+                    headers=supabase_headers(None),
+                    params={"id": f"eq.{dossier_id}"},
+                    json={"sharepoint_url": None},
+                )
+        except Exception as e2:
+            logger.error("Webhook: reset sharepoint_url ook mislukt: %s", e2)
         return {"status": "error", "reason": str(e.message)}
 
     # SharePoint URL opslaan (echte URL vervangt "pending")
@@ -396,6 +430,37 @@ async def webhook_dossier_created(request: Request):
 
     logger.info("Webhook: klantmap aangemaakt voor dossier %s (%s)", dossier_id, result["mapnaam"])
     return {"status": "ok", "mapnaam": result["mapnaam"], "sharepoint_url": result["sharepoint_url"]}
+
+
+async def _find_existing_klantmap(dossier_id: str, klant_naam: str) -> str | None:
+    """Zoek of een ander dossier met dezelfde klant_naam al een SharePoint map heeft.
+
+    Returns de sharepoint_url als gevonden, anders None.
+    Negeert het huidige dossier en "pending" URLs.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(None),
+                params={
+                    "select": "sharepoint_url",
+                    "klant_naam": f"eq.{klant_naam}",
+                    "id": f"neq.{dossier_id}",
+                    "sharepoint_url": "not.is.null",
+                    "limit": "1",
+                },
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+            if rows:
+                url = rows[0].get("sharepoint_url", "")
+                # "pending" is geen echte URL — negeren
+                if url and url != "pending":
+                    return url
+    except Exception as e:
+        logger.warning("Webhook: bestaande klantmap zoeken mislukt: %s", e)
+    return None
 
 
 # =============================================================================
