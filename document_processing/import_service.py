@@ -25,7 +25,10 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 # ---------------------------------------------------------------------------
 # Veld-mapping: alleen velden relevant voor een hypotheekaanvraag
 # key = veldnaam zoals Claude het extraheert (camelCase)
-# value = (label_NL, display_categorie, target_path)
+# value = (label_NL, display_categorie, target_path, value_type)
+#
+# value_type: "text" (default), "date", "currency", "number", "boolean", "percent"
+#   Frontend gebruikt dit om waarden correct te formatteren.
 #
 # target_path notatie:
 #   persoon.X        → {persoon}.persoon.X
@@ -41,108 +44,110 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 #   vermogen.X       → vermogenSectie specifiek
 #   verplichtingen.X → verplichtingen specifiek
 # ---------------------------------------------------------------------------
-IMPORTABLE_FIELDS: dict[str, tuple[str, str, str]] = {
+IMPORTABLE_FIELDS: dict[str, tuple[str, str, str, str]] = {
     # --- Persoonsgegevens ---
-    "achternaam":       ("Achternaam", "Persoonsgegevens", "persoon.achternaam"),
-    "voornamen":        ("Voornamen", "Persoonsgegevens", "persoon.voornamen"),
-    "voorletters":      ("Voorletters", "Persoonsgegevens", "persoon.voorletters"),
-    "roepnaam":         ("Roepnaam", "Persoonsgegevens", "persoon.roepnaam"),
-    "geboortedatum":    ("Geboortedatum", "Persoonsgegevens", "persoon.geboortedatum"),
-    "geboorteplaats":   ("Geboorteplaats", "Persoonsgegevens", "persoon.geboorteplaats"),
-    "geboorteland":     ("Geboorteland", "Persoonsgegevens", "persoon.geboorteland"),
-    "nationaliteit":    ("Nationaliteit", "Persoonsgegevens", "persoon.nationaliteit"),
-    "geslacht":         ("Geslacht", "Persoonsgegevens", "persoon.geslacht"),
-    "bsn":              ("BSN", "Persoonsgegevens", "persoon.bsn"),
+    "achternaam":       ("Achternaam", "Persoonsgegevens", "persoon.achternaam", "text"),
+    "voornamen":        ("Voornamen", "Persoonsgegevens", "persoon.voornamen", "text"),
+    "voorletters":      ("Voorletters", "Persoonsgegevens", "persoon.voorletters", "text"),
+    "roepnaam":         ("Roepnaam", "Persoonsgegevens", "persoon.roepnaam", "text"),
+    "geboortedatum":    ("Geboortedatum", "Persoonsgegevens", "persoon.geboortedatum", "date"),
+    "geboorteplaats":   ("Geboorteplaats", "Persoonsgegevens", "persoon.geboorteplaats", "text"),
+    "geboorteland":     ("Geboorteland", "Persoonsgegevens", "persoon.geboorteland", "text"),
+    "nationaliteit":    ("Nationaliteit", "Persoonsgegevens", "persoon.nationaliteit", "text"),
+    "geslacht":         ("Geslacht", "Persoonsgegevens", "persoon.geslacht", "text"),
+    "bsn":              ("BSN", "Persoonsgegevens", "persoon.bsn", "text"),
+
+    # --- Adres ---
+    "adresWerknemer":   ("Adres", "Adres", "persoon.adres", "text"),
 
     # --- Legitimatie ---
-    "documentnummer":       ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer"),
-    "legitimatienummer":    ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer"),
-    "geldigTot":            ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
-    "documentGeldigTot":    ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
-    "verloopdatum":         ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
-    "afgifteplaats":        ("Afgifteplaats", "Legitimatie", "identiteit.afgifteplaats"),
-    "afgiftedatum":         ("Afgiftedatum", "Legitimatie", "identiteit.afgiftedatum"),
+    "documentnummer":       ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer", "text"),
+    "legitimatienummer":    ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer", "text"),
+    "geldigTot":            ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
+    "documentGeldigTot":    ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
+    "verloopdatum":         ("Geldig tot", "Legitimatie", "identiteit.geldigTot", "date"),
+    "afgifteplaats":        ("Afgifteplaats", "Legitimatie", "identiteit.afgifteplaats", "text"),
+    "afgiftedatum":         ("Afgiftedatum", "Legitimatie", "identiteit.afgiftedatum", "date"),
 
     # --- Werkgever ---
-    "werkgeverNaam":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever"),
-    "naamWerkgever":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever"),
-    "functie":              ("Functie", "Werkgever", "dienstverband.functie"),
-    "inDienstSinds":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds"),
-    "datumInDienst":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds"),
-    "kvkNummer":            ("KvK-nummer", "Werkgever", "werkgever.kvkNummer"),
-    "adresWerkgever":       ("Adres werkgever", "Werkgever", "werkgever.adresWerkgever"),
-    "adresWerknemer":       ("Adres werknemer", "Persoonsgegevens", "persoon.adres"),
-    "vestigingsplaats":     ("Vestigingsplaats", "Werkgever", "werkgever.vestigingsplaats"),
-    "dienstverbandType":    ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband"),
-    "soortDienstverband":   ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband"),
-    "proeftijd":            ("Proeftijd", "Werkgever", "dienstverband.proeftijd"),
-    "loonbeslag":           ("Loonbeslag", "Werkgever", "dienstverband.loonbeslag"),
+    "werkgeverNaam":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever", "text"),
+    "naamWerkgever":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever", "text"),
+    "functie":              ("Functie", "Werkgever", "dienstverband.functie", "text"),
+    "inDienstSinds":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds", "date"),
+    "datumInDienst":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds", "date"),
+    "kvkNummer":            ("KvK-nummer", "Werkgever", "werkgever.kvkNummer", "text"),
+    "adresWerkgever":       ("Adres werkgever", "Werkgever", "werkgever.adresWerkgever", "text"),
+    "vestigingsplaats":     ("Vestigingsplaats", "Werkgever", "werkgever.vestigingsplaats", "text"),
+    "dienstverbandType":    ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband", "text"),
+    "soortDienstverband":   ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband", "text"),
+    "proeftijd":            ("Proeftijd", "Werkgever", "dienstverband.proeftijd", "boolean"),
+    "loonbeslag":           ("Loonbeslag", "Werkgever", "dienstverband.loonbeslag", "boolean"),
 
     # --- Inkomen (WGV) ---
-    "brutoJaarsalaris":             ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris"),
-    "brutoSalaris":                 ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris"),
-    "vakantiegeld":                 ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag"),
-    "vakantiegeldBedrag":           ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag"),
-    "vakantiegeldPercentage":       ("Vakantiegeld %", "Inkomen", "wgv.vakantiegeldPercentage"),
-    "eindejaarsuitkering":          ("Eindejaarsuitkering", "Inkomen", "wgv.eindejaarsuitkering"),
-    "onregelmatigheidstoeslag":     ("Onregelmatigheidstoeslag", "Inkomen", "wgv.onregelmatigheidstoeslag"),
-    "overwerk":                     ("Overwerk", "Inkomen", "wgv.overwerk"),
-    "provisie":                     ("Provisie", "Inkomen", "wgv.provisie"),
-    "dertiendeMaand":               ("13e maand", "Inkomen", "wgv.dertiendeMaand"),
-    "compensatieUren":              ("Compensatie-uren", "Inkomen", "wgv.structureelFlexibelBudget"),
-    "totaalWgvInkomen":             ("Totaal WGV inkomen", "Inkomen", "wgv.totaalWgvInkomen"),
-    "structureelFlexibelBudget":    ("Structureel flexibel budget", "Inkomen", "wgv.structureelFlexibelBudget"),
-    "variabelBrutoJaarinkomen":     ("Variabel bruto jaarinkomen", "Inkomen", "wgv.variabelBrutoJaarinkomen"),
-    "vastToeslagOpHetInkomen":      ("Vaste toeslag", "Inkomen", "wgv.vastToeslagOpHetInkomen"),
-    "vebAfgelopen12Maanden":        ("VEB afgelopen 12 mnd", "Inkomen", "wgv.vebAfgelopen12Maanden"),
+    "brutoJaarsalaris":             ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris", "currency"),
+    "brutoSalaris":                 ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris", "currency"),
+    "vakantiegeld":                 ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag", "currency"),
+    "vakantiegeldBedrag":           ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag", "currency"),
+    "vakantiegeldPercentage":       ("Vakantiegeld %", "Inkomen", "wgv.vakantiegeldPercentage", "percent"),
+    "eindejaarsuitkering":          ("Eindejaarsuitkering", "Inkomen", "wgv.eindejaarsuitkering", "currency"),
+    "onregelmatigheidstoeslag":     ("Onregelmatigheidstoeslag", "Inkomen", "wgv.onregelmatigheidstoeslag", "currency"),
+    "overwerk":                     ("Overwerk", "Inkomen", "wgv.overwerk", "currency"),
+    "provisie":                     ("Provisie", "Inkomen", "wgv.provisie", "currency"),
+    "dertiendeMaand":               ("13e maand", "Inkomen", "wgv.dertiendeMaand", "currency"),
+    "compensatieUren":              ("Compensatie-uren", "Inkomen", "wgv.structureelFlexibelBudget", "currency"),
+    "totaalWgvInkomen":             ("Totaal WGV inkomen", "Inkomen", "wgv.totaalWgvInkomen", "currency"),
+    "structureelFlexibelBudget":    ("Structureel flexibel budget", "Inkomen", "wgv.structureelFlexibelBudget", "currency"),
+    "variabelBrutoJaarinkomen":     ("Variabel bruto jaarinkomen", "Inkomen", "wgv.variabelBrutoJaarinkomen", "currency"),
+    "vastToeslagOpHetInkomen":      ("Vaste toeslag", "Inkomen", "wgv.vastToeslagOpHetInkomen", "currency"),
+    "vebAfgelopen12Maanden":        ("VEB afgelopen 12 mnd", "Inkomen", "wgv.vebAfgelopen12Maanden", "currency"),
 
     # --- Inkomen (IBL) ---
-    "gemiddeldJaarToetsinkomen":    ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
-    "toetsinkomen":                 ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
-    "iblToetsinkomen":              ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
+    "gemiddeldJaarToetsinkomen":    ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
+    "toetsinkomen":                 ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
+    "iblToetsinkomen":              ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen", "currency"),
 
     # --- Pensioenbijdrage ---
-    "maandelijksePensioenbijdrage": ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage"),
-    "pensioenbijdrage":             ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage"),
-    "pensioenbijdragePercentage":   ("Pensioenbijdrage %", "Inkomen", "loondienst.pensioenbijdragePercentage"),
+    "maandelijksePensioenbijdrage": ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage", "currency"),
+    "pensioenbijdrage":             ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage", "currency"),
+    "pensioenbijdragePercentage":   ("Pensioenbijdrage %", "Inkomen", "loondienst.pensioenbijdragePercentage", "percent"),
 
     # --- Onderpand / Woning ---
-    "koopprijs":            ("Koopsom", "Onderpand", "financiering.aankoopsomWoning"),
-    "aankoopsom":           ("Koopsom", "Onderpand", "financiering.aankoopsomWoning"),
-    "marktwaarde":          ("Marktwaarde", "Onderpand", "onderpand.marktwaarde"),
-    "wozWaarde":            ("WOZ-waarde", "Onderpand", "onderpand.wozWaarde"),
-    "energielabel":         ("Energielabel", "Onderpand", "onderpand.energielabel"),
-    "bouwjaar":             ("Bouwjaar", "Onderpand", "onderpand.bouwjaar"),
-    "woonoppervlakte":      ("Woonoppervlakte (m²)", "Onderpand", "onderpand.woonoppervlakte"),
-    "leveringsdatum":       ("Leveringsdatum", "Onderpand", "onderpand.leveringsdatum"),
-    "jaarlijkseErfpacht":   ("Erfpachtcanon (jaar)", "Onderpand", "onderpand.jaarlijkseErfpacht"),
-    "erfpacht":             ("Erfpacht", "Onderpand", "onderpand.erfpacht"),
-    "taxatiedatum":         ("Taxatiedatum", "Onderpand", "onderpand.taxatiedatum"),
-    "waardeNaVerbouwing":   ("Waarde na verbouwing", "Onderpand", "onderpand.marktwaardeNaVerbouwing"),
-    "totaalVerbouwingskosten": ("Verbouwingskosten", "Onderpand", "financiering.verbouwing"),
-    "vraagprijs":           ("Vraagprijs", "Onderpand", "onderpand.vraagprijs"),
+    "koopprijs":            ("Koopsom", "Onderpand", "financiering.aankoopsomWoning", "currency"),
+    "aankoopsom":           ("Koopsom", "Onderpand", "financiering.aankoopsomWoning", "currency"),
+    "marktwaarde":          ("Marktwaarde", "Onderpand", "onderpand.marktwaarde", "currency"),
+    "wozWaarde":            ("WOZ-waarde", "Onderpand", "onderpand.wozWaarde", "currency"),
+    "energielabel":         ("Energielabel", "Onderpand", "onderpand.energielabel", "text"),
+    "bouwjaar":             ("Bouwjaar", "Onderpand", "onderpand.bouwjaar", "number"),
+    "woonoppervlakte":      ("Woonoppervlakte (m²)", "Onderpand", "onderpand.woonoppervlakte", "number"),
+    "leveringsdatum":       ("Leveringsdatum", "Onderpand", "onderpand.leveringsdatum", "date"),
+    "jaarlijkseErfpacht":   ("Erfpachtcanon (jaar)", "Onderpand", "onderpand.jaarlijkseErfpacht", "currency"),
+    "erfpacht":             ("Erfpacht", "Onderpand", "onderpand.erfpacht", "boolean"),
+    "taxatiedatum":         ("Taxatiedatum", "Onderpand", "onderpand.taxatiedatum", "date"),
+    "waardeNaVerbouwing":   ("Waarde na verbouwing", "Onderpand", "onderpand.marktwaardeNaVerbouwing", "currency"),
+    "totaalVerbouwingskosten": ("Verbouwingskosten", "Onderpand", "financiering.verbouwing", "currency"),
+    "vraagprijs":           ("Vraagprijs", "Onderpand", "onderpand.vraagprijs", "currency"),
 
     # --- Pensioen (UPO) ---
-    "ouderdomspensioenTotaalExclAow":  ("Ouderdomspensioen (excl AOW)", "Pensioen", "pensioen.ouderdomspensioen"),
-    "nabestaandenpensioenPartner":     ("Nabestaandenpensioen partner", "Pensioen", "pensioen.partnerpensioen"),
-    "nabestaandenpensioenKinderen":    ("Wezenpensioen", "Pensioen", "pensioen.wezenpensioen"),
+    "ouderdomspensioenTotaalExclAow":  ("Ouderdomspensioen (excl AOW)", "Pensioen", "pensioen.ouderdomspensioen", "currency"),
+    "nabestaandenpensioenPartner":     ("Nabestaandenpensioen partner", "Pensioen", "pensioen.partnerpensioen", "currency"),
+    "nabestaandenpensioenKinderen":    ("Wezenpensioen", "Pensioen", "pensioen.wezenpensioen", "currency"),
 
     # --- Hypotheek (bestaand) ---
-    "geldverstrekker":      ("Geldverstrekker", "Hypotheek", "hypotheek.geldverstrekker"),
-    "restschuld":           ("Restschuld", "Hypotheek", "hypotheek.restschuld"),
-    "oorspronkelijkBedrag": ("Oorspronkelijk bedrag", "Hypotheek", "hypotheek.oorspronkelijkBedrag"),
-    "maandlast":            ("Maandlast", "Hypotheek", "hypotheek.maandlast"),
-    "einddatumRentevast":   ("Einddatum rentevast", "Hypotheek", "hypotheek.einddatumRentevast"),
-    "rentePercentage":      ("Rente %", "Hypotheek", "hypotheek.rentePercentage"),
+    "geldverstrekker":      ("Geldverstrekker", "Hypotheek", "hypotheek.geldverstrekker", "text"),
+    "restschuld":           ("Restschuld", "Hypotheek", "hypotheek.restschuld", "currency"),
+    "oorspronkelijkBedrag": ("Oorspronkelijk bedrag", "Hypotheek", "hypotheek.oorspronkelijkBedrag", "currency"),
+    "maandlast":            ("Maandlast", "Hypotheek", "hypotheek.maandlast", "currency"),
+    "einddatumRentevast":   ("Einddatum rentevast", "Hypotheek", "hypotheek.einddatumRentevast", "date"),
+    "rentePercentage":      ("Rente %", "Hypotheek", "hypotheek.rentePercentage", "percent"),
 
     # --- Bankgegevens ---
-    "iban":                 ("IBAN", "Bankgegevens", "vermogen.iban"),
-    "rekeningnummer":       ("IBAN", "Bankgegevens", "vermogen.iban"),
+    "iban":                 ("IBAN", "Bankgegevens", "vermogen.iban", "text"),
+    "rekeningnummer":       ("IBAN", "Bankgegevens", "vermogen.iban", "text"),
 
     # --- Echtscheiding ---
-    "partneralimentatieBedrag":  ("Partneralimentatie", "Echtscheiding", "verplichtingen.partneralimentatie"),
-    "kinderalimentatieBedrag":   ("Kinderalimentatie", "Echtscheiding", "verplichtingen.kinderalimentatie"),
-    "datumScheiding":            ("Datum scheiding", "Echtscheiding", "persoon.datumEchtscheiding"),
+    "partneralimentatieBedrag":  ("Partneralimentatie", "Echtscheiding", "verplichtingen.partneralimentatie", "currency"),
+    "kinderalimentatieBedrag":   ("Kinderalimentatie", "Echtscheiding", "verplichtingen.kinderalimentatie", "currency"),
+    "datumScheiding":            ("Datum scheiding", "Echtscheiding", "persoon.datumEchtscheiding", "date"),
 }
 
 # Aliases: Nederlandse veldnamen (lowercase) → camelCase key in IMPORTABLE_FIELDS
@@ -216,8 +221,8 @@ _DUTCH_ALIASES: dict[str, str | None] = {
 }
 
 
-def _resolve_field(name: str) -> tuple[str, str, str] | None:
-    """Resolve veldnaam naar (label, category, target) of None als niet importeerbaar."""
+def _resolve_field(name: str) -> tuple[str, str, str, str] | None:
+    """Resolve veldnaam naar (label, category, target, value_type) of None als niet importeerbaar."""
     # Directe match (camelCase)
     if name in IMPORTABLE_FIELDS:
         return IMPORTABLE_FIELDS[name]
@@ -341,7 +346,7 @@ async def get_available_imports(
             if mapping is None:
                 continue
 
-            label, category, target = mapping
+            label, category, target, value_type = mapping
 
             # Dedup: nieuwste wint, per (persoon, target)
             dedup_key = f"{persoon}.{target}"
@@ -367,6 +372,7 @@ async def get_available_imports(
                 "sectie": sectie,
                 "persoon": persoon,
                 "target": target,
+                "value_type": value_type,
                 "waarde_extractie": waarde,
                 "waarde_huidig": waarde_huidig,
                 "status": status,
@@ -374,15 +380,19 @@ async def get_available_imports(
                 "bron_datum": created,
             })
 
-    # Sorteer: categorie → persoon → label
+    # Sorteer in volgorde van invullen in de aanvraag tool:
+    # Klant → Adres → Legitimatie → Werkgever → Inkomen → Onderpand →
+    # Hypotheek → Pensioen → Bankgegevens → Echtscheiding
     category_order = [
-        "Persoonsgegevens", "Legitimatie", "Werkgever", "Inkomen",
-        "Onderpand", "Pensioen", "Hypotheek", "Bankgegevens", "Echtscheiding",
+        "Persoonsgegevens", "Adres", "Legitimatie", "Werkgever", "Inkomen",
+        "Onderpand", "Hypotheek", "Pensioen", "Bankgegevens", "Echtscheiding",
     ]
+    persoon_order = {"aanvrager": 0, "partner": 1, "gezamenlijk": 2}
 
     def sort_key(item):
         cat_idx = category_order.index(item["categorie"]) if item["categorie"] in category_order else 99
-        return (cat_idx, item["persoon"], item["label"])
+        pers_idx = persoon_order.get(item["persoon"], 9)
+        return (pers_idx, cat_idx, item["label"])
 
     imports.sort(key=sort_key)
 
