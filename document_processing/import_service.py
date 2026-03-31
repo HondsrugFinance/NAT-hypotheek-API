@@ -4,6 +4,9 @@ Drie functies:
 1. available_imports() — wat is er beschikbaar vs wat is er al ingevuld
 2. import_fields() — importeer geselecteerde velden naar aanvraag
 3. compare_field() — vergelijk een enkel veld
+
+Alleen velden die daadwerkelijk in een hypotheekaanvraag ingevuld kunnen worden
+zijn importeerbaar. De rest blijft in de extractie-verzamelbak.
 """
 
 import logging
@@ -19,6 +22,219 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 
+# ---------------------------------------------------------------------------
+# Veld-mapping: alleen velden relevant voor een hypotheekaanvraag
+# key = veldnaam zoals Claude het extraheert (camelCase)
+# value = (label_NL, display_categorie, target_path)
+#
+# target_path notatie:
+#   persoon.X        → {persoon}.persoon.X
+#   identiteit.X     → {persoon}.identiteit.X
+#   werkgever.X      → inkomen{Persoon}[0].loondienst.werkgever.X
+#   dienstverband.X  → inkomen{Persoon}[0].loondienst.dienstverband.X
+#   wgv.X            → inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.X
+#   loondienst.X     → inkomen{Persoon}[0].loondienst.X
+#   onderpand.X      → onderpand.X
+#   financiering.X   → financieringsopzet.X
+#   pensioen.X       → pensioen specifiek (frontend routing)
+#   hypotheek.X      → hypotheek specifiek (frontend routing)
+#   vermogen.X       → vermogenSectie specifiek
+#   verplichtingen.X → verplichtingen specifiek
+# ---------------------------------------------------------------------------
+IMPORTABLE_FIELDS: dict[str, tuple[str, str, str]] = {
+    # --- Persoonsgegevens ---
+    "achternaam":       ("Achternaam", "Persoonsgegevens", "persoon.achternaam"),
+    "voornamen":        ("Voornamen", "Persoonsgegevens", "persoon.voornamen"),
+    "voorletters":      ("Voorletters", "Persoonsgegevens", "persoon.voorletters"),
+    "roepnaam":         ("Roepnaam", "Persoonsgegevens", "persoon.roepnaam"),
+    "geboortedatum":    ("Geboortedatum", "Persoonsgegevens", "persoon.geboortedatum"),
+    "geboorteplaats":   ("Geboorteplaats", "Persoonsgegevens", "persoon.geboorteplaats"),
+    "geboorteland":     ("Geboorteland", "Persoonsgegevens", "persoon.geboorteland"),
+    "nationaliteit":    ("Nationaliteit", "Persoonsgegevens", "persoon.nationaliteit"),
+    "geslacht":         ("Geslacht", "Persoonsgegevens", "persoon.geslacht"),
+    "bsn":              ("BSN", "Persoonsgegevens", "persoon.bsn"),
+
+    # --- Legitimatie ---
+    "documentnummer":       ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer"),
+    "legitimatienummer":    ("Documentnummer", "Legitimatie", "identiteit.legitimatienummer"),
+    "geldigTot":            ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
+    "documentGeldigTot":    ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
+    "verloopdatum":         ("Geldig tot", "Legitimatie", "identiteit.geldigTot"),
+    "afgifteplaats":        ("Afgifteplaats", "Legitimatie", "identiteit.afgifteplaats"),
+    "afgiftedatum":         ("Afgiftedatum", "Legitimatie", "identiteit.afgiftedatum"),
+
+    # --- Werkgever ---
+    "werkgeverNaam":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever"),
+    "naamWerkgever":        ("Werkgever", "Werkgever", "werkgever.naamWerkgever"),
+    "functie":              ("Functie", "Werkgever", "dienstverband.functie"),
+    "inDienstSinds":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds"),
+    "datumInDienst":        ("In dienst sinds", "Werkgever", "dienstverband.inDienstSinds"),
+    "kvkNummer":            ("KvK-nummer", "Werkgever", "werkgever.kvkNummer"),
+    "adresWerkgever":       ("Adres werkgever", "Werkgever", "werkgever.adresWerkgever"),
+    "adresWerknemer":       ("Adres werknemer", "Persoonsgegevens", "persoon.adres"),
+    "vestigingsplaats":     ("Vestigingsplaats", "Werkgever", "werkgever.vestigingsplaats"),
+    "dienstverbandType":    ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband"),
+    "soortDienstverband":   ("Soort dienstverband", "Werkgever", "dienstverband.soortDienstverband"),
+    "proeftijd":            ("Proeftijd", "Werkgever", "dienstverband.proeftijd"),
+    "loonbeslag":           ("Loonbeslag", "Werkgever", "dienstverband.loonbeslag"),
+
+    # --- Inkomen (WGV) ---
+    "brutoJaarsalaris":             ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris"),
+    "brutoSalaris":                 ("Bruto jaarsalaris", "Inkomen", "wgv.brutoSalaris"),
+    "vakantiegeld":                 ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag"),
+    "vakantiegeldBedrag":           ("Vakantiegeld", "Inkomen", "wgv.vakantiegeldBedrag"),
+    "vakantiegeldPercentage":       ("Vakantiegeld %", "Inkomen", "wgv.vakantiegeldPercentage"),
+    "eindejaarsuitkering":          ("Eindejaarsuitkering", "Inkomen", "wgv.eindejaarsuitkering"),
+    "onregelmatigheidstoeslag":     ("Onregelmatigheidstoeslag", "Inkomen", "wgv.onregelmatigheidstoeslag"),
+    "overwerk":                     ("Overwerk", "Inkomen", "wgv.overwerk"),
+    "provisie":                     ("Provisie", "Inkomen", "wgv.provisie"),
+    "dertiendeMaand":               ("13e maand", "Inkomen", "wgv.dertiendeMaand"),
+    "compensatieUren":              ("Compensatie-uren", "Inkomen", "wgv.structureelFlexibelBudget"),
+    "totaalWgvInkomen":             ("Totaal WGV inkomen", "Inkomen", "wgv.totaalWgvInkomen"),
+    "structureelFlexibelBudget":    ("Structureel flexibel budget", "Inkomen", "wgv.structureelFlexibelBudget"),
+    "variabelBrutoJaarinkomen":     ("Variabel bruto jaarinkomen", "Inkomen", "wgv.variabelBrutoJaarinkomen"),
+    "vastToeslagOpHetInkomen":      ("Vaste toeslag", "Inkomen", "wgv.vastToeslagOpHetInkomen"),
+    "vebAfgelopen12Maanden":        ("VEB afgelopen 12 mnd", "Inkomen", "wgv.vebAfgelopen12Maanden"),
+
+    # --- Inkomen (IBL) ---
+    "gemiddeldJaarToetsinkomen":    ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
+    "toetsinkomen":                 ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
+    "iblToetsinkomen":              ("IBL toetsinkomen", "Inkomen", "loondienst.gemiddeldJaarToetsinkomen"),
+
+    # --- Pensioenbijdrage ---
+    "maandelijksePensioenbijdrage": ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage"),
+    "pensioenbijdrage":             ("Pensioenbijdrage (mnd)", "Inkomen", "loondienst.maandelijksePensioenbijdrage"),
+    "pensioenbijdragePercentage":   ("Pensioenbijdrage %", "Inkomen", "loondienst.pensioenbijdragePercentage"),
+
+    # --- Onderpand / Woning ---
+    "koopprijs":            ("Koopsom", "Onderpand", "financiering.aankoopsomWoning"),
+    "aankoopsom":           ("Koopsom", "Onderpand", "financiering.aankoopsomWoning"),
+    "marktwaarde":          ("Marktwaarde", "Onderpand", "onderpand.marktwaarde"),
+    "wozWaarde":            ("WOZ-waarde", "Onderpand", "onderpand.wozWaarde"),
+    "energielabel":         ("Energielabel", "Onderpand", "onderpand.energielabel"),
+    "bouwjaar":             ("Bouwjaar", "Onderpand", "onderpand.bouwjaar"),
+    "woonoppervlakte":      ("Woonoppervlakte (m²)", "Onderpand", "onderpand.woonoppervlakte"),
+    "leveringsdatum":       ("Leveringsdatum", "Onderpand", "onderpand.leveringsdatum"),
+    "jaarlijkseErfpacht":   ("Erfpachtcanon (jaar)", "Onderpand", "onderpand.jaarlijkseErfpacht"),
+    "erfpacht":             ("Erfpacht", "Onderpand", "onderpand.erfpacht"),
+    "taxatiedatum":         ("Taxatiedatum", "Onderpand", "onderpand.taxatiedatum"),
+    "waardeNaVerbouwing":   ("Waarde na verbouwing", "Onderpand", "onderpand.marktwaardeNaVerbouwing"),
+    "totaalVerbouwingskosten": ("Verbouwingskosten", "Onderpand", "financiering.verbouwing"),
+    "vraagprijs":           ("Vraagprijs", "Onderpand", "onderpand.vraagprijs"),
+
+    # --- Pensioen (UPO) ---
+    "ouderdomspensioenTotaalExclAow":  ("Ouderdomspensioen (excl AOW)", "Pensioen", "pensioen.ouderdomspensioen"),
+    "nabestaandenpensioenPartner":     ("Nabestaandenpensioen partner", "Pensioen", "pensioen.partnerpensioen"),
+    "nabestaandenpensioenKinderen":    ("Wezenpensioen", "Pensioen", "pensioen.wezenpensioen"),
+
+    # --- Hypotheek (bestaand) ---
+    "geldverstrekker":      ("Geldverstrekker", "Hypotheek", "hypotheek.geldverstrekker"),
+    "restschuld":           ("Restschuld", "Hypotheek", "hypotheek.restschuld"),
+    "oorspronkelijkBedrag": ("Oorspronkelijk bedrag", "Hypotheek", "hypotheek.oorspronkelijkBedrag"),
+    "maandlast":            ("Maandlast", "Hypotheek", "hypotheek.maandlast"),
+    "einddatumRentevast":   ("Einddatum rentevast", "Hypotheek", "hypotheek.einddatumRentevast"),
+    "rentePercentage":      ("Rente %", "Hypotheek", "hypotheek.rentePercentage"),
+
+    # --- Bankgegevens ---
+    "iban":                 ("IBAN", "Bankgegevens", "vermogen.iban"),
+    "rekeningnummer":       ("IBAN", "Bankgegevens", "vermogen.iban"),
+
+    # --- Echtscheiding ---
+    "partneralimentatieBedrag":  ("Partneralimentatie", "Echtscheiding", "verplichtingen.partneralimentatie"),
+    "kinderalimentatieBedrag":   ("Kinderalimentatie", "Echtscheiding", "verplichtingen.kinderalimentatie"),
+    "datumScheiding":            ("Datum scheiding", "Echtscheiding", "persoon.datumEchtscheiding"),
+}
+
+# Aliases: Nederlandse veldnamen (lowercase) → camelCase key in IMPORTABLE_FIELDS
+_DUTCH_ALIASES: dict[str, str | None] = {
+    "bruto jaarsalaris": "brutoJaarsalaris",
+    "bruto jaarloon": "brutoJaarsalaris",
+    "datum in dienst": "datumInDienst",
+    "type dienstverband": "dienstverbandType",
+    "werkgever": "werkgeverNaam",
+    "koopprijs": "koopprijs",
+    "leveringsdatum": "leveringsdatum",
+    "erfpacht": "erfpacht",
+    "marktwaarde": "marktwaarde",
+    "taxatiedatum": "taxatiedatum",
+    "waarde na verbouwing": "waardeNaVerbouwing",
+    "vraagprijs": "vraagprijs",
+    "woonoppervlakte": "woonoppervlakte",
+    "energielabel": "energielabel",
+    "geldverstrekker": "geldverstrekker",
+    "oorspronkelijk bedrag": "oorspronkelijkBedrag",
+    "restschuld": "restschuld",
+    "rente": "rentePercentage",
+    "maandlast": "maandlast",
+    "einddatum rentevast": "einddatumRentevast",
+    "rekeningnummer (iban)": "rekeningnummer",
+    "datum scheiding": "datumScheiding",
+    "partneralimentatie bedrag": "partneralimentatieBedrag",
+    "kinderalimentatie bedrag": "kinderalimentatieBedrag",
+    "totaal verbouwingskosten": "totaalVerbouwingskosten",
+    "achternaam": "achternaam",
+    "voorletters": "voorletters",
+    "geboortedatum": "geboortedatum",
+    "geboorteplaats": "geboorteplaats",
+    "nationaliteit": "nationaliteit",
+    "documentnummer": "documentnummer",
+    "verloopdatum": "verloopdatum",
+    # Niet-importeerbare velden (None = bewust overslaan)
+    "volledige naam": None,
+    "overige inkomensbestandsdelen": None,
+    "proeftijd verlopen": None,
+    "periode": None,
+    "bijzondere beloningen": None,
+    "pensioenfonds": None,
+    "bruto bedrag": None,
+    "ingangsdatum": None,
+    "adres": None,
+    "datum bankgarantie": None,
+    "ontbindende voorwaarden datum": None,
+    "registratiedatum": None,
+    "bank": None,
+    "saldo": None,
+    "datum": None,
+    "totaal vermogen": None,
+    "kredietverstrekker": None,
+    "type lening": None,
+    "einddatum": None,
+    "verdeling vermogen": None,
+    "datum afgifte": None,
+    "resultaat": None,
+    "toetsdatum": None,
+    "hypotheekbedrag": None,
+    "eigenaar": None,
+    "aandeel": None,
+    "kadastrale aanduiding": None,
+    "inschrijving bedrag": None,
+    "specificatie per post": None,
+    "leningnummer": None,
+    "bruto maandloon": None,
+    "loonheffing": None,
+    "jaar": None,
+}
+
+
+def _resolve_field(name: str) -> tuple[str, str, str] | None:
+    """Resolve veldnaam naar (label, category, target) of None als niet importeerbaar."""
+    # Directe match (camelCase)
+    if name in IMPORTABLE_FIELDS:
+        return IMPORTABLE_FIELDS[name]
+
+    # Nederlandse alias (lowercase)
+    lowered = name.lower().strip()
+    alias = _DUTCH_ALIASES.get(lowered)
+    if alias is not None and alias in IMPORTABLE_FIELDS:
+        return IMPORTABLE_FIELDS[alias]
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Supabase helpers
+# ---------------------------------------------------------------------------
+
 def _sb_headers(access_token: str | None = None) -> dict:
     key = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
     token = access_token or key
@@ -29,6 +245,10 @@ def _sb_headers(access_token: str | None = None) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Hoofd-functie
+# ---------------------------------------------------------------------------
+
 async def get_available_imports(
     dossier_id: str,
     aanvraag_id: str | None = None,
@@ -36,32 +256,8 @@ async def get_available_imports(
 ) -> dict:
     """Vergelijk beschikbare extracties met huidige aanvraag/berekening data.
 
-    Returns:
-        {
-            "dossier_id": "...",
-            "aanvraag_id": "...",
-            "documenten_verwerkt": 9,
-            "laatste_verwerking": "2026-03-27T...",
-            "imports": [
-                {
-                    "veld": "brutoJaarsalaris",
-                    "sectie": "werkgeversverklaring",
-                    "waarde_extractie": 58752,
-                    "waarde_huidig": null,
-                    "status": "nieuw",  // "nieuw", "bevestigd", "afwijkend", "niet_beschikbaar"
-                    "bron_document": "WGV - Denise Uilenberg",
-                    "confidence": 0.95,
-                    "persoon": "aanvrager",
-                },
-                ...
-            ],
-            "samenvatting": {
-                "nieuw": 23,
-                "bevestigd": 12,
-                "afwijkend": 3,
-                "totaal": 38,
-            }
-        }
+    Retourneert alleen velden die daadwerkelijk in een hypotheekaanvraag
+    ingevuld kunnen worden (gefilterd via IMPORTABLE_FIELDS mapping).
     """
     headers = _sb_headers(access_token)
 
@@ -125,9 +321,9 @@ async def get_available_imports(
         resp.raise_for_status()
         analysis = resp.json()
 
-    # Bouw import-overzicht per veld
+    # Bouw import-overzicht — alleen importeerbare velden
     imports = []
-    seen_fields = set()  # Voorkom dubbelen (nieuwste wint)
+    seen_fields: set[str] = set()  # Voorkom dubbelen (nieuwste wint)
 
     for ef in all_fields:
         sectie = ef.get("sectie", "")
@@ -140,13 +336,21 @@ async def get_available_imports(
             if waarde is None:
                 continue
 
-            field_key = f"{sectie}.{persoon}.{veld}"
-            if field_key in seen_fields:
-                continue  # Al gezien (nieuwere versie)
-            seen_fields.add(field_key)
+            # Filter: alleen importeerbare velden
+            mapping = _resolve_field(veld)
+            if mapping is None:
+                continue
+
+            label, category, target = mapping
+
+            # Dedup: nieuwste wint, per (persoon, target)
+            dedup_key = f"{persoon}.{target}"
+            if dedup_key in seen_fields:
+                continue
+            seen_fields.add(dedup_key)
 
             # Vergelijk met huidige aanvraag data
-            waarde_huidig = _find_in_aanvraag(huidige_data, veld, persoon, sectie)
+            waarde_huidig = _find_in_aanvraag(huidige_data, target, persoon)
             confidence = confidences.get(veld, 0.5)
 
             if waarde_huidig is None:
@@ -158,14 +362,29 @@ async def get_available_imports(
 
             imports.append({
                 "veld": veld,
+                "label": label,
+                "categorie": category,
                 "sectie": sectie,
                 "persoon": persoon,
+                "target": target,
                 "waarde_extractie": waarde,
                 "waarde_huidig": waarde_huidig,
                 "status": status,
                 "confidence": confidence if isinstance(confidence, (int, float)) else 0.5,
                 "bron_datum": created,
             })
+
+    # Sorteer: categorie → persoon → label
+    category_order = [
+        "Persoonsgegevens", "Legitimatie", "Werkgever", "Inkomen",
+        "Onderpand", "Pensioen", "Hypotheek", "Bankgegevens", "Echtscheiding",
+    ]
+
+    def sort_key(item):
+        cat_idx = category_order.index(item["categorie"]) if item["categorie"] in category_order else 99
+        return (cat_idx, item["persoon"], item["label"])
+
+    imports.sort(key=sort_key)
 
     # Samenvatting
     nieuw = sum(1 for i in imports if i["status"] == "nieuw")
@@ -193,49 +412,85 @@ async def get_available_imports(
     }
 
 
-def _find_in_aanvraag(data: dict, veld: str, persoon: str, sectie: str):
-    """Zoek een veld in de aanvraag data structuur."""
+def _find_in_aanvraag(data: dict, target: str, persoon: str):
+    """Zoek een veld in de aanvraag data via target path."""
     if not data:
         return None
 
-    # Directe match
-    if veld in data:
-        return data[veld]
+    prefix, _, field = target.partition(".")
+    if not field:
+        return None
 
-    # Zoek in persoon-specifieke secties
-    if persoon == "aanvrager":
-        aanvrager = data.get("aanvrager", {})
-        for sub in [aanvrager, aanvrager.get("persoon", {}), aanvrager.get("werkgever", {}),
-                     aanvrager.get("adresContact", {})]:
-            if isinstance(sub, dict) and veld in sub:
-                return sub[veld]
+    # --- persoon.X → {persoon}.persoon.X ---
+    if prefix == "persoon":
+        person_data = data.get(persoon if persoon != "gezamenlijk" else "aanvrager", {})
+        sub = person_data.get("persoon", {})
+        if isinstance(sub, dict) and field in sub:
+            return sub[field]
 
-        # Zoek in inkomenAanvrager
-        for item in data.get("inkomenAanvrager", []):
+    # --- identiteit.X → {persoon}.identiteit.X ---
+    elif prefix == "identiteit":
+        person_data = data.get(persoon if persoon != "gezamenlijk" else "aanvrager", {})
+        sub = person_data.get("identiteit", {})
+        if isinstance(sub, dict) and field in sub:
+            return sub[field]
+
+    # --- werkgever.X → inkomen{Persoon}[0].loondienst.werkgever.X ---
+    elif prefix == "werkgever":
+        inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
+        for item in data.get(inkomen_key, []):
             if isinstance(item, dict):
-                if veld in item:
-                    return item[veld]
-                for sub_key in ["loondienst", "werkgeversverklaringCalc", "ondernemingData"]:
-                    sub = item.get(sub_key, {})
-                    if isinstance(sub, dict) and veld in sub:
-                        return sub[veld]
+                werkgever = item.get("loondienst", {}).get("werkgever", {})
+                if isinstance(werkgever, dict) and field in werkgever:
+                    return werkgever[field]
 
-    elif persoon == "partner":
-        partner = data.get("partner", {})
-        for sub in [partner, partner.get("persoon", {}), partner.get("werkgever", {}),
-                     partner.get("adresContact", {})]:
-            if isinstance(sub, dict) and veld in sub:
-                return sub[veld]
+    # --- dienstverband.X → inkomen{Persoon}[0].loondienst.dienstverband.X ---
+    elif prefix == "dienstverband":
+        inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
+        for item in data.get(inkomen_key, []):
+            if isinstance(item, dict):
+                dv = item.get("loondienst", {}).get("dienstverband", {})
+                if isinstance(dv, dict) and field in dv:
+                    return dv[field]
 
-    # Zoek in onderpand
-    onderpand = data.get("onderpand", {})
-    if isinstance(onderpand, dict) and veld in onderpand:
-        return onderpand[veld]
+    # --- wgv.X → inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.X ---
+    elif prefix == "wgv":
+        inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
+        for item in data.get(inkomen_key, []):
+            if isinstance(item, dict):
+                wgv = item.get("loondienst", {}).get("werkgeversverklaringCalc", {})
+                if isinstance(wgv, dict) and field in wgv:
+                    return wgv[field]
 
-    # Zoek in financieringsopzet
-    fin = data.get("financieringsopzet", {})
-    if isinstance(fin, dict) and veld in fin:
-        return fin[veld]
+    # --- loondienst.X → inkomen{Persoon}[0].loondienst.X ---
+    elif prefix == "loondienst":
+        inkomen_key = f"inkomen{persoon.capitalize()}" if persoon != "gezamenlijk" else "inkomenAanvrager"
+        for item in data.get(inkomen_key, []):
+            if isinstance(item, dict):
+                ld = item.get("loondienst", {})
+                if isinstance(ld, dict) and field in ld:
+                    return ld[field]
+
+    # --- onderpand.X ---
+    elif prefix == "onderpand":
+        onderpand = data.get("onderpand", {})
+        if isinstance(onderpand, dict) and field in onderpand:
+            return onderpand[field]
+
+    # --- financiering.X → financieringsopzet.X ---
+    elif prefix == "financiering":
+        fin = data.get("financieringsopzet", {})
+        if isinstance(fin, dict) and field in fin:
+            return fin[field]
+
+    # --- vermogen.X ---
+    elif prefix == "vermogen":
+        vs = data.get("vermogenSectie", {})
+        if isinstance(vs, dict):
+            if field == "iban":
+                ibans = vs.get("iban", {})
+                iban_key = f"iban{persoon.capitalize()}" if persoon != "gezamenlijk" else "ibanAanvrager"
+                return ibans.get(iban_key)
 
     return None
 
