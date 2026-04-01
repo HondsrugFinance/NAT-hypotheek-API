@@ -86,6 +86,7 @@ def generate_sections(
     dossier: dict,
     aanvraag: dict,
     options: AdviesrapportOptions,
+    berekening: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """Normaliseer data, bereken alles, bouw secties.
 
@@ -93,12 +94,13 @@ def generate_sections(
         dossier: Volledige rij uit Supabase `dossiers` tabel
         aanvraag: Volledige rij uit Supabase `aanvragen` tabel
         options: Adviesrapport opties (uit Lovable dialog)
+        berekening: Optioneel — rij uit `berekeningen` tabel (nieuwe structuur)
 
     Returns:
         (sections, context) — context bevat tussenresultaten voor preview/PDF.
     """
     # --- Stap 1-2: Normaliseer data ---
-    data = extract_dossier_data(dossier, aanvraag)
+    data = extract_dossier_data(dossier, aanvraag, berekening=berekening)
     logger.info("Data genormaliseerd: hypotheek=%.0f, leningdelen=%d",
                 data.hypotheek_bedrag, len(data.leningdelen))
 
@@ -431,6 +433,7 @@ def generate_report(
     aanvraag: dict,
     options: AdviesrapportOptions,
     text_overrides: dict | None = None,
+    berekening: dict | None = None,
 ) -> bytes:
     """Genereer adviesrapport PDF vanuit Supabase data.
 
@@ -439,11 +442,12 @@ def generate_report(
         aanvraag: Volledige rij uit Supabase `aanvragen` tabel
         options: Adviesrapport opties (uit Lovable dialog)
         text_overrides: Optioneel dict met aangepaste teksten per sectie-id
+        berekening: Optioneel — rij uit `berekeningen` tabel
 
     Returns:
         PDF bytes
     """
-    sections, ctx = generate_sections(dossier, aanvraag, options)
+    sections, ctx = generate_sections(dossier, aanvraag, options, berekening=berekening)
 
     if text_overrides:
         _apply_text_overrides(sections, text_overrides)

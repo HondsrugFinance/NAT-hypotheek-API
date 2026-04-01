@@ -112,3 +112,49 @@ async def lees_aanvraag(aanvraag_id: str, access_token: str | None = None) -> di
 
     logger.info("Aanvraag geladen: %s", aanvraag_id)
     return rows[0]
+
+
+async def lees_berekeningen(dossier_id: str, access_token: str | None = None) -> list[dict]:
+    """Lees alle berekeningen van een dossier (tabel: berekeningen).
+
+    Returns:
+        Lijst van berekening-dicts, gesorteerd op aanmaak_datum.
+    """
+    url = f"{SUPABASE_URL}/rest/v1/berekeningen"
+    params = {
+        "select": "*",
+        "dossier_id": f"eq.{dossier_id}",
+        "order": "aanmaak_datum.asc",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url, headers=_headers(access_token), params=params)
+        resp.raise_for_status()
+
+    rows = resp.json()
+    logger.info("Berekeningen geladen voor dossier %s: %d stuks", dossier_id, len(rows))
+    return rows
+
+
+async def lees_berekening(berekening_id: str, access_token: str | None = None) -> dict:
+    """Lees een enkele berekening (tabel: berekeningen).
+
+    Raises:
+        ValueError: Als de berekening niet gevonden wordt.
+    """
+    url = f"{SUPABASE_URL}/rest/v1/berekeningen"
+    params = {
+        "select": "*",
+        "id": f"eq.{berekening_id}",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url, headers=_headers(access_token), params=params)
+        resp.raise_for_status()
+
+    rows = resp.json()
+    if not rows:
+        raise ValueError(f"Berekening niet gevonden: {berekening_id}")
+
+    logger.info("Berekening geladen: %s", berekening_id)
+    return rows[0]

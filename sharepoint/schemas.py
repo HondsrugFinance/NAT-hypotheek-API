@@ -27,3 +27,8 @@ class FolderItem(BaseModel):
 class KlantmapInhoudResponse(BaseModel):
     sharepoint_url: str | None
     items: list[FolderItem]
+
+
+class KlantmapRenameRequest(BaseModel):
+    dossier_id: str
+    nieuwe_naam: str  # Naamdeel na dossiernummer, bijv. "Hall, Peter van en Hall-van der Lee, Arabella"

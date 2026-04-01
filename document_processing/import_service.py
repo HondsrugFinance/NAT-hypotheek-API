@@ -368,8 +368,11 @@ async def get_available_imports(
     # Haal huidige data op (aanvraag of berekening)
     huidige_data = {}
     if aanvraag_id:
-        table = "aanvragen" if context == "aanvraag" else "dossiers"
-        data_field = "data" if context == "aanvraag" else "invoer"
+        if context == "aanvraag":
+            table, data_field = "aanvragen", "data"
+        else:
+            # Nieuw: probeer eerst berekeningen tabel, fallback naar dossiers
+            table, data_field = "berekeningen", "invoer"
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{SUPABASE_URL}/rest/v1/{table}",
@@ -751,7 +754,8 @@ async def apply_imports(
     if context == "aanvraag":
         table, data_field = "aanvragen", "data"
     else:
-        table, data_field = "dossiers", "invoer"
+        # Nieuw: schrijf naar berekeningen tabel (niet meer naar dossiers.invoer)
+        table, data_field = "berekeningen", "invoer"
 
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

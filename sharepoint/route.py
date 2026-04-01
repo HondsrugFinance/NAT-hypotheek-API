@@ -12,6 +12,7 @@ from sharepoint import client as sp_client
 from sharepoint.schemas import (
     FolderItem,
     KlantmapInhoudResponse,
+    KlantmapRenameRequest,
     KlantmapRequest,
     KlantmapResponse,
 )
@@ -253,6 +254,82 @@ async def verwijder_bestand(item_id: str, request: Request):
         raise HTTPException(e.status_code, f"Verwijderen mislukt: {e.message}")
 
     return {"status": "ok", "deleted": item_id}
+
+
+@router.patch("/klantmap/rename")
+async def hernoem_klantmap(body: KlantmapRenameRequest, request: Request):
+    """Hernoem de SharePoint klantmap (bijv. bij partner toevoegen/verwijderen).
+
+    Het dossiernummer-prefix blijft behouden. Alleen het naamdeel wijzigt.
+    Voorbeeld: "2026-0089 Hall, Peter van" → "2026-0089 Hall, Peter van en Hall-van der Lee, Arabella"
+
+    Werkt de sharepoint_url bij in Supabase.
+    """
+    if not sp_client.is_configured():
+        raise HTTPException(503, "SharePoint niet geconfigureerd")
+
+    access_token = _extract_access_token(request)
+
+    # 1. Haal dossier op voor dossiernummer + huidige sharepoint_url
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(access_token),
+                params={"select": "dossiernummer,sharepoint_url", "id": f"eq.{body.dossier_id}"},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as e:
+        raise HTTPException(500, f"Dossier ophalen mislukt: {e}")
+
+    if not rows:
+        raise HTTPException(404, f"Dossier niet gevonden: {body.dossier_id}")
+
+    dossier = rows[0]
+    dossiernummer = dossier.get("dossiernummer")
+    current_url = dossier.get("sharepoint_url")
+
+    if not dossiernummer:
+        raise HTTPException(400, "Dossier heeft geen dossiernummer")
+    if not current_url or current_url == "pending":
+        raise HTTPException(400, "Dossier heeft geen SharePoint map")
+
+    # 2. Bepaal huidige mapnaam uit URL en bouw nieuwe naam
+    import re
+    clean_naam = re.sub(r'["*:<>?/\\|]', '', body.nieuwe_naam).rstrip('. ')
+    nieuwe_mapnaam = f"{dossiernummer} {clean_naam}"
+
+    # Zoek het huidige pad: haal de mapnaam uit de URL
+    # SharePoint URL format: https://....sharepoint.com/sites/.../1.Klanten/2026-0089 Hall, Peter van
+    from sharepoint.client import SHAREPOINT_KLANTEN_ROOT
+    huidige_mapnaam = current_url.rstrip("/").split("/")[-1]
+    huidig_pad = f"{SHAREPOINT_KLANTEN_ROOT}/{huidige_mapnaam}"
+
+    if huidige_mapnaam == nieuwe_mapnaam:
+        return {"status": "unchanged", "mapnaam": nieuwe_mapnaam, "sharepoint_url": current_url}
+
+    # 3. Hernoem op SharePoint
+    try:
+        result = await sp_client.rename_folder(huidig_pad, nieuwe_mapnaam)
+    except GraphAPIError as e:
+        raise HTTPException(e.status_code, f"Hernoemen mislukt: {e.message}")
+
+    new_url = result.get("webUrl", current_url)
+
+    # 4. Update sharepoint_url in Supabase (voor dit dossier + alle dossiers met dezelfde oude URL)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(access_token),
+                params={"sharepoint_url": f"eq.{current_url}"},
+                json={"sharepoint_url": new_url},
+            )
+    except Exception as e:
+        logger.warning("SharePoint URL bijwerken na rename mislukt: %s", e)
+
+    return {"status": "ok", "mapnaam": nieuwe_mapnaam, "sharepoint_url": new_url}
 
 
 # =============================================================================

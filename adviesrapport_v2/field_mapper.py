@@ -2270,20 +2270,26 @@ def _extract_financiering_from_dossier(invoer: dict) -> NormalizedFinanciering:
 def extract_dossier_data(
     dossier: dict,
     aanvraag: dict,
+    berekening: dict | None = None,
 ) -> NormalizedDossierData:
     """Hoofdfunctie: Supabase dossier + aanvraag → NormalizedDossierData.
 
     PRIMAIRE BRON: aanvraag.data (Inventarisatie + Samenstellen stappen)
-    FALLBACK: dossier.invoer (Haalbaarheid stap)
+    FALLBACK: berekening.invoer (nieuwe structuur) of dossier.invoer (legacy)
 
     Args:
         dossier: Volledige rij uit Supabase `dossiers` tabel
         aanvraag: Volledige rij uit Supabase `aanvragen` tabel
+        berekening: Optioneel — rij uit `berekeningen` tabel (nieuwe structuur).
+                    Als aanwezig, wordt berekening.invoer en berekening.scenario1
+                    gebruikt in plaats van dossier.invoer en dossier.scenario1.
 
     Returns:
         NormalizedDossierData met alle velden genormaliseerd.
     """
-    invoer = dossier.get("invoer") or dossier
+    # Berekening heeft prioriteit boven dossier voor invoer/scenario data
+    _source = berekening if berekening else dossier
+    invoer = _source.get("invoer") or dossier.get("invoer") or dossier
     aanvraag_data = {}
     if aanvraag and isinstance(aanvraag.get("data"), dict):
         aanvraag_data = aanvraag["data"]
@@ -2355,9 +2361,9 @@ def extract_dossier_data(
     if has_aanvraag:
         leningdelen, had_bestaande = _extract_leningdelen_from_aanvraag(aanvraag_data)
     if not has_aanvraag or not leningdelen:
-        # Fallback naar dossier scenario1
+        # Fallback naar berekening.scenario1 (nieuw) of dossier.scenario1 (legacy)
         had_bestaande = False
-        scenario_kolom = dossier.get("scenario1")
+        scenario_kolom = _source.get("scenario1") or dossier.get("scenario1")
         if isinstance(scenario_kolom, str):
             try:
                 import json

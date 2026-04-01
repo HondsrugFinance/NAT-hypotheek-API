@@ -122,6 +122,44 @@ async def get_folder(pad: str) -> dict:
         return resp.json()
 
 
+async def rename_folder(pad: str, nieuwe_naam: str) -> dict:
+    """Hernoem een map op SharePoint.
+
+    Args:
+        pad: Huidig relatief pad binnen de drive (bijv. "1.Klanten/2026-0089 Hall, Peter van")
+        nieuwe_naam: Nieuwe mapnaam (bijv. "2026-0089 Hall, Peter van en Hall-van der Lee, Arabella")
+
+    Returns:
+        dict met bijgewerkte folder metadata (id, name, webUrl)
+
+    Raises:
+        GraphAPIError: Bij API fout of map niet gevonden
+    """
+    headers = await _graph_headers()
+    url = f"{GRAPH_BASE_URL}/drives/{SHAREPOINT_DRIVE_ID}/root:/{pad}"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            url,
+            headers=headers,
+            json={"name": nieuwe_naam},
+        )
+
+        if resp.status_code == 404:
+            raise GraphAPIError(f"Map niet gevonden: {pad}", status_code=404)
+
+        if resp.status_code not in (200,):
+            raise GraphAPIError(
+                f"Map hernoemen mislukt: {resp.status_code}",
+                status_code=resp.status_code,
+                detail=resp.text[:300],
+            )
+
+        result = resp.json()
+        logger.info("Map hernoemd: %s → %s", pad, nieuwe_naam)
+        return result
+
+
 async def list_folder(pad: str) -> list[dict]:
     """Lijst de inhoud van een map.
 
