@@ -737,8 +737,8 @@ async def apply_imports(
 
     Returns: {"imported": 5, "target_id": "...", "context": "..."}
     """
-    # Stap 1: haal beschikbare imports op
-    available = await get_available_imports(dossier_id, target_id, context, access_token)
+    # Stap 1: haal beschikbare imports op (gebruik service key, niet user token)
+    available = await get_available_imports(dossier_id, target_id, context, None)
     all_imports = available.get("imports", [])
 
     # Stap 2: filter op geselecteerde targets
