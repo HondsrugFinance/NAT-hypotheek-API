@@ -316,15 +316,28 @@ def _sb_headers(access_token: str | None = None) -> dict:
     }
 
 
-async def _fetch_data(headers: dict, table: str, field: str, row_id: str) -> dict:
-    """Haal een enkel JSONB veld op uit een tabel."""
+# ---------------------------------------------------------------------------
+# Supabase CRUD helpers — geen fallbacks, directe tabel-aanroepen
+# ---------------------------------------------------------------------------
+
+# Context → (tabel, jsonb_kolom)
+_CONTEXT_TABLE = {
+    "berekening": ("berekeningen", "invoer"),
+    "aanvraag":   ("aanvragen", "data"),
+}
+
+
+async def _read_target(headers: dict, context: str, target_id: str) -> dict:
+    """Lees de huidige data van een berekening of aanvraag."""
+    table, field = _CONTEXT_TABLE[context]
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
             f"{SUPABASE_URL}/rest/v1/{table}",
             headers=headers,
-            params={"select": field, "id": f"eq.{row_id}"},
+            params={"select": field, "id": f"eq.{target_id}"},
         )
         if resp.status_code >= 400:
+            logger.warning("Read %s/%s failed: %s", table, target_id, resp.status_code)
             return {}
         rows = resp.json()
         if rows:
@@ -332,89 +345,19 @@ async def _fetch_data(headers: dict, table: str, field: str, row_id: str) -> dic
     return {}
 
 
-async def _fetch_berekening_data(headers: dict, target_id: str) -> dict:
-    """Zoek berekening data — probeer: berekeningen.id, dossiers.id, berekeningen.dossier_id."""
-    # 1. Direct als berekening ID
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/berekeningen",
-            headers=headers,
-            params={"select": "invoer", "id": f"eq.{target_id}"},
-        )
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                return rows[0].get("invoer", {}) or {}
-
-    # 2. Als dossier ID → zoek berekening via dossier_id
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/berekeningen",
-            headers=headers,
-            params={"select": "invoer", "dossier_id": f"eq.{target_id}", "order": "laatst_gewijzigd.desc", "limit": "1"},
-        )
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                return rows[0].get("invoer", {}) or {}
-
-    # 3. Fallback: dossiers tabel (oude structuur)
-    return await _fetch_data(headers, "dossiers", "invoer", target_id)
-
-
-async def _fetch_berekening_with_location(headers: dict, target_id: str) -> tuple | None:
-    """Zoek berekening data + waar het zit (tabel, veld, row_id). Voor schrijven."""
-    # 1. Direct als berekening ID
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/berekeningen",
-            headers=headers,
-            params={"select": "id,invoer", "id": f"eq.{target_id}"},
-        )
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                return ("berekeningen", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
-
-    # 2. Als dossier ID → zoek berekening via dossier_id
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/berekeningen",
-            headers=headers,
-            params={"select": "id,invoer", "dossier_id": f"eq.{target_id}", "order": "laatst_gewijzigd.desc", "limit": "1"},
-        )
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                return ("berekeningen", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
-
-    # 3. Fallback: dossiers tabel
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/dossiers",
-            headers=headers,
-            params={"select": "id,invoer", "id": f"eq.{target_id}"},
-        )
-        if resp.status_code == 200:
-            rows = resp.json()
-            if rows:
-                return ("dossiers", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
-
-    return None
-
-
-async def _write_data(headers: dict, table: str, field: str, row_id: str, data: dict):
-    """Schrijf een JSONB veld naar een tabel."""
+async def _write_target(headers: dict, context: str, target_id: str, data: dict):
+    """Schrijf data naar een berekening of aanvraag."""
+    table, field = _CONTEXT_TABLE[context]
     patch_headers = {**headers, "Prefer": "return=minimal"}
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.patch(
             f"{SUPABASE_URL}/rest/v1/{table}",
             headers=patch_headers,
-            params={"id": f"eq.{row_id}"},
+            params={"id": f"eq.{target_id}"},
             json={field: data},
         )
         if resp.status_code >= 400:
-            logger.error("Supabase PATCH %s/%s failed: %s %s", table, row_id, resp.status_code, resp.text)
+            logger.error("Write %s/%s failed: %s %s", table, target_id, resp.status_code, resp.text)
         resp.raise_for_status()
 
 
@@ -467,13 +410,10 @@ async def get_available_imports(
         ibl_fields = resp.json()
         all_fields.extend(ibl_fields)
 
-    # Haal huidige data op (aanvraag of berekening)
+    # Haal huidige data op van het target (berekening of aanvraag)
     huidige_data = {}
     if aanvraag_id:
-        if context == "aanvraag":
-            huidige_data = await _fetch_data(headers, "aanvragen", "data", aanvraag_id)
-        else:
-            huidige_data = await _fetch_berekening_data(headers, aanvraag_id)
+        huidige_data = await _read_target(headers, context, aanvraag_id)
 
     # Haal dossier-analyse op voor samenvatting
     async with httpx.AsyncClient(timeout=10) as client:
@@ -820,16 +760,17 @@ async def apply_imports(
     selected_targets: list[str],
     access_token: str | None = None,
 ) -> dict:
-    """Importeer geselecteerde velden naar een aanvraag of berekening.
+    """Importeer geselecteerde velden naar een berekening of aanvraag.
 
-    1. Haal beschikbare imports op (met context)
-    2. Filter op selected_targets
-    3. Merge in huidige data
-    4. Sla op in Supabase
-
-    Returns: {"imported": 5, "target_id": "...", "context": "..."}
+    Args:
+        dossier_id: UUID van het dossier (bron van extracties)
+        target_id: UUID van de berekening of aanvraag (bestemming)
+        context: "berekening" of "aanvraag"
+        selected_targets: lijst van target-paden om te importeren
     """
-    # Stap 1: haal beschikbare imports op (gebruik service key, niet user token)
+    import copy
+
+    # Stap 1: haal beschikbare imports op
     available = await get_available_imports(dossier_id, target_id, context, None)
     all_imports = available.get("imports", [])
 
@@ -840,35 +781,24 @@ async def apply_imports(
     if not to_import:
         return {"imported": 0, "target_id": target_id, "context": context}
 
-    # Gebruik service key voor lezen + schrijven (RLS bypass)
+    # Stap 3: lees huidige data
     headers = _sb_headers()
+    current_data = await _read_target(headers, context, target_id)
 
-    # Stap 3+4+5: lees, merge, schrijf
-    if context == "aanvraag":
-        current_data = await _fetch_data(headers, "aanvragen", "data", target_id)
-        if not current_data and current_data != {}:
-            raise ValueError(f"Aanvraag {target_id} niet gevonden")
+    # Stap 4: merge
+    merged = copy.deepcopy(current_data) if current_data else {}
+    merge_fn = _merge_aanvraag if context == "aanvraag" else _merge_berekening
+    for item in to_import:
+        if context == "aanvraag":
+            merge_fn(merged, item["target"], item["persoon"], item["waarde_extractie"])
+        else:
+            merge_fn(merged, item["target"], item["waarde_extractie"])
 
-        import copy
-        merged = copy.deepcopy(current_data) if current_data else {}
-        for item in to_import:
-            _merge_aanvraag(merged, item["target"], item["persoon"], item["waarde_extractie"])
+    # Stap 5: schrijf terug
+    await _write_target(headers, context, target_id, merged)
 
-        await _write_data(headers, "aanvragen", "data", target_id, merged)
-    else:
-        result = await _fetch_berekening_with_location(headers, target_id)
-        if not result:
-            raise ValueError(f"Berekening {target_id} niet gevonden")
-
-        import copy
-        table, data_field, row_id, current_data = result
-        merged = copy.deepcopy(current_data)
-        for item in to_import:
-            _merge_berekening(merged, item["target"], item["waarde_extractie"])
-
-        await _write_data(headers, table, data_field, row_id, merged)
-
-    logger.info("Imported %d fields into %s %s (%s)", len(to_import), table, target_id, context)
+    table = _CONTEXT_TABLE[context][0]
+    logger.info("Imported %d fields into %s %s", len(to_import), table, target_id)
 
     return {
         "imported": len(to_import),
