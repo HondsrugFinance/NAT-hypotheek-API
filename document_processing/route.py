@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from document_processing.pipeline_v2 import process_document_v2
-from document_processing.import_service import get_available_imports, apply_imports
+from document_processing.smart_mapper import generate_smart_import, apply_smart_import
 from document_processing.schemas import ProcessRequest, ApplyImportsRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
@@ -359,7 +359,7 @@ async def available_imports(
     target_id: str = None,
     context: str = "berekening",
 ):
-    """Haal beschikbare imports op: vergelijk extracties met huidige data.
+    """Haal beschikbare imports op via Claude smart mapping.
 
     Query params:
         dossier_id: UUID van het dossier (bron: extracted_fields)
@@ -368,12 +368,11 @@ async def available_imports(
     """
     if context not in ("aanvraag", "berekening"):
         context = "berekening"
-    token = _extract_token(request)
     try:
-        result = await get_available_imports(dossier_id, target_id, context, token)
+        result = await generate_smart_import(dossier_id, target_id, context)
         return result
     except Exception as _ex:
-        logger.error("Available imports mislukt: %s", _ex)
+        logger.error("Smart import preview mislukt: %s", _ex)
         raise HTTPException(500, f"Imports ophalen mislukt: {_ex}")
 
 
@@ -382,27 +381,25 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
     """Importeer geselecteerde velden naar een aanvraag of berekening.
 
     Body:
-        target_id: ID van de aanvraag of berekening (dossier)
-        context: "aanvraag" of "berekening"
-        selected_targets: lijst van target-paden (bijv. ["klantGegevens.achternaamAanvrager", "inkomenGegevens.hoofdinkomenAanvrager"])
+        target_id: UUID van de berekening of aanvraag (bestemming)
+        context: "berekening" of "aanvraag"
+        selected_targets: lijst van veld-paden (bijv. ["aanvrager.persoon.achternaam"])
     """
     if not body or not body.selected_targets:
         raise HTTPException(400, "Geen velden geselecteerd")
     if body.context not in ("aanvraag", "berekening"):
         raise HTTPException(400, "context moet 'aanvraag' of 'berekening' zijn")
 
-    token = _extract_token(request)
     try:
-        result = await apply_imports(
+        result = await apply_smart_import(
             dossier_id=dossier_id,
             target_id=body.target_id,
             context=body.context,
-            selected_targets=body.selected_targets,
-            access_token=token,
+            selected_pads=body.selected_targets,
         )
         return result
     except ValueError as _ex:
         raise HTTPException(404, str(_ex))
     except Exception as _ex:
-        logger.error("Apply imports mislukt: %s", _ex)
+        logger.error("Smart import apply mislukt: %s", _ex)
         raise HTTPException(500, f"Importeren mislukt: {_ex}")
