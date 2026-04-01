@@ -614,7 +614,7 @@ def _find_in_berekening(data: dict, target: str, persoon: str):
       klantGegevens.achternaamAanvrager
       inkomenGegevens.hoofdinkomenAanvrager
       onderpand.marktwaarde → haalbaarheidsBerekeningen[0].onderpand.X
-      berekeningen.aankoopsomWoning → berekeningen[0].X
+      berekeningen.aankoopsomWoning → berekeningen[0].X of root (Aanpassen)
     """
     if not data:
         return None
@@ -642,10 +642,13 @@ def _find_in_berekening(data: dict, target: str, persoon: str):
                 return onderpand[field]
 
     elif prefix == "berekeningen":
-        # berekeningen[0].X
+        # Aankoop: berekeningen[0].X
         ber = data.get("berekeningen", [])
         if ber and isinstance(ber[0], dict) and field in ber[0]:
             return ber[0][field]
+        # Aanpassen: veld staat direct op root-niveau (bijv. wozWaarde)
+        if field in data:
+            return data[field]
 
     return None
 
@@ -855,16 +858,33 @@ def _merge_berekening(data: dict, target: str, value):
         hb[0].setdefault("onderpand", {})[field] = value
 
     elif prefix == "berekeningen":
-        ber = data.setdefault("berekeningen", [])
-        if not ber:
-            ber.append({})
-        ber[0][field] = value
+        # Aankoop: berekeningen[0].X
+        ber = data.get("berekeningen", [])
+        if ber:
+            ber[0][field] = value
+        else:
+            # Aanpassen: veld direct op root (bijv. wozWaarde)
+            data[field] = value
 
 
 def _uuid() -> str:
     """Genereer een UUID string."""
     import uuid
     return str(uuid.uuid4())
+
+
+# Energielabel aliassen: extractie-waarde → berekening-waarde en vice versa
+_ENERGIELABEL_ALIASES = {
+    "geen (geldig) label": "geen_label",
+    "geen_label": "geen (geldig) label",
+    "a++++": "a++++",
+    "a+++": "a+++",
+    "a++": "a++",
+    "a+": "a+",
+    "e,f,g": "e", "e, f, g": "e",
+    "c,d": "c", "c, d": "c",
+    "a,b": "a", "a, b": "a",
+}
 
 
 def _values_match(val1, val2) -> bool:
@@ -877,6 +897,11 @@ def _values_match(val1, val2) -> bool:
     if s1 == s2:
         return True
 
+    # Energielabel aliassen
+    if _ENERGIELABEL_ALIASES.get(s1) == s2 or _ENERGIELABEL_ALIASES.get(s2) == s1:
+        return True
+
+    # Numerieke vergelijking (tolerantie 0.01)
     try:
         n1 = float(str(val1).replace(",", ".").replace("\u20ac", "").replace(" ", ""))
         n2 = float(str(val2).replace(",", ".").replace("\u20ac", "").replace(" ", ""))
