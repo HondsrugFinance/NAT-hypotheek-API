@@ -352,6 +352,31 @@ async def reject_extraction(dossier_id: str, extraction_id: str, request: Reques
     return {"status": "rejected", "extraction_id": extraction_id}
 
 
+@router.get("/{dossier_id}/debug-tables")
+async def debug_tables(dossier_id: str, aanvraag_id: str = None):
+    """Debug: check in welke tabellen het ID voorkomt."""
+    import httpx, os
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    results = {}
+    for table in ["dossiers", "berekeningen", "aanvragen"]:
+        tid = aanvraag_id or dossier_id
+        async with httpx.AsyncClient(timeout=5) as client:
+            # By id
+            r = await client.get(f"{url}/rest/v1/{table}", headers=headers,
+                                 params={"select": "id", "id": f"eq.{tid}"})
+            results[f"{table}_by_id"] = {"status": r.status_code, "rows": len(r.json()) if r.status_code == 200 else r.text}
+            # By dossier_id (voor berekeningen/aanvragen)
+            if table != "dossiers":
+                r2 = await client.get(f"{url}/rest/v1/{table}", headers=headers,
+                                      params={"select": "id", "dossier_id": f"eq.{tid}"})
+                results[f"{table}_by_dossier_id"] = {"status": r2.status_code, "rows": len(r2.json()) if r2.status_code == 200 else r2.text}
+    results["dossier_id"] = dossier_id
+    results["aanvraag_id"] = aanvraag_id
+    return results
+
+
 @router.get("/{dossier_id}/available-imports")
 async def available_imports(
     dossier_id: str,
