@@ -748,7 +748,8 @@ async def apply_imports(
     if not to_import:
         return {"imported": 0, "target_id": target_id, "context": context}
 
-    headers = _sb_headers(access_token)
+    # Gebruik service key voor lezen + schrijven (RLS bypass)
+    headers = _sb_headers()
 
     # Stap 3: haal huidige data op
     if context == "aanvraag":
@@ -782,13 +783,15 @@ async def apply_imports(
 
     # Stap 5: opslaan
     patch_headers = {**headers, "Prefer": "return=minimal"}
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.patch(
             f"{SUPABASE_URL}/rest/v1/{table}",
             headers=patch_headers,
             params={"id": f"eq.{target_id}"},
             json={data_field: current_data},
         )
+        if resp.status_code >= 400:
+            logger.error("Supabase PATCH %s/%s failed: %s %s", table, target_id, resp.status_code, resp.text)
         resp.raise_for_status()
 
     logger.info("Imported %d fields into %s %s (%s)", len(to_import), table, target_id, context)
