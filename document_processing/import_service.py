@@ -420,8 +420,13 @@ async def get_available_imports(
             if target is None:
                 continue
 
-            label = mapping["label"]
+            # Filter: persoonsgegevens van "gezamenlijk" documenten niet importeren
+            # (bevatten vaak ex-partner data uit echtscheidingsdocumenten)
             category = mapping["categorie"]
+            if persoon == "gezamenlijk" and category in ("Persoonsgegevens", "Adres", "Legitimatie"):
+                continue
+
+            label = mapping["label"]
             value_type = mapping["value_type"]
 
             # Resolve {P} placeholder
@@ -629,9 +634,16 @@ def _find_in_berekening(data: dict, target: str, persoon: str):
             return kg[field]
 
     elif prefix == "inkomenGegevens":
+        # Direct op invoer (Aankoop)
         ig = data.get("inkomenGegevens", {})
-        if isinstance(ig, dict) and field in ig:
+        if isinstance(ig, dict) and field in ig and ig[field]:
             return ig[field]
+        # In haalbaarheidsBerekeningen[0] (Aanpassen: inkomen per berekening)
+        hb = data.get("haalbaarheidsBerekeningen", [])
+        if hb and isinstance(hb[0], dict):
+            ig2 = hb[0].get("inkomenGegevens", {})
+            if isinstance(ig2, dict) and field in ig2 and ig2[field]:
+                return ig2[field]
 
     elif prefix == "onderpand":
         # haalbaarheidsBerekeningen[0].onderpand.X
@@ -849,7 +861,13 @@ def _merge_berekening(data: dict, target: str, value):
         data.setdefault("klantGegevens", {})[field] = value
 
     elif prefix == "inkomenGegevens":
-        data.setdefault("inkomenGegevens", {})[field] = value
+        # Direct op invoer (Aankoop)
+        if "inkomenGegevens" in data:
+            data["inkomenGegevens"][field] = value
+        # Ook in haalbaarheidsBerekeningen[0] (Aanpassen: inkomen per berekening)
+        hb = data.get("haalbaarheidsBerekeningen", [])
+        if hb and isinstance(hb[0], dict):
+            hb[0].setdefault("inkomenGegevens", {})[field] = value
 
     elif prefix == "onderpand":
         hb = data.setdefault("haalbaarheidsBerekeningen", [])
