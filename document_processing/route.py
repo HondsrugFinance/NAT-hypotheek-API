@@ -7,8 +7,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from document_processing.pipeline_v2 import process_document_v2
-from document_processing.import_service import get_available_imports
-from document_processing.schemas import ProcessRequest, ApplyToAanvraagRequest
+from document_processing.import_service import get_available_imports, apply_imports
+from document_processing.schemas import ProcessRequest, ApplyImportsRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
 
@@ -376,13 +376,32 @@ async def available_imports(
         raise HTTPException(500, f"Imports ophalen mislukt: {_ex}")
 
 
-@router.post("/{dossier_id}/apply-to-aanvraag")
-async def apply_to_aanvraag(dossier_id: str, request: Request, body: ApplyToAanvraagRequest = None):
-    """Pas geaccepteerde extracties toe op aanvragen.data JSONB.
+@router.post("/{dossier_id}/apply-imports")
+async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyImportsRequest = None):
+    """Importeer geselecteerde velden naar een aanvraag of berekening.
 
-    Dit is de stap waarbij extracted_data daadwerkelijk naar de aanvraag gaat.
-    Alleen accepted extracties worden toegepast.
+    Body:
+        target_id: ID van de aanvraag of berekening (dossier)
+        context: "aanvraag" of "berekening"
+        selected_targets: lijst van target-paden (bijv. ["klantGegevens.achternaamAanvrager", "inkomenGegevens.hoofdinkomenAanvrager"])
     """
-    # TODO: Implementeer de mapping van extracted_data velden naar aanvragen.data JSONB
-    # Dit vereist de volledige veld-mapping uit document-extractie-mapping.xlsx
-    raise HTTPException(501, "Apply-to-aanvraag wordt in een volgende fase gebouwd")
+    if not body or not body.selected_targets:
+        raise HTTPException(400, "Geen velden geselecteerd")
+    if body.context not in ("aanvraag", "berekening"):
+        raise HTTPException(400, "context moet 'aanvraag' of 'berekening' zijn")
+
+    token = _extract_token(request)
+    try:
+        result = await apply_imports(
+            dossier_id=dossier_id,
+            target_id=body.target_id,
+            context=body.context,
+            selected_targets=body.selected_targets,
+            access_token=token,
+        )
+        return result
+    except ValueError as _ex:
+        raise HTTPException(404, str(_ex))
+    except Exception as _ex:
+        logger.error("Apply imports mislukt: %s", _ex)
+        raise HTTPException(500, f"Importeren mislukt: {_ex}")

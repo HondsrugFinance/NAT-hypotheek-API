@@ -479,6 +479,26 @@ async def get_available_imports(
 
     imports.sort(key=sort_key)
 
+    # Voeg waarde_display toe (geformateerd voor UI)
+    for item in imports:
+        item["waarde_display"] = _format_display(item["waarde_extractie"], item["value_type"])
+        if item["waarde_huidig"] is not None:
+            item["huidig_display"] = _format_display(item["waarde_huidig"], item["value_type"])
+        else:
+            item["huidig_display"] = None
+
+    # Bouw gegroepeerde structuur
+    groups: list[dict] = []
+    current_key = ""
+    persoon_labels = {"aanvrager": "Aanvrager", "partner": "Partner", "gezamenlijk": "Gezamenlijk"}
+    for item in imports:
+        plabel = persoon_labels.get(item["persoon"], item["persoon"])
+        key = f"{plabel} — {item['categorie']}"
+        if key != current_key:
+            groups.append({"title": key, "items": []})
+            current_key = key
+        groups[-1]["items"].append(item)
+
     nieuw = sum(1 for i in imports if i["status"] == "nieuw")
     bevestigd = sum(1 for i in imports if i["status"] == "bevestigd")
     afwijkend = sum(1 for i in imports if i["status"] == "afwijkend")
@@ -494,6 +514,7 @@ async def get_available_imports(
         "laatste_verwerking": analysis_data.get("updated_at"),
         "dossier_samenvatting": analysis_data.get("samenvatting"),
         "inkomen_analyse": inkomen,
+        "groups": groups,
         "imports": imports,
         "samenvatting": {
             "nieuw": nieuw,
@@ -627,6 +648,223 @@ def _find_in_berekening(data: dict, target: str, persoon: str):
             return ber[0][field]
 
     return None
+
+
+def _format_display(value, value_type: str) -> str:
+    """Format een waarde voor weergave in de UI."""
+    if value is None:
+        return "—"
+
+    if value_type == "date":
+        s = str(value)
+        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+            return f"{s[8:10]}-{s[5:7]}-{s[0:4]}"
+        return s
+
+    if value_type == "currency":
+        try:
+            cleaned = str(value).replace("\u20ac", "").replace(" ", "").strip()
+            # "42.768" (NL duizendtal) vs "42768.50" (decimaal)
+            # Als er een punt is gevolgd door precies 3 cijfers aan het eind → duizendtalseparator
+            if "." in cleaned and not "," in cleaned:
+                parts = cleaned.split(".")
+                if len(parts[-1]) == 3 and len(parts) > 1:
+                    cleaned = cleaned.replace(".", "")  # NL duizendtallen
+            cleaned = cleaned.replace(",", ".")
+            n = float(cleaned)
+            formatted = f"{n:,.0f}".replace(",", ".")
+            return f"\u20ac {formatted}"
+        except (ValueError, TypeError):
+            return str(value)
+
+    if value_type == "percent":
+        return f"{value}%"
+
+    if value_type == "boolean":
+        if value is True or str(value).lower() == "true":
+            return "Ja"
+        if value is False or str(value).lower() == "false":
+            return "Nee"
+        return str(value)
+
+    if value_type == "number":
+        try:
+            n = float(str(value))
+            if n == int(n):
+                return f"{int(n):,}".replace(",", ".")
+            return str(value)
+        except (ValueError, TypeError):
+            return str(value)
+
+    return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Apply imports — merge geselecteerde velden in aanvraag of berekening
+# ---------------------------------------------------------------------------
+
+async def apply_imports(
+    dossier_id: str,
+    target_id: str,
+    context: str,
+    selected_targets: list[str],
+    access_token: str | None = None,
+) -> dict:
+    """Importeer geselecteerde velden naar een aanvraag of berekening.
+
+    1. Haal beschikbare imports op (met context)
+    2. Filter op selected_targets
+    3. Merge in huidige data
+    4. Sla op in Supabase
+
+    Returns: {"imported": 5, "target_id": "...", "context": "..."}
+    """
+    # Stap 1: haal beschikbare imports op
+    available = await get_available_imports(dossier_id, target_id, context, access_token)
+    all_imports = available.get("imports", [])
+
+    # Stap 2: filter op geselecteerde targets
+    selected_set = set(selected_targets)
+    to_import = [i for i in all_imports if i["target"] in selected_set]
+
+    if not to_import:
+        return {"imported": 0, "target_id": target_id, "context": context}
+
+    headers = _sb_headers(access_token)
+
+    # Stap 3: haal huidige data op
+    if context == "aanvraag":
+        table, data_field = "aanvragen", "data"
+    else:
+        table, data_field = "dossiers", "invoer"
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/{table}",
+            headers=headers,
+            params={"select": data_field, "id": f"eq.{target_id}"},
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+
+    if not rows:
+        raise ValueError(f"{table} {target_id} niet gevonden")
+
+    import copy
+    current_data = copy.deepcopy(rows[0].get(data_field, {}) or {})
+
+    # Stap 4: merge
+    if context == "aanvraag":
+        for item in to_import:
+            _merge_aanvraag(current_data, item["target"], item["persoon"], item["waarde_extractie"])
+    else:
+        for item in to_import:
+            _merge_berekening(current_data, item["target"], item["waarde_extractie"])
+
+    # Stap 5: opslaan
+    patch_headers = {**headers, "Prefer": "return=minimal"}
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/{table}",
+            headers=patch_headers,
+            params={"id": f"eq.{target_id}"},
+            json={data_field: current_data},
+        )
+        resp.raise_for_status()
+
+    logger.info("Imported %d fields into %s %s (%s)", len(to_import), table, target_id, context)
+
+    return {
+        "imported": len(to_import),
+        "target_id": target_id,
+        "context": context,
+        "velden": [{"label": i["label"], "target": i["target"]} for i in to_import],
+    }
+
+
+def _merge_aanvraag(data: dict, target: str, persoon: str, value):
+    """Merge een enkel veld in AanvraagData structuur."""
+    prefix, _, field = target.partition(".")
+    if not field:
+        return
+
+    person_key = "partner" if persoon == "partner" else "aanvrager"
+
+    if prefix == "persoon":
+        data.setdefault(person_key, {}).setdefault("persoon", {})[field] = value
+
+    elif prefix == "identiteit":
+        data.setdefault(person_key, {}).setdefault("identiteit", {})[field] = value
+
+    elif prefix == "werkgever":
+        inkomen_key = f"inkomen{person_key.capitalize()}"
+        items = data.setdefault(inkomen_key, [])
+        if not items:
+            items.append({"id": _uuid(), "type": "loondienst", "loondienst": {}})
+        items[0].setdefault("loondienst", {}).setdefault("werkgever", {})[field] = value
+
+    elif prefix == "dienstverband":
+        inkomen_key = f"inkomen{person_key.capitalize()}"
+        items = data.setdefault(inkomen_key, [])
+        if not items:
+            items.append({"id": _uuid(), "type": "loondienst", "loondienst": {}})
+        items[0].setdefault("loondienst", {}).setdefault("dienstverband", {})[field] = value
+
+    elif prefix == "wgv":
+        inkomen_key = f"inkomen{person_key.capitalize()}"
+        items = data.setdefault(inkomen_key, [])
+        if not items:
+            items.append({"id": _uuid(), "type": "loondienst", "loondienst": {}})
+        items[0].setdefault("loondienst", {}).setdefault("werkgeversverklaringCalc", {})[field] = value
+
+    elif prefix == "loondienst":
+        inkomen_key = f"inkomen{person_key.capitalize()}"
+        items = data.setdefault(inkomen_key, [])
+        if not items:
+            items.append({"id": _uuid(), "type": "loondienst", "loondienst": {}})
+        items[0].setdefault("loondienst", {})[field] = value
+
+    elif prefix == "onderpand":
+        data.setdefault("onderpand", {})[field] = value
+
+    elif prefix == "financiering":
+        data.setdefault("financieringsopzet", {})[field] = value
+
+    elif prefix == "vermogen":
+        if field == "iban":
+            iban_key = f"iban{person_key.capitalize()}"
+            data.setdefault("vermogenSectie", {}).setdefault("iban", {})[iban_key] = value
+
+
+def _merge_berekening(data: dict, target: str, value):
+    """Merge een enkel veld in berekening invoer structuur."""
+    prefix, _, field = target.partition(".")
+    if not field:
+        return
+
+    if prefix == "klantGegevens":
+        data.setdefault("klantGegevens", {})[field] = value
+
+    elif prefix == "inkomenGegevens":
+        data.setdefault("inkomenGegevens", {})[field] = value
+
+    elif prefix == "onderpand":
+        hb = data.setdefault("haalbaarheidsBerekeningen", [])
+        if not hb:
+            hb.append({"onderpand": {}})
+        hb[0].setdefault("onderpand", {})[field] = value
+
+    elif prefix == "berekeningen":
+        ber = data.setdefault("berekeningen", [])
+        if not ber:
+            ber.append({})
+        ber[0][field] = value
+
+
+def _uuid() -> str:
+    """Genereer een UUID string."""
+    import uuid
+    return str(uuid.uuid4())
 
 
 def _values_match(val1, val2) -> bool:

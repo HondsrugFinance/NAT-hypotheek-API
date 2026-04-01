@@ -50,6 +50,13 @@ class MergePhotosRequest(BaseModel):
 
 
 class ApplyToAanvraagRequest(BaseModel):
-    """Request voor POST /documents/{dossier_id}/apply-to-aanvraag."""
+    """DEPRECATED — gebruik ApplyImportsRequest."""
     aanvraag_id: str
-    extraction_ids: list[str]  # welke extracties toepassen
+    extraction_ids: list[str]
+
+
+class ApplyImportsRequest(BaseModel):
+    """Request voor POST /doc-processing/{dossier_id}/apply-imports."""
+    target_id: str  # aanvraag_id of dossier_id (berekening)
+    context: str = "aanvraag"  # "aanvraag" of "berekening"
+    selected_targets: list[str]  # lijst van target-paden om te importeren
