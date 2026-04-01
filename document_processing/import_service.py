@@ -316,6 +316,108 @@ def _sb_headers(access_token: str | None = None) -> dict:
     }
 
 
+async def _fetch_data(headers: dict, table: str, field: str, row_id: str) -> dict:
+    """Haal een enkel JSONB veld op uit een tabel."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/{table}",
+            headers=headers,
+            params={"select": field, "id": f"eq.{row_id}"},
+        )
+        if resp.status_code >= 400:
+            return {}
+        rows = resp.json()
+        if rows:
+            return rows[0].get(field, {}) or {}
+    return {}
+
+
+async def _fetch_berekening_data(headers: dict, target_id: str) -> dict:
+    """Zoek berekening data — probeer: berekeningen.id, dossiers.id, berekeningen.dossier_id."""
+    # 1. Direct als berekening ID
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/berekeningen",
+            headers=headers,
+            params={"select": "invoer", "id": f"eq.{target_id}"},
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return rows[0].get("invoer", {}) or {}
+
+    # 2. Als dossier ID → zoek berekening via dossier_id
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/berekeningen",
+            headers=headers,
+            params={"select": "invoer", "dossier_id": f"eq.{target_id}", "order": "laatst_gewijzigd.desc", "limit": "1"},
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return rows[0].get("invoer", {}) or {}
+
+    # 3. Fallback: dossiers tabel (oude structuur)
+    return await _fetch_data(headers, "dossiers", "invoer", target_id)
+
+
+async def _fetch_berekening_with_location(headers: dict, target_id: str) -> tuple | None:
+    """Zoek berekening data + waar het zit (tabel, veld, row_id). Voor schrijven."""
+    # 1. Direct als berekening ID
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/berekeningen",
+            headers=headers,
+            params={"select": "id,invoer", "id": f"eq.{target_id}"},
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return ("berekeningen", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
+
+    # 2. Als dossier ID → zoek berekening via dossier_id
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/berekeningen",
+            headers=headers,
+            params={"select": "id,invoer", "dossier_id": f"eq.{target_id}", "order": "laatst_gewijzigd.desc", "limit": "1"},
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return ("berekeningen", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
+
+    # 3. Fallback: dossiers tabel
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossiers",
+            headers=headers,
+            params={"select": "id,invoer", "id": f"eq.{target_id}"},
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return ("dossiers", "invoer", rows[0]["id"], rows[0].get("invoer", {}) or {})
+
+    return None
+
+
+async def _write_data(headers: dict, table: str, field: str, row_id: str, data: dict):
+    """Schrijf een JSONB veld naar een tabel."""
+    patch_headers = {**headers, "Prefer": "return=minimal"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/{table}",
+            headers=patch_headers,
+            params={"id": f"eq.{row_id}"},
+            json={field: data},
+        )
+        if resp.status_code >= 400:
+            logger.error("Supabase PATCH %s/%s failed: %s %s", table, row_id, resp.status_code, resp.text)
+        resp.raise_for_status()
+
+
 # ---------------------------------------------------------------------------
 # Hoofd-functie
 # ---------------------------------------------------------------------------
@@ -369,24 +471,9 @@ async def get_available_imports(
     huidige_data = {}
     if aanvraag_id:
         if context == "aanvraag":
-            tables_to_try = [("aanvragen", "data")]
+            huidige_data = await _fetch_data(headers, "aanvragen", "data", aanvraag_id)
         else:
-            # Probeer berekeningen eerst, fallback naar dossiers
-            tables_to_try = [("berekeningen", "invoer"), ("dossiers", "invoer")]
-
-        for table, data_field in tables_to_try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{SUPABASE_URL}/rest/v1/{table}",
-                    headers=headers,
-                    params={"select": data_field, "id": f"eq.{aanvraag_id}"},
-                )
-                if resp.status_code >= 400:
-                    continue
-                rows = resp.json()
-                if rows:
-                    huidige_data = rows[0].get(data_field, {}) or {}
-                    break
+            huidige_data = await _fetch_berekening_data(headers, aanvraag_id)
 
     # Haal dossier-analyse op voor samenvatting
     async with httpx.AsyncClient(timeout=10) as client:
@@ -528,6 +615,7 @@ async def get_available_imports(
         "inkomen_analyse": inkomen,
         "groups": groups,
         "imports": imports,
+        "toon_banner": len(imports) > 0,  # altijd tonen als er velden zijn
         "samenvatting": {
             "nieuw": nieuw,
             "bevestigd": bevestigd,
@@ -755,55 +843,30 @@ async def apply_imports(
     # Gebruik service key voor lezen + schrijven (RLS bypass)
     headers = _sb_headers()
 
-    # Stap 3: haal huidige data op — probeer berekeningen, fallback dossiers
+    # Stap 3+4+5: lees, merge, schrijf
     if context == "aanvraag":
-        tables_to_try = [("aanvragen", "data")]
-    else:
-        tables_to_try = [("berekeningen", "invoer"), ("dossiers", "invoer")]
+        current_data = await _fetch_data(headers, "aanvragen", "data", target_id)
+        if not current_data and current_data != {}:
+            raise ValueError(f"Aanvraag {target_id} niet gevonden")
 
-    rows = []
-    table = ""
-    data_field = ""
-    for t, df in tables_to_try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/{t}",
-                headers=headers,
-                params={"select": df, "id": f"eq.{target_id}"},
-            )
-            if resp.status_code >= 400:
-                continue
-            rows = resp.json()
-            if rows:
-                table, data_field = t, df
-                break
-
-    if not rows:
-        raise ValueError(f"Berekening/dossier {target_id} niet gevonden")
-
-    import copy
-    current_data = copy.deepcopy(rows[0].get(data_field, {}) or {})
-
-    # Stap 4: merge
-    if context == "aanvraag":
+        import copy
+        merged = copy.deepcopy(current_data) if current_data else {}
         for item in to_import:
-            _merge_aanvraag(current_data, item["target"], item["persoon"], item["waarde_extractie"])
-    else:
-        for item in to_import:
-            _merge_berekening(current_data, item["target"], item["waarde_extractie"])
+            _merge_aanvraag(merged, item["target"], item["persoon"], item["waarde_extractie"])
 
-    # Stap 5: opslaan
-    patch_headers = {**headers, "Prefer": "return=minimal"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.patch(
-            f"{SUPABASE_URL}/rest/v1/{table}",
-            headers=patch_headers,
-            params={"id": f"eq.{target_id}"},
-            json={data_field: current_data},
-        )
-        if resp.status_code >= 400:
-            logger.error("Supabase PATCH %s/%s failed: %s %s", table, target_id, resp.status_code, resp.text)
-        resp.raise_for_status()
+        await _write_data(headers, "aanvragen", "data", target_id, merged)
+    else:
+        result = await _fetch_berekening_with_location(headers, target_id)
+        if not result:
+            raise ValueError(f"Berekening {target_id} niet gevonden")
+
+        import copy
+        table, data_field, row_id, current_data = result
+        merged = copy.deepcopy(current_data)
+        for item in to_import:
+            _merge_berekening(merged, item["target"], item["waarde_extractie"])
+
+        await _write_data(headers, table, data_field, row_id, merged)
 
     logger.info("Imported %d fields into %s %s (%s)", len(to_import), table, target_id, context)
 
