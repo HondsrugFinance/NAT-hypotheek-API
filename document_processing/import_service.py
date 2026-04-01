@@ -369,20 +369,24 @@ async def get_available_imports(
     huidige_data = {}
     if aanvraag_id:
         if context == "aanvraag":
-            table, data_field = "aanvragen", "data"
+            tables_to_try = [("aanvragen", "data")]
         else:
-            # Nieuw: probeer eerst berekeningen tabel, fallback naar dossiers
-            table, data_field = "berekeningen", "invoer"
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/{table}",
-                headers=headers,
-                params={"select": data_field, "id": f"eq.{aanvraag_id}"},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-            if rows:
-                huidige_data = rows[0].get(data_field, {}) or {}
+            # Probeer berekeningen eerst, fallback naar dossiers
+            tables_to_try = [("berekeningen", "invoer"), ("dossiers", "invoer")]
+
+        for table, data_field in tables_to_try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/{table}",
+                    headers=headers,
+                    params={"select": data_field, "id": f"eq.{aanvraag_id}"},
+                )
+                if resp.status_code >= 400:
+                    continue
+                rows = resp.json()
+                if rows:
+                    huidige_data = rows[0].get(data_field, {}) or {}
+                    break
 
     # Haal dossier-analyse op voor samenvatting
     async with httpx.AsyncClient(timeout=10) as client:
@@ -751,23 +755,31 @@ async def apply_imports(
     # Gebruik service key voor lezen + schrijven (RLS bypass)
     headers = _sb_headers()
 
-    # Stap 3: haal huidige data op
+    # Stap 3: haal huidige data op — probeer berekeningen, fallback dossiers
     if context == "aanvraag":
-        table, data_field = "aanvragen", "data"
+        tables_to_try = [("aanvragen", "data")]
     else:
-        table, data_field = "berekeningen", "invoer"
+        tables_to_try = [("berekeningen", "invoer"), ("dossiers", "invoer")]
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/{table}",
-            headers=headers,
-            params={"select": data_field, "id": f"eq.{target_id}"},
-        )
-        resp.raise_for_status()
-        rows = resp.json()
+    rows = []
+    table = ""
+    data_field = ""
+    for t, df in tables_to_try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/{t}",
+                headers=headers,
+                params={"select": df, "id": f"eq.{target_id}"},
+            )
+            if resp.status_code >= 400:
+                continue
+            rows = resp.json()
+            if rows:
+                table, data_field = t, df
+                break
 
     if not rows:
-        raise ValueError(f"{table} {target_id} niet gevonden")
+        raise ValueError(f"Berekening/dossier {target_id} niet gevonden")
 
     import copy
     current_data = copy.deepcopy(rows[0].get(data_field, {}) or {})
