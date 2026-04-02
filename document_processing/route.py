@@ -260,12 +260,23 @@ async def process_all_pending(dossier_id: str, request: Request):
         logger.error("Stap 3 (einde) mislukt: %s", e)
         step3_result = f"error: {e}"
 
+    # Stap 4: import cache vullen (op achtergrond, niet-blokkerend)
+    cache_result = None
+    try:
+        from document_processing.smart_mapper import populate_cache
+        await populate_cache(dossier_id)
+        cache_result = "completed"
+    except Exception as e:
+        logger.warning("Import cache vullen mislukt: %s", e)
+        cache_result = f"error: {e}"
+
     return {
         "processed": len(clean_results),
         "succeeded": succeeded,
         "failed": failed,
         "ibl_rerun": ibl_rerun,
         "step3": step3_result,
+        "import_cache": cache_result,
         "results": clean_results,
     }
 
@@ -358,18 +369,20 @@ async def available_imports(
     request: Request,
     target_id: str = None,
     context: str = "berekening",
+    refresh: bool = False,
 ):
-    """Haal beschikbare imports op via Claude smart mapping.
+    """Haal beschikbare imports op. Leest uit cache (instant), tenzij refresh=true.
 
     Query params:
         dossier_id: UUID van het dossier (bron: extracted_fields)
         target_id: UUID van de berekening of aanvraag (vergelijk hiermee)
         context: "berekening" of "aanvraag"
+        refresh: true = forceer nieuwe Claude mapping (langzaam, ~10s)
     """
     if context not in ("aanvraag", "berekening"):
         context = "berekening"
     try:
-        result = await generate_smart_import(dossier_id, target_id, context)
+        result = await generate_smart_import(dossier_id, target_id, context, force_refresh=refresh)
         return result
     except Exception as _ex:
         logger.error("Smart import preview mislukt: %s", _ex)
