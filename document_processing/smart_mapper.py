@@ -211,6 +211,7 @@ async def generate_smart_import(
             "context": context,
             "merged_data": {},
             "velden": [],
+            "imports": [],
             "groups": [],
             "toon_banner": False,
             "samenvatting": {"nieuw": 0, "bevestigd": 0, "afwijkend": 0, "totaal": 0},
@@ -281,6 +282,7 @@ async def generate_smart_import(
         "context": context,
         "merged_data": merged_data,
         "velden": velden,
+        "imports": velden,  # alias — frontend verwacht "imports"
         "groups": groups,
         "toon_banner": len(velden) > 0,
         "samenvatting": {
@@ -343,6 +345,7 @@ def _fallback_response(dossier_id: str, target_id: str | None, context: str) -> 
         "context": context,
         "merged_data": {},
         "velden": [],
+        "imports": [],
         "groups": [],
         "toon_banner": False,
         "samenvatting": {"nieuw": 0, "bevestigd": 0, "afwijkend": 0, "totaal": 0},
