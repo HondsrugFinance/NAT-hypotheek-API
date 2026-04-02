@@ -268,14 +268,12 @@ async def _write_cache(
     headers: dict, dossier_id: str, context: str,
     merged_data: dict, velden: list, groups: list,
 ):
-    """Schrijf of update cache in Supabase."""
+    """Schrijf of update cache in Supabase (PATCH als bestaat, INSERT als nieuw)."""
     nieuw = sum(1 for v in velden if v.get("status") == "nieuw")
     bevestigd = sum(1 for v in velden if v.get("status") == "bevestigd")
     afwijkend = sum(1 for v in velden if v.get("status") == "afwijkend")
 
-    row = {
-        "dossier_id": dossier_id,
-        "context": context,
+    data = {
         "merged_data": merged_data,
         "velden": velden,
         "groups": groups,
@@ -285,15 +283,36 @@ async def _write_cache(
         },
     }
 
-    upsert_headers = {**headers, "Prefer": "resolution=merge-duplicates"}
+    # Probeer PATCH (update bestaande row)
+    patch_headers = {**headers, "Prefer": "return=minimal"}
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
+        resp = await client.patch(
             f"{SUPABASE_URL}/rest/v1/import_cache",
-            headers=upsert_headers,
-            json=row,
+            headers=patch_headers,
+            params={"dossier_id": f"eq.{dossier_id}", "context": f"eq.{context}"},
+            json=data,
         )
-        if resp.status_code >= 400:
-            logger.error("Cache write failed: %s %s", resp.status_code, resp.text[:300])
+
+        if resp.status_code == 200:
+            # Check of er daadwerkelijk een row geüpdatet is
+            # (Supabase PATCH retourneert 200 zelfs als 0 rows matchen)
+            check = await client.get(
+                f"{SUPABASE_URL}/rest/v1/import_cache",
+                headers=headers,
+                params={"select": "id", "dossier_id": f"eq.{dossier_id}", "context": f"eq.{context}"},
+            )
+            if check.status_code == 200 and check.json():
+                return  # Update gelukt
+
+        # INSERT als row nog niet bestaat
+        insert_data = {**data, "dossier_id": dossier_id, "context": context}
+        resp2 = await client.post(
+            f"{SUPABASE_URL}/rest/v1/import_cache",
+            headers={**headers, "Prefer": "return=minimal"},
+            json=insert_data,
+        )
+        if resp2.status_code >= 400:
+            logger.error("Cache write failed: %s %s", resp2.status_code, resp2.text[:300])
 
 
 # ---------------------------------------------------------------------------
