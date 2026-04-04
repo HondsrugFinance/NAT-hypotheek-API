@@ -333,7 +333,10 @@ async def _run_claude_mapping(dossier_id: str, context: str) -> tuple[dict, list
         logger.error("ANTHROPIC_API_KEY niet geconfigureerd")
         return None
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    # Aanvraag-schema is groter → meer tokens nodig
+    max_tokens = 16000 if context == "aanvraag" else 8000
+
+    async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -343,7 +346,7 @@ async def _run_claude_mapping(dossier_id: str, context: str) -> tuple[dict, list
             },
             json={
                 "model": "claude-sonnet-4-20250514",
-                "max_tokens": 8000,
+                "max_tokens": max_tokens,
                 "messages": [{"role": "user", "content": prompt}],
             },
         )
@@ -355,6 +358,10 @@ async def _run_claude_mapping(dossier_id: str, context: str) -> tuple[dict, list
         result = resp.json()
 
     content = result.get("content", [{}])[0].get("text", "")
+    stop_reason = result.get("stop_reason", "")
+    if stop_reason == "max_tokens":
+        logger.warning("Claude response afgekapt (max_tokens bereikt) voor %s context=%s", dossier_id, context)
+
     try:
         if content.startswith("```"):
             content = content.split("\n", 1)[1]

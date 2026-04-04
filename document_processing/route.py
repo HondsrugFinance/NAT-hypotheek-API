@@ -385,8 +385,9 @@ async def available_imports(
         result = await generate_smart_import(dossier_id, target_id, context, force_refresh=refresh)
         return result
     except Exception as _ex:
-        logger.error("Smart import preview mislukt: %s", _ex)
-        raise HTTPException(500, f"Imports ophalen mislukt: {_ex}")
+        import traceback
+        logger.error("Smart import preview mislukt: %s\n%s", _ex, traceback.format_exc())
+        raise HTTPException(500, f"Imports ophalen mislukt: {type(_ex).__name__}: {_ex}")
 
 
 @router.post("/{dossier_id}/apply-imports")
