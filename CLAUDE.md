@@ -118,6 +118,23 @@ NAT-hypotheek-API/
 │       ├── risk_relationship.py # Relatiebeëindiging
 │       └── closing.py          # Aandachtspunten + disclaimer
 │
+├── document_processing/        # AI-driven document processing pipeline
+│   ├── pipeline_v2.py          # Orchestratie: classificatie → extractie → analyse
+│   ├── step_combined.py        # Gecombineerde stap 1+2 voor simpele documenten
+│   ├── step1_extract_all.py    # "Vertel me alles" extractie (Claude Vision)
+│   ├── step2_structure.py      # Structurering + vergelijking
+│   ├── step3_dossier_analysis.py # Dossier-brede analyse (compleetheid, inkomen)
+│   ├── smart_mapper.py         # Claude-based schema mapping (vervangt handmatige mapping)
+│   ├── schemas_target.py       # AanvraagData + berekening schema's voor Claude prompt
+│   ├── import_service.py       # Legacy handmatige veld-mapping (vervangen door smart_mapper)
+│   ├── rename_move.py          # Bestandsnaamgeving + verplaatsen
+│   ├── text_detector.py        # PDF tekst detectie (PyPDF2 + Vision fallback)
+│   ├── ibl_runner.py           # IBL-tool wrapper (UWV → toetsinkomen)
+│   ├── route.py                # FastAPI endpoints voor document processing
+│   ├── schemas.py              # Pydantic modellen
+│   ├── classifier.py           # Document classificatie
+│   └── extractor.py            # Document extractie
+│
 ├── energielabel/               # EP-Online energielabel opvragen
 │   ├── __init__.py
 │   └── ep_online_client.py     # EP-Online API v5 client (RVO)
@@ -206,6 +223,26 @@ POST /adviesrapport-pdf       (V1: frontend-driven, Lovable bouwt secties)
 POST /adviesrapport-pdf-v2    (V2: backend-driven, alleen dossier_id + aanvraag_id)
 POST /adviesrapport-preview-v2  (JSON preview: bewerkbare teksten + per-persoon scenario-bedragen)
 ```
+
+### Document Processing
+```
+POST /doc-processing/{document_id}/process          # Enkel document verwerken
+POST /doc-processing/{dossier_id}/process-all       # Batch: scan _inbox + verwerk alles
+GET  /doc-processing/{dossier_id}/extracted          # Alle extracties ophalen
+GET  /doc-processing/{dossier_id}/available-imports  # Smart import preview (uit cache)
+POST /doc-processing/{dossier_id}/apply-imports      # Geselecteerde velden importeren
+```
+
+**Smart import flow:**
+1. `process-all` verwerkt documenten → extracties in `extracted_fields` + cache in `import_cache`
+2. `available-imports` leest uit cache (instant) → vergelijkt met huidige berekening/aanvraag
+3. Frontend toont checkboxes → gebruiker selecteert velden
+4. `apply-imports` schrijft ALLEEN geselecteerde velden naar berekening/aanvraag (pad-voor-pad)
+
+Query params voor `available-imports`:
+- `target_id` — UUID van berekening of aanvraag (vergelijk hiermee)
+- `context` — `"berekening"` of `"aanvraag"` (bepaalt welk schema)
+- `refresh=true` — forceer nieuwe Claude mapping (langzaam, ~10s)
 
 ### E-mail Draft (API-key vereist)
 ```
@@ -729,27 +766,59 @@ Twee strategische doelen: **(A)** daadwerkelijk hypotheekaanvragen indienen en *
 
 Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te versturen.
 
-| # | Item | Waar | Handmatig | Claude Code | Blocker |
-|---|------|------|-----------|-------------|---------|
-| C4 | Hypotheekrentes handmatig beheren (Supabase tabel + admin matrix-editor + auto-fill formulier) | Supabase + Lovable | 2 dagen | ~30 min | Lovable prompt geschreven |
-| C4.2 | Hypotheekrentes automatisch ophalen (hypotheekrente-api.nl) | NAT API | 1 dag | ~20 min | API key aanvragen bij info@hypotheekbond.nl |
-| HDN | HDN-export — aanvragen elektronisch versturen via HDN/eBlinqx | NAT API + Lovable | 1-2 weken | ~2 uur | HDN aansluiting + API-specificatie |
+| # | Item | Status | Blocker |
+|---|------|--------|---------|
+| C4 | Hypotheekrentes handmatig beheren | ✅ Gereed | |
+| C4.2 | Hypotheekrentes automatisch ophalen (hypotheekrente-api.nl) | 📋 | API key aanvragen bij info@hypotheekbond.nl |
+| HDN | HDN-export — aanvragen elektronisch versturen via HDN/eBlinqx | 📋 | HDN aansluiting + API-specificatie |
 
 ### Doel B — Workflow automatisering
 
-Klantmappen koppelen, documenten verwerken, statusmails versturen.
+| # | Item | Status |
+|---|------|--------|
+| B1 | SharePoint koppeling — klantmap + _inbox | ✅ Gereed |
+| B2 | Document processing — classificatie, extractie, IBL | ✅ Gereed |
+| B2.1 | Smart import naar berekening | ✅ Gereed (Claude smart mapper + cache) |
+| B2.2 | Smart import naar aanvraag | 🔄 Backend klaar, Lovable banner mist |
+| B2.3 | Import inhoudelijke fine-tuning | 🔄 Selectieve merge werkt, testen loopt |
+| B3 | Statusmail automatisering | 📋 Backlog |
+| B4 | Calcasa desktoptaxatie | 📋 Backlog |
+| B5 | Chatbot & klantportaal | 📋 Backlog |
 
-| # | Item | Waar | Handmatig | Claude Code | Afhankelijkheid |
-|---|------|------|-----------|-------------|-----------------|
-| B1 | OneDrive/SharePoint koppeling — klantmap automatisch aanmaken + linken aan dossier | NAT API + Graph API | 2 dagen | ~1 uur | Azure app-registratie (Files.ReadWrite) |
-| B2 | Document processing — documenten uit klantmap herkennen en Rekentool vullen (AI) | NAT API | 3-5 dagen | ~3 uur | B1 (klantmappen) |
-| B3 | Statusmail automatisering — e-mails genereren met voortgang, benodigde documenten, etc. | NAT API + Graph API | 2 dagen | ~1 uur | E-mail templates + triggers |
-| B4 | Calcasa desktoptaxatie — taxatie uitzetten via API (€110/stuk), rapport koppelen aan dossier | NAT API | 1 dag | ~30 min | Calcasa API-toegang |
+### Document Processing — Subniveaus
+
+| Item | Status |
+|------|--------|
+| Classificatie + extractie (Claude Vision, 30+ doctypes) | ✅ |
+| IBL-tool (UWV → toetsinkomen) | ✅ |
+| Bestandsnaamgeving + verplaatsen | ✅ |
+| Dossier-analyse (compleetheid, inkomensvergelijking) | ✅ |
+| Smart import naar berekening (Claude mapping + cache) | ✅ |
+| Smart import naar aanvraag | 🔄 Backend klaar |
+| Import cache (instant laden na documentverwerking) | ✅ |
+| Selectieve merge (alleen aangevinkte velden) | ✅ |
+| Deduplicatie (beste versie → klantmap, rest → archief) | 📋 |
+| Samenvoegen foto's (meerdere JPGs → 1 document) | 📋 |
+| Automatische trigger bij upload | 📋 |
 
 ### Lagere prioriteit
 
 | Item | Wanneer |
 |------|---------|
-| Code refactoring (4 grote bestanden splitsen, ~45 min Claude Code) | Bij grote wijzigingen in betreffend bestand |
+| Code refactoring (4 grote bestanden splitsen) | Bij grote wijzigingen in betreffend bestand |
 | API-versioning (`/v1/calculate`) | Bij NAT 2027 of externe afnemers |
-| Project-switch naar eigen Supabase | Bij eerste klant of schaling |
+
+---
+
+## Ontwerpprincipes
+
+### Lovable = domme frontend
+Lovable wordt ALLEEN gebruikt voor weergave en user-acties doorsturen. Alle logica (data ophalen, vergelijken, formatteren, groeperen, mergen, opslaan) zit in de Python backend. Lovable prompts moeten kort en simpel zijn. Bij twijfel: verplaats logica naar de backend.
+
+### Smart import architectuur
+- **Vergaarbak**: `extracted_fields` tabel (per document, per dossier)
+- **Claude mapping**: `smart_mapper.py` — Claude krijgt schema + extracties, vult formulier in
+- **Cache**: `import_cache` tabel — resultaat per (dossier, context), instant ophaalbaar
+- **Selectieve merge**: `_set_nested()` — alleen aangevinkte velden schrijven, bestaande data intact
+- **Twee contexten**: `berekening` (~10 velden) en `aanvraag` (~50 velden)
+- **Per berekening/aanvraag onafhankelijk**: vergelijking gebeurt per target, niet per dossier
