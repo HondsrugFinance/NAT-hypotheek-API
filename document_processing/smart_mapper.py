@@ -600,29 +600,46 @@ async def apply_smart_import(
     context: str,
     selected_pads: list[str],
 ) -> dict:
-    """Pas geselecteerde velden toe op het target.
+    """Pas ALLEEN geselecteerde velden toe op het target.
 
-    1. Genereer de volledige smart import (met merged_data)
-    2. Schrijf merged_data naar Supabase (alleen geselecteerde paden)
+    1. Haal cached velden op (met waarden)
+    2. Lees huidige data van het target
+    3. Merge alleen geselecteerde velden pad-voor-pad
+    4. Schrijf geüpdatete data terug
     """
-    # Genereer de volledige mapping
-    full = await generate_smart_import(dossier_id, target_id, context)
-    merged_data = full.get("merged_data", {})
-    all_velden = full.get("velden", [])
+    import copy
 
-    if not merged_data:
-        return {"imported": 0, "target_id": target_id, "context": context}
+    # Stap 1: haal cached mapping op
+    headers = _sb_headers()
+    cached = await _read_cache(headers, dossier_id, context)
+    if not cached:
+        # Geen cache → genereer on-the-fly
+        result = await _run_claude_mapping(dossier_id, context)
+        if not result:
+            return {"imported": 0, "target_id": target_id, "context": context}
+        _, velden = result
+    else:
+        velden = cached.get("velden", [])
 
     # Filter: alleen geselecteerde paden
     selected_set = set(selected_pads)
-    selected_velden = [v for v in all_velden if v.get("pad") in selected_set]
+    selected_velden = [v for v in velden if v.get("pad") in selected_set]
 
     if not selected_velden:
         return {"imported": 0, "target_id": target_id, "context": context}
 
-    # Schrijf de volledige merged_data naar Supabase
-    # Claude heeft al de huidige data meegenomen, dus merged_data is compleet
-    headers = _sb_headers()
+    # Stap 2: lees huidige data
+    current_data = await _fetch_target_data(context, target_id)
+    updated = copy.deepcopy(current_data) if current_data else {}
+
+    # Stap 3: merge alleen geselecteerde velden, pad-voor-pad
+    for veld in selected_velden:
+        pad = veld.get("pad", "")
+        waarde = veld.get("waarde")
+        if pad and waarde is not None:
+            _set_nested(updated, pad, waarde)
+
+    # Stap 4: schrijf terug
     if context == "aanvraag":
         table, field = "aanvragen", "data"
     else:
@@ -634,7 +651,7 @@ async def apply_smart_import(
             f"{SUPABASE_URL}/rest/v1/{table}",
             headers=patch_headers,
             params={"id": f"eq.{target_id}"},
-            json={field: merged_data},
+            json={field: updated},
         )
         if resp.status_code >= 400:
             logger.error("Write %s/%s failed: %s %s", table, target_id, resp.status_code, resp.text)
@@ -648,3 +665,51 @@ async def apply_smart_import(
         "context": context,
         "velden": [{"label": v["label"], "pad": v["pad"]} for v in selected_velden],
     }
+
+
+def _set_nested(data: dict, pad: str, value):
+    """Zet een waarde in een genest dict via dot-notatie met array-support.
+
+    Voorbeeld: _set_nested(data, "aanvrager.persoon.achternaam", "Brust")
+    Voorbeeld: _set_nested(data, "hypotheken[0].leningdelen[1].bedrag", 90390)
+    """
+    segments = []
+    for part in pad.split("."):
+        if "[" in part:
+            key, rest = part.split("[", 1)
+            segments.append(key)
+            segments.append(int(rest.rstrip("]")))
+        else:
+            segments.append(part)
+
+    current = data
+    for i, segment in enumerate(segments[:-1]):
+        next_segment = segments[i + 1]
+
+        if isinstance(segment, int):
+            # Array index navigatie
+            while len(current) <= segment:
+                current.append({})
+            if i + 1 < len(segments) - 1:
+                current = current[segment]
+            else:
+                current = current[segment]
+        elif isinstance(next_segment, int):
+            # Volgende is een array index → zorg dat het een list is
+            if segment not in current or not isinstance(current.get(segment), list):
+                current[segment] = []
+            current = current[segment]
+        else:
+            # Volgende is een dict key
+            if segment not in current or not isinstance(current.get(segment), dict):
+                current[segment] = {}
+            current = current[segment]
+
+    # Zet de waarde
+    last = segments[-1]
+    if isinstance(last, int):
+        while len(current) <= last:
+            current.append({})
+        current[last] = value
+    else:
+        current[last] = value
