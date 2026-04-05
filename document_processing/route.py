@@ -423,6 +423,72 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
         raise HTTPException(500, f"Importeren mislukt: {_ex}")
 
 
+@router.post("/{dossier_id}/reprocess-all")
+async def reprocess_all_documents(dossier_id: str, request: Request):
+    """Herverwerk ALLE documenten van een dossier (stap 1+2+3 opnieuw).
+
+    Draait stap 1+2 opnieuw met force=True voor elk document,
+    daarna stap 3 analyse en cache vullen. Duurt ~30-120s.
+    """
+    import asyncio
+    from document_processing.pipeline_v2 import process_document_v2, _run_dossier_analysis, _build_dossier_context
+
+    token = _extract_token(request)
+    headers = _sb_headers(token)
+
+    # Haal alle documenten op
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/documents",
+            headers=headers,
+            params={"select": "id,bestandsnaam,document_type", "dossier_id": f"eq.{dossier_id}"},
+        )
+        resp.raise_for_status()
+        docs = resp.json()
+
+    if not docs:
+        return {"message": "Geen documenten gevonden", "processed": 0}
+
+    # Herverwerk elk document met force=True, max 4 tegelijk
+    semaphore = asyncio.Semaphore(4)
+
+    async def reprocess(doc_id: str) -> dict:
+        async with semaphore:
+            return await process_document_v2(doc_id, force=True, skip_step3=True)
+
+    tasks = [reprocess(doc["id"]) for doc in docs]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    clean = []
+    for r in results:
+        if isinstance(r, Exception):
+            clean.append({"status": "error", "error": str(r)})
+        else:
+            clean.append(r)
+
+    succeeded = sum(1 for r in clean if r.get("status") == "extracted")
+
+    # Stap 3: analyse
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossiers",
+            headers=headers,
+            params={"select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url", "id": f"eq.{dossier_id}"},
+        )
+        resp.raise_for_status()
+        dossiers = resp.json()
+
+    if dossiers:
+        context = _build_dossier_context(dossiers[0])
+        await _run_dossier_analysis(dossier_id, context)
+
+    # Cache vullen
+    from document_processing.smart_mapper import populate_cache
+    await populate_cache(dossier_id)
+
+    return {"processed": len(docs), "succeeded": succeeded, "dossier_id": dossier_id}
+
+
 @router.post("/{dossier_id}/rerun-analysis")
 async def rerun_analysis(dossier_id: str, request: Request):
     """Draai stap 3 (dossier-analyse) opnieuw, zonder documenten te herverwerken.
