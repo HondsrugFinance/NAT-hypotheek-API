@@ -238,16 +238,55 @@ Het heeft de volgende structuur:
 }
 
 REGELS:
+
+Formatting:
 - Datums altijd in YYYY-MM-DD formaat
 - Bedragen als getallen (geen € teken)
 - Percentages als getallen (8 = 8%, niet 0.08)
 - Rente als percentage (4.5 = 4,5%)
 - Looptijd in maanden (360 = 30 jaar)
-- Lege strings voor onbekende tekstvelden, null voor onbekende getallen
-- Vul ALLEEN velden in waar je data voor hebt uit de documenten
+- RenteVastPeriode in jaren (10 = 10 jaar)
+
+Wat NIET invullen:
+- Vul ALLEEN velden in waar je CONCRETE data voor hebt uit de documenten
 - Maak GEEN waarden aan die niet in de brondata staan
-- Bij meerdere inkomstenbronnen (WGV, IBL, loonstrook): maak aparte entries in inkomenAanvrager[]
+- Als een waarde niet te extraheren is: LAAT HET VELD WEG uit de JSON (niet "" of null zetten)
+  Dit is cruciaal: het formulier heeft defaults (bijv. einddatum=AOW). Als je "" invult overschrijf je die default.
+- Vul GEEN financieringsopzet in (dat is een adviseur-keuze, geen documentdata)
+
+Inkomen:
+- Maak maar ÉÉN inkomen-entry per persoon. Kies het HOOGSTE betrouwbare inkomen.
+  Als er WGV én IBL beschikbaar zijn: gebruik het WGV-inkomen (werkgeversverklaring) als primaire entry.
+  Zet het IBL toetsinkomen als gemiddeldJaarToetsinkomen in hetzelfde inkomen-object.
+- Bij soortBerekening: gebruik "werkgeversverklaring" als er een WGV is, anders "inkomensbepaling_loondienst"
+- inkomstenbron: vul de werkgevernaam in
+- ingangsdatum: datum in dienst
+- einddatum: LAAT WEG (niet "" zetten — de frontend default is AOW-datum)
+- jaarbedrag: totaal WGV inkomen of IBL toetsinkomen
+
+Hypotheek:
+- hypotheekInschrijvingen[].inschrijving = het bij de notaris GEREGISTREERDE bedrag (uit kadaster_hypotheek document).
+  Dit is NIET de marktwaarde en NIET de som van leningdelen. Het kan hoger zijn dan de werkelijke lening.
+  Als het kadaster-document niet beschikbaar is: LAAT het inschrijvingsbedrag WEG.
+- hypotheekInschrijvingen[].geldverstrekker = de geldverstrekker uit het hypotheekoverzicht
+- hypotheken[].leningdelen: vul ALLE beschikbare velden in:
+  - ingangsdatum: oorspronkelijke startdatum van het leningdeel (als bekend)
+  - looptijd: originele looptijd in maanden (als bekend)
+  - einddatum: einddatum van het leningdeel (als bekend)
+  - ingangsdatumRvp: startdatum van de huidige rentevaste periode
+  - renteVastPeriode: duur in JAREN (niet maanden)
+  - einddatumRvp: einddatum rentevaste periode
+  - renteAftrekTot: tot wanneer rente aftrekbaar is (meestal 30 jaar na ingangsdatum)
+  - fiscaalRegime: "box1_na_2013" voor leningen na 2013, "box1_voor_2013" voor leningen vóór 2013
 - Bij meerdere hypotheekdelen: maak aparte entries in hypotheken[0].leningdelen[]
+
+Geldverstrekker aliassen:
+- "BAWAG P.S.K." → gebruik "Hypotrust" (BAWAG is de backoffice, Hypotrust is het label)
+- Als de geldverstrekker niet herkend wordt, gebruik de naam zoals op het document staat
+
+Verplichtingen:
+- Vul alleen verplichtingen in die EXPLICIET in de documenten staan (BKR, leningoverzicht)
+- Geen aannames over verplichtingen die niet gedocumenteerd zijn
 """
 
 # ---------------------------------------------------------------------------
@@ -345,5 +384,8 @@ REGELS:
 - Looptijden in maanden (360 = 30 jaar)
 - energielabel: "geen_label" | "G" | "F" | "E" | "D" | "C" | "B" | "A" | "A+" | "A++" | "A+++" | "A++++"
 - aflossingsvorm: "annuiteit" | "lineair" | "aflossingsvrij" | "spaarhypotheek"
-- Vul ALLEEN velden in waar je data voor hebt
+- Vul ALLEEN velden in waar je CONCRETE data voor hebt uit de documenten
+- Als een waarde niet te extraheren is: LAAT HET VELD WEG (niet 0 of "" zetten)
+- Maak maar ÉÉN inkomen-entry per persoon (gebruik het hoogste betrouwbare inkomen)
+- "BAWAG P.S.K." → gebruik "Hypotrust" als geldverstrekker
 """
