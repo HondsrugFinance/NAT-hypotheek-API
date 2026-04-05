@@ -296,11 +296,10 @@ async def get_prefill_data(dossier_id: str) -> dict:
         zeker_velden = [v for v in velden if v.get("layer") == "zeker"]
         onzeker_velden = [v for v in velden if v.get("layer") == "onzeker"]
 
-        # Bouw gefilterde prefill met alleen zekere velden
-        zeker_prefill = build_zeker_prefill(merged_data, zeker_velden)
-
+        # Retourneer volledige merged_data als prefill (backward compatible).
+        # Check_vragen vraagt bevestiging voor onzekere waarden.
         return {
-            "prefill_data": zeker_prefill,
+            "prefill_data": merged_data,
             "alle_data": merged_data,
             "check_vragen": check_vragen,
             "velden_count": len(velden),
