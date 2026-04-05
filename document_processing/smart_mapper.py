@@ -1,12 +1,14 @@
-"""Smart mapper — Claude vult het doelschema in op basis van geëxtraheerde data.
+"""Smart mapper — vertaalt geëxtraheerde data naar formuliervelden.
 
-In plaats van een handmatige veld-mapping laat Claude het formulier invullen.
-Claude krijgt:
-1. Alle geëxtraheerde data uit documenten (de vergaarbak)
-2. Het doelschema (AanvraagData of berekening-invoer)
-3. De huidige data (wat de adviseur al heeft ingevuld)
+Architectuur v2: AI analyseert (stap 3), Python vertaalt (dit bestand).
+De Claude mapping-call is vervangen door een deterministische Python mapper.
+Beslissingen (keuzemomenten) komen uit stap 3 dossier-analyse.
 
-Claude retourneert een kant-en-klaar JSON object + veldenlijst voor de UI.
+Flow:
+1. Lees extracted_fields uit Supabase (resultaat van stap 1+2)
+2. Lees beslissingen uit dossier_analysis (resultaat van stap 3)
+3. Python field mapper vertaalt naar AanvraagData (instant, geen API call)
+4. Resultaat in import_cache (voor instant prefill)
 """
 
 import json
@@ -16,13 +18,7 @@ from typing import Any
 
 import httpx
 
-from document_processing.schemas_target import AANVRAAG_SCHEMA, BEREKENING_SCHEMA
-from document_processing.config_loader import build_allowed_values_prompt
-from document_processing.confidence_rules import (
-    classify_veld,
-    build_check_vragen,
-    build_zeker_prefill,
-)
+from document_processing.field_mapper_v2 import map_extracted_to_form
 
 logger = logging.getLogger("nat-api.smart-mapper")
 
@@ -98,121 +94,30 @@ async def _fetch_target_data(context: str, target_id: str) -> dict:
     return {}
 
 
-def _format_extracted_for_prompt(extracted: list[dict]) -> str:
-    """Formatteer geëxtraheerde data voor de Claude prompt."""
-    sections = []
-    seen = set()
-
-    for ef in extracted:
-        sectie = ef.get("sectie", "onbekend")
-        persoon = ef.get("persoon", "onbekend")
-        fields = ef.get("fields", {})
-
-        if not fields:
-            continue
-
-        key = f"{sectie}_{persoon}"
-        if key in seen:
-            continue
-        seen.add(key)
-
-        lines = [f"\n--- {sectie} ({persoon}) ---"]
-        for veld, waarde in fields.items():
-            if waarde is not None:
-                lines.append(f"  {veld}: {waarde}")
-
-        sections.append("\n".join(lines))
-
-    return "\n".join(sections) if sections else "(geen geëxtraheerde data)"
+async def _fetch_beslissingen(dossier_id: str) -> list[dict]:
+    """Haal beslissingen op uit dossier_analysis (stap 3 output)."""
+    headers = _sb_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossier_analysis",
+            headers=headers,
+            params={
+                "select": "beslissingen",
+                "dossier_id": f"eq.{dossier_id}",
+                "order": "updated_at.desc",
+                "limit": "1",
+            },
+        )
+        if resp.status_code == 200:
+            rows = resp.json()
+            if rows:
+                return rows[0].get("beslissingen") or []
+    return []
 
 
-def _build_prompt(context: str, extracted_text: str, current_data: dict) -> str:
-    """Bouw de Claude prompt."""
-    schema = AANVRAAG_SCHEMA if context == "aanvraag" else BEREKENING_SCHEMA
-
-    current_json = json.dumps(current_data, ensure_ascii=False, indent=2) if current_data else "{}"
-    # Beperk huidige data tot 3000 chars om tokens te besparen
-    if len(current_json) > 3000:
-        current_json = current_json[:3000] + "\n... (ingekort)"
-
-    allowed_values = build_allowed_values_prompt()
-
-    return f"""Je bent een hypotheekadviseur-assistent. Je taak: vul het doelschema in met de beschikbare geëxtraheerde data uit documenten.
-
-DOELSCHEMA:
-{schema}
-
-{allowed_values}
-
-GEËXTRAHEERDE DATA UIT DOCUMENTEN:
-{extracted_text}
-
-HUIDIGE DATA (al ingevuld door adviseur):
-{current_json}
-
-INSTRUCTIES:
-1. Vul het doelschema in met alle beschikbare data uit de documenten.
-2. Behoud de huidige data van de adviseur — overschrijf NIET wat al ingevuld is (tenzij de huidige waarde 0, null, of een lege string is).
-3. Bij meerdere inkomstenbronnen (WGV en IBL): gebruik het WGV-inkomen als hoofdwaarde. Geef het IBL-inkomen als alternatief in het velden-object.
-4. Bij meerdere hypotheekdelen: maak aparte entries in de leningdelen array.
-5. Zet GEEN waarden neer die niet in de brondata staan.
-6. Datums in YYYY-MM-DD formaat.
-7. Bedragen als getallen zonder € teken.
-8. Rente als percentage (1.46 = 1,46%).
-9. Looptijd in maanden (360 = 30 jaar).
-10. Dropdown-velden MOETEN een waarde uit de TOEGESTANE WAARDEN sectie bevatten.
-
-BELANGRIJK — ONZEKERHEID:
-- Een FOUT antwoord is 3x erger dan een LEEG veld. Bij twijfel: laat leeg.
-- Als je NIET ZEKER bent: laat het veld WEG uit merged_data.
-- Elke waarde die je invult moet herleidbaar zijn naar een specifiek document.
-- source="extracted" = letterlijk overgenomen uit het document, woord voor woord.
-- source="inferred" = afgeleid, berekend, of geïnterpreteerd uit documentgegevens.
-- Bij inferred: geef een duidelijke evidence string (wat je afleidde, waaruit).
-- Bij dropdown-waarden die niet exact matchen: geef de dichtstbijzijnde match als waarde
-  EN de originele documentwaarde als alternatief.
-
-RESPONSE FORMAT (strict JSON, geen markdown):
-{{
-  "merged_data": {{ ... het ingevulde schema ... }},
-  "velden": [
-    {{
-      "pad": "aanvrager.persoon.achternaam",
-      "label": "Achternaam",
-      "waarde": "Brust",
-      "waarde_display": "Brust",
-      "bron": "paspoort",
-      "status": "nieuw",
-      "source": "extracted",
-      "evidence": "Letterlijk overgenomen van paspoort"
-    }}
-  ]
-}}
-
-Elke entry in "velden" representeert EEN veld dat je hebt ingevuld. Gebruik deze status:
-- "nieuw": veld was leeg/0/null, nu ingevuld
-- "bevestigd": veld was al ingevuld en matcht met document
-- "afwijkend": veld was al ingevuld maar wijkt af van document (toon BEIDE waarden)
-
-Elk veld MOET bevatten:
-- "source": "extracted" of "inferred"
-- "evidence": korte uitleg waar de waarde vandaan komt
-
-Optioneel (bij onzekerheid of meerdere opties):
-- "alternatieven": [{{"label": "IBL: € 68.351", "waarde": 68351}}]
-  Gebruik dit bij: meerdere inkomstenbronnen, geldverstrekker naam-mismatch,
-  of andere situaties waar de adviseur moet kiezen.
-
-Voor "afwijkend" velden: zet de document-waarde in merged_data maar voeg "waarde_huidig" en "huidig_display" toe aan het veld-object.
-
-Formatteer waarde_display als volgt:
-- Bedragen: "€ 42.768" (met € en NL duizendtallen)
-- Datums: "01-05-1983" (DD-MM-YYYY)
-- Percentages: "1,46%"
-- Booleans: "Ja" of "Nee"
-- Getallen: "127" (geen € teken voor niet-bedragen zoals bouwjaar, m²)
-
-Retourneer ALLEEN valid JSON, geen uitleg of markdown."""
+## _build_prompt en Claude mapping VERWIJDERD in v2 ##
+# De Claude smart mapping call is vervangen door de deterministische Python
+# field mapper (field_mapper_v2.py). Beslissingen komen uit stap 3 analyse.
 
 
 async def generate_smart_import(
@@ -243,17 +148,17 @@ async def generate_smart_import(
 
             return _build_response_from_cache(cached, current_data, dossier_id, target_id, context)
 
-    # --- Stap 2: geen cache of force → Claude call ---
-    result = await _run_claude_mapping(dossier_id, context)
+    # --- Stap 2: geen cache of force → Python field mapping ---
+    result = await _run_field_mapping(dossier_id, context)
 
     if result is None:
         return _empty_response(dossier_id, target_id, context)
 
-    merged_data, velden = result
+    merged_data, velden, check_vragen = result
 
     # --- Stap 3: sla op in cache ---
     groups = _build_groups(velden)
-    await _write_cache(headers, dossier_id, context, merged_data, velden, groups)
+    await _write_cache(headers, dossier_id, context, merged_data, velden, groups, check_vragen)
 
     # --- Stap 4: vergelijk met huidige target data ---
     current_data = {}
@@ -293,30 +198,23 @@ async def get_prefill_data(dossier_id: str) -> dict:
         merged_data = cached["merged_data"]
         check_vragen = cached.get("check_vragen") or []
 
-        zeker_velden = [v for v in velden if v.get("layer") == "zeker"]
-        onzeker_velden = [v for v in velden if v.get("layer") == "onzeker"]
-
-        # Retourneer volledige merged_data als prefill (backward compatible).
-        # Check_vragen vraagt bevestiging voor onzekere waarden.
         return {
             "prefill_data": merged_data,
             "alle_data": merged_data,
             "check_vragen": check_vragen,
             "velden_count": len(velden),
-            "zekerheden_count": len(zeker_velden),
-            "onzekerheden_count": len(onzeker_velden),
+            "check_vragen_count": len(check_vragen),
             "cached": True,
             "dossier_id": dossier_id,
         }
 
-    # Geen cache → GEEN Claude call, retourneer leeg
+    # Geen cache → retourneer leeg
     return {
         "prefill_data": {},
         "alle_data": {},
         "check_vragen": [],
         "velden_count": 0,
-        "zekerheden_count": 0,
-        "onzekerheden_count": 0,
+        "check_vragen_count": 0,
         "cached": False,
         "dossier_id": dossier_id,
         "error": "Verwerk eerst documenten om gegevens automatisch in te vullen",
@@ -349,16 +247,12 @@ async def _read_cache(headers: dict, dossier_id: str, context: str) -> dict | No
 async def _write_cache(
     headers: dict, dossier_id: str, context: str,
     merged_data: dict, velden: list, groups: list,
+    check_vragen: list | None = None,
 ):
     """Schrijf cache: DELETE bestaande + INSERT nieuwe (simpel en betrouwbaar)."""
     nieuw = sum(1 for v in velden if v.get("status") == "nieuw")
     bevestigd = sum(1 for v in velden if v.get("status") == "bevestigd")
     afwijkend = sum(1 for v in velden if v.get("status") == "afwijkend")
-    zeker = sum(1 for v in velden if v.get("layer") == "zeker")
-    onzeker = sum(1 for v in velden if v.get("layer") == "onzeker")
-
-    # Bouw checkvragen uit onzekere velden
-    check_vragen = build_check_vragen(velden)
 
     row = {
         "dossier_id": dossier_id,
@@ -366,11 +260,11 @@ async def _write_cache(
         "merged_data": merged_data,
         "velden": velden,
         "groups": groups,
-        "check_vragen": check_vragen,
+        "check_vragen": check_vragen or [],
         "samenvatting": {
             "nieuw": nieuw, "bevestigd": bevestigd,
             "afwijkend": afwijkend, "totaal": len(velden),
-            "zeker": zeker, "onzeker": onzeker,
+            "check_vragen": len(check_vragen or []),
         },
     }
 
@@ -395,70 +289,28 @@ async def _write_cache(
 
 
 # ---------------------------------------------------------------------------
-# Claude mapping (de dure call)
+# Python field mapping (vervangt Claude smart mapping call)
 # ---------------------------------------------------------------------------
 
-async def _run_claude_mapping(dossier_id: str, context: str) -> tuple[dict, list] | None:
-    """Draai de Claude mapping. Returns (merged_data, velden) of None bij fout."""
+async def _run_field_mapping(dossier_id: str, context: str) -> tuple[dict, list, list] | None:
+    """Deterministische field mapping. Returns (merged_data, velden, check_vragen) of None.
+
+    Geen Claude API call — instant, deterministisch, testbaar.
+    """
     extracted = await _fetch_extracted_data(dossier_id)
     if not extracted:
         return None
 
-    extracted_text = _format_extracted_for_prompt(extracted)
-    # Bij cache-generatie: geen huidige data (we vergelijken later per target)
-    prompt = _build_prompt(context, extracted_text, {})
+    # Haal beslissingen op uit stap 3 analyse
+    beslissingen = await _fetch_beslissingen(dossier_id)
 
-    if not ANTHROPIC_API_KEY:
-        logger.error("ANTHROPIC_API_KEY niet geconfigureerd")
+    # Python mapper: extracted_fields + beslissingen → formuliervelden
+    merged_data, velden, check_vragen = map_extracted_to_form(extracted, beslissingen)
+
+    if not merged_data:
         return None
 
-    # Aanvraag-schema is groter → meer tokens nodig
-    max_tokens = 16000 if context == "aanvraag" else 8000
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-20250514",
-                "max_tokens": max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
-
-        if resp.status_code != 200:
-            logger.error("Claude API error: %s %s", resp.status_code, resp.text[:500])
-            return None
-
-        result = resp.json()
-
-    content = result.get("content", [{}])[0].get("text", "")
-    stop_reason = result.get("stop_reason", "")
-    if stop_reason == "max_tokens":
-        logger.warning("Claude response afgekapt (max_tokens bereikt) voor %s context=%s", dossier_id, context)
-
-    try:
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1]
-            content = content.rsplit("```", 1)[0]
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        logger.error("Claude response geen geldige JSON: %s", content[:500])
-        return None
-
-    merged_data = parsed.get("merged_data", {})
-    velden = parsed.get("velden", [])
-
-    # Post-processing: classificeer elk veld als zeker/onzeker
-    for veld in velden:
-        claude_source = veld.get("source", "extracted")
-        veld["layer"] = classify_veld(veld.get("pad", ""), claude_source)
-
-    return merged_data, velden
+    return merged_data, velden, check_vragen
 
 
 # ---------------------------------------------------------------------------
@@ -710,10 +562,10 @@ async def apply_smart_import(
     cached = await _read_cache(headers, dossier_id, context)
     if not cached:
         # Geen cache → genereer on-the-fly
-        result = await _run_claude_mapping(dossier_id, context)
+        result = await _run_field_mapping(dossier_id, context)
         if not result:
             return {"imported": 0, "target_id": target_id, "context": context}
-        _, velden = result
+        _, velden, _ = result
     else:
         velden = cached.get("velden", [])
 

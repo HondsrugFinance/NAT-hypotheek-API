@@ -1,4 +1,4 @@
-"""Stap 3: Dossier-brede analyse.
+"""Stap 3: Dossier-brede analyse + beslissingen.
 
 Kijkt naar ALLE geëxtraheerde data van ALLE documenten samen:
 - Inconsistenties tussen documenten
@@ -6,6 +6,7 @@ Kijkt naar ALLE geëxtraheerde data van ALLE documenten samen:
 - Inkomensvergelijking (WGV vs IBL)
 - Compleetheidspercentage
 - Suggesties aan adviseur
+- Beslissingen: keuzemomenten voor de adviseur (welk inkomen? welke geldverstrekker?)
 """
 
 import json
@@ -13,6 +14,8 @@ import logging
 import os
 
 import httpx
+
+from document_processing.config_loader import build_allowed_values_prompt
 
 logger = logging.getLogger("nat-api.step3")
 
@@ -47,6 +50,8 @@ def _build_prompt(
             "fields": f.get("fields", {}),
         })
 
+    allowed_values = build_allowed_values_prompt()
+
     return f"""Je bent een senior hypotheekadviseur die een dossier analyseert.
 
 ## Dossiercontext
@@ -58,6 +63,8 @@ Partner: {partner or 'geen'}
 
 ## Alle gestructureerde velden
 {json.dumps(fields_overview, indent=2, ensure_ascii=False)[:6000]}
+
+## {allowed_values}
 
 ## Opdracht
 Analyseer het complete dossier en geef:
@@ -90,6 +97,26 @@ Analyseer het complete dossier en geef:
 
 5. **Samenvatting**: Korte status van het dossier in 2-3 zinnen.
 
+6. **Beslissingen**: Identificeer situaties waar de adviseur een KEUZE moet maken.
+   Een beslissing is ALLEEN nodig als:
+   - Er MEERDERE waarden zijn voor hetzelfde gegeven (bijv. WGV-inkomen én IBL-inkomen)
+   - Een waarde op het document NIET matcht met een bekende optie uit TOEGESTANE WAARDEN
+   - De adviseur een STRATEGISCHE keuze moet maken die niet uit documenten volgt
+
+   Wat GEEN beslissing is:
+   - Een waarde die letterlijk uit één document komt zonder ambiguïteit
+   - Werkgever-details (postcode, adres, KvK) — dat zijn feiten
+   - WGV-deelbedragen (vakantiegeld, dertiende maand) — dat zijn inputs voor het totaal
+   - Gegevens die uit het paspoort/ID komen (naam, BSN, geboortedatum)
+
+   Per beslissing:
+   - type: korte identifier (inkomen_keuze, geldverstrekker, doelstelling, etc.)
+   - persoon: "aanvrager" of "partner" (indien van toepassing)
+   - vraag: MENSELIJKE vraagtekst in het Nederlands, 1 zin
+   - opties: lijst met label (leesbaar), waarde (voor het formulier), bron (documenttype)
+   - aanbeveling: index (0-based) van de aanbevolen optie
+   - reden: korte uitleg WAAROM dit een keuze is (1 zin)
+
 Antwoord in exact dit JSON formaat:
 {{
   "samenvatting": "Het dossier bevat ...",
@@ -99,25 +126,35 @@ Antwoord in exact dit JSON formaat:
     "percentage": 65
   }},
   "inconsistenties": [
-    {{"veld": "geboortedatum", "documenten": ["paspoort", "uwv"], "waarden": ["1995-08-23", "1995-08-23"], "status": "consistent"}},
-    ...
+    {{"veld": "geboortedatum", "documenten": ["paspoort", "uwv"], "waarden": ["1995-08-23", "1995-08-23"], "status": "consistent"}}
   ],
   "inkomen_analyse": {{
     "aanvrager": {{
       "wgv_inkomen": null,
       "ibl_inkomen": 29715.31,
       "loonstrook_schatting": 58752,
-      "suggestie": "WGV inkomen (EUR 58.752) is significant hoger dan IBL (EUR 29.715). Aanbeveling: gebruik WGV."
+      "suggestie": "WGV inkomen significant hoger dan IBL. Aanbeveling: gebruik WGV."
     }},
-    "partner": {{ ... }}
+    "partner": null
   }},
+  "beslissingen": [
+    {{
+      "type": "inkomen_keuze",
+      "persoon": "aanvrager",
+      "vraag": "Welk inkomen hanteren voor de aanvrager?",
+      "opties": [
+        {{"label": "WGV: € 66.834 (werkgeversverklaring)", "waarde": 66834, "bron": "werkgeversverklaring"}},
+        {{"label": "IBL: € 68.351 (UWV inkomensbepaling)", "waarde": 68351, "bron": "uwv_verzekeringsbericht"}}
+      ],
+      "aanbeveling": 0,
+      "reden": "Twee inkomensberekeningen beschikbaar, adviseur kiest welke te hanteren."
+    }}
+  ],
   "suggesties": [
-    "WGV opvragen — potentieel hoger inkomen",
-    ...
+    "WGV opvragen — potentieel hoger inkomen"
   ],
   "waarschuwingen": [
-    "Nota van afrekening betreft eerdere woning De Lange Garde 10 met J. Derks (2020)",
-    ...
+    "Nota van afrekening betreft eerdere woning (2020)"
   ],
   "confidence": 0.9
 }}"""
@@ -153,7 +190,7 @@ async def analyze_dossier(
 
     payload = {
         "model": ANTHROPIC_MODEL,
-        "max_tokens": 3000,
+        "max_tokens": 4000,
         "temperature": 0.0,
         "messages": [{"role": "user", "content": prompt}],
     }

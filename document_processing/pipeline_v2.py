@@ -624,6 +624,7 @@ async def _run_dossier_analysis(dossier_id: str, context: dict) -> None:
         "ontbrekende_documenten": analysis.get("compleetheid", {}).get("ontbrekend", []),
         "samenvatting": analysis.get("samenvatting", ""),
         "inkomen_analyse": analysis.get("inkomen_analyse", {}),
+        "beslissingen": analysis.get("beslissingen", []),
         "documenten_verwerkt": len(all_extractions),
         "confidence": analysis.get("confidence", 0),
         "duration_ms": step3_ms,
