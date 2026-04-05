@@ -280,9 +280,11 @@ Hypotheek:
   - fiscaalRegime: "box1_na_2013" voor leningen na 2013, "box1_voor_2013" voor leningen vóór 2013
 - Bij meerdere hypotheekdelen: maak aparte entries in hypotheken[0].leningdelen[]
 
-Geldverstrekker aliassen:
-- "BAWAG P.S.K." → gebruik "Hypotrust" (BAWAG is de backoffice, Hypotrust is het label)
-- Als de geldverstrekker niet herkend wordt, gebruik de naam zoals op het document staat
+Geldverstrekker:
+- Gebruik ALLEEN namen uit de TOEGESTANE WAARDEN sectie.
+- Als de naam op het document niet exact matcht, kies de dichtstbijzijnde match
+  en geef de originele naam als alternatief.
+- Als er GEEN match is: laat het veld leeg met een reden.
 
 Verplichtingen:
 - Vul alleen verplichtingen in die EXPLICIET in de documenten staan (BKR, leningoverzicht)
@@ -382,10 +384,10 @@ REGELS:
 - hoofdinkomenAanvrager/Partner = jaarbedrag
 - rentepercentage = percentage (5.0 = 5%)
 - Looptijden in maanden (360 = 30 jaar)
-- energielabel: "geen_label" | "G" | "F" | "E" | "D" | "C" | "B" | "A" | "A+" | "A++" | "A+++" | "A++++"
-- aflossingsvorm: "annuiteit" | "lineair" | "aflossingsvrij" | "spaarhypotheek"
+- energielabel: zie TOEGESTANE WAARDEN sectie
+- aflossingsvorm: zie TOEGESTANE WAARDEN sectie
 - Vul ALLEEN velden in waar je CONCRETE data voor hebt uit de documenten
 - Als een waarde niet te extraheren is: LAAT HET VELD WEG (niet 0 of "" zetten)
 - Maak maar ÉÉN inkomen-entry per persoon (gebruik het hoogste betrouwbare inkomen)
-- "BAWAG P.S.K." → gebruik "Hypotrust" als geldverstrekker
+- Geldverstrekker: gebruik ALLEEN namen uit de TOEGESTANE WAARDEN sectie
 """

@@ -55,8 +55,15 @@ class ApplyToAanvraagRequest(BaseModel):
     extraction_ids: list[str]
 
 
+class CheckVraagAnswer(BaseModel):
+    """Eén antwoord op een checkvraag."""
+    pad: str  # veldpad (bijv. "inkomenAanvrager[0].jaarbedrag")
+    waarde: str | int | float | bool | None  # gekozen waarde
+
+
 class ApplyImportsRequest(BaseModel):
     """Request voor POST /doc-processing/{dossier_id}/apply-imports."""
     target_id: str  # aanvraag_id of dossier_id (berekening)
     context: str = "aanvraag"  # "aanvraag" of "berekening"
-    selected_targets: list[str]  # lijst van target-paden om te importeren
+    selected_targets: list[str] = []  # lijst van target-paden om te importeren
+    check_vragen_answers: list[CheckVraagAnswer] = []  # antwoorden op checkvragen

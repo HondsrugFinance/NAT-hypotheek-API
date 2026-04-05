@@ -17,6 +17,12 @@ from typing import Any
 import httpx
 
 from document_processing.schemas_target import AANVRAAG_SCHEMA, BEREKENING_SCHEMA
+from document_processing.config_loader import build_allowed_values_prompt
+from document_processing.confidence_rules import (
+    classify_veld,
+    build_check_vragen,
+    build_zeker_prefill,
+)
 
 logger = logging.getLogger("nat-api.smart-mapper")
 
@@ -129,10 +135,14 @@ def _build_prompt(context: str, extracted_text: str, current_data: dict) -> str:
     if len(current_json) > 3000:
         current_json = current_json[:3000] + "\n... (ingekort)"
 
+    allowed_values = build_allowed_values_prompt()
+
     return f"""Je bent een hypotheekadviseur-assistent. Je taak: vul het doelschema in met de beschikbare geëxtraheerde data uit documenten.
 
 DOELSCHEMA:
 {schema}
+
+{allowed_values}
 
 GEËXTRAHEERDE DATA UIT DOCUMENTEN:
 {extracted_text}
@@ -143,13 +153,24 @@ HUIDIGE DATA (al ingevuld door adviseur):
 INSTRUCTIES:
 1. Vul het doelschema in met alle beschikbare data uit de documenten.
 2. Behoud de huidige data van de adviseur — overschrijf NIET wat al ingevuld is (tenzij de huidige waarde 0, null, of een lege string is).
-3. Bij meerdere inkomstenbronnen (WGV en IBL): maak APARTE entries. Één met soortBerekening="werkgeversverklaring" en één met soortBerekening="inkomensbepaling_loondienst".
+3. Bij meerdere inkomstenbronnen (WGV en IBL): gebruik het WGV-inkomen als hoofdwaarde. Geef het IBL-inkomen als alternatief in het velden-object.
 4. Bij meerdere hypotheekdelen: maak aparte entries in de leningdelen array.
 5. Zet GEEN waarden neer die niet in de brondata staan.
 6. Datums in YYYY-MM-DD formaat.
 7. Bedragen als getallen zonder € teken.
 8. Rente als percentage (1.46 = 1,46%).
 9. Looptijd in maanden (360 = 30 jaar).
+10. Dropdown-velden MOETEN een waarde uit de TOEGESTANE WAARDEN sectie bevatten.
+
+BELANGRIJK — ONZEKERHEID:
+- Een FOUT antwoord is 3x erger dan een LEEG veld. Bij twijfel: laat leeg.
+- Als je NIET ZEKER bent: laat het veld WEG uit merged_data.
+- Elke waarde die je invult moet herleidbaar zijn naar een specifiek document.
+- source="extracted" = letterlijk overgenomen uit het document, woord voor woord.
+- source="inferred" = afgeleid, berekend, of geïnterpreteerd uit documentgegevens.
+- Bij inferred: geef een duidelijke evidence string (wat je afleidde, waaruit).
+- Bij dropdown-waarden die niet exact matchen: geef de dichtstbijzijnde match als waarde
+  EN de originele documentwaarde als alternatief.
 
 RESPONSE FORMAT (strict JSON, geen markdown):
 {{
@@ -161,7 +182,9 @@ RESPONSE FORMAT (strict JSON, geen markdown):
       "waarde": "Brust",
       "waarde_display": "Brust",
       "bron": "paspoort",
-      "status": "nieuw"
+      "status": "nieuw",
+      "source": "extracted",
+      "evidence": "Letterlijk overgenomen van paspoort"
     }}
   ]
 }}
@@ -170,6 +193,15 @@ Elke entry in "velden" representeert EEN veld dat je hebt ingevuld. Gebruik deze
 - "nieuw": veld was leeg/0/null, nu ingevuld
 - "bevestigd": veld was al ingevuld en matcht met document
 - "afwijkend": veld was al ingevuld maar wijkt af van document (toon BEIDE waarden)
+
+Elk veld MOET bevatten:
+- "source": "extracted" of "inferred"
+- "evidence": korte uitleg waar de waarde vandaan komt
+
+Optioneel (bij onzekerheid of meerdere opties):
+- "alternatieven": [{{"label": "IBL: € 68.351", "waarde": 68351}}]
+  Gebruik dit bij: meerdere inkomstenbronnen, geldverstrekker naam-mismatch,
+  of andere situaties waar de adviseur moet kiezen.
 
 Voor "afwijkend" velden: zet de document-waarde in merged_data maar voeg "waarde_huidig" en "huidig_display" toe aan het veld-object.
 
@@ -244,6 +276,11 @@ async def populate_cache(dossier_id: str):
 async def get_prefill_data(dossier_id: str) -> dict:
     """Haal vooringevulde aanvraag-data op uit de cache. NOOIT een Claude call.
 
+    Gelaagd systeem:
+    - prefill_data: alleen zekerheden (naam, BSN, adres, etc.) — direct invullen
+    - alle_data: volledige data (voor na beantwoording checkvragen)
+    - check_vragen: onzekerheden als keuzevragen voor de adviseur
+
     Als cache gevuld → retourneer instant.
     Als cache leeg → retourneer leeg object + foutmelding.
     De cache wordt gevuld door process-all (documentverwerking), niet hier.
@@ -252,9 +289,23 @@ async def get_prefill_data(dossier_id: str) -> dict:
 
     cached = await _read_cache(headers, dossier_id, "aanvraag")
     if cached and cached.get("merged_data"):
+        velden = cached.get("velden", [])
+        merged_data = cached["merged_data"]
+        check_vragen = cached.get("check_vragen") or []
+
+        zeker_velden = [v for v in velden if v.get("layer") == "zeker"]
+        onzeker_velden = [v for v in velden if v.get("layer") == "onzeker"]
+
+        # Bouw gefilterde prefill met alleen zekere velden
+        zeker_prefill = build_zeker_prefill(merged_data, zeker_velden)
+
         return {
-            "prefill_data": cached["merged_data"],
-            "velden_count": len(cached.get("velden", [])),
+            "prefill_data": zeker_prefill,
+            "alle_data": merged_data,
+            "check_vragen": check_vragen,
+            "velden_count": len(velden),
+            "zekerheden_count": len(zeker_velden),
+            "onzekerheden_count": len(onzeker_velden),
             "cached": True,
             "dossier_id": dossier_id,
         }
@@ -262,7 +313,11 @@ async def get_prefill_data(dossier_id: str) -> dict:
     # Geen cache → GEEN Claude call, retourneer leeg
     return {
         "prefill_data": {},
+        "alle_data": {},
+        "check_vragen": [],
         "velden_count": 0,
+        "zekerheden_count": 0,
+        "onzekerheden_count": 0,
         "cached": False,
         "dossier_id": dossier_id,
         "error": "Verwerk eerst documenten om gegevens automatisch in te vullen",
@@ -280,7 +335,7 @@ async def _read_cache(headers: dict, dossier_id: str, context: str) -> dict | No
             f"{SUPABASE_URL}/rest/v1/import_cache",
             headers=headers,
             params={
-                "select": "merged_data,velden,groups,samenvatting,updated_at",
+                "select": "merged_data,velden,groups,samenvatting,check_vragen,updated_at",
                 "dossier_id": f"eq.{dossier_id}",
                 "context": f"eq.{context}",
             },
@@ -300,6 +355,11 @@ async def _write_cache(
     nieuw = sum(1 for v in velden if v.get("status") == "nieuw")
     bevestigd = sum(1 for v in velden if v.get("status") == "bevestigd")
     afwijkend = sum(1 for v in velden if v.get("status") == "afwijkend")
+    zeker = sum(1 for v in velden if v.get("layer") == "zeker")
+    onzeker = sum(1 for v in velden if v.get("layer") == "onzeker")
+
+    # Bouw checkvragen uit onzekere velden
+    check_vragen = build_check_vragen(velden)
 
     row = {
         "dossier_id": dossier_id,
@@ -307,9 +367,11 @@ async def _write_cache(
         "merged_data": merged_data,
         "velden": velden,
         "groups": groups,
+        "check_vragen": check_vragen,
         "samenvatting": {
             "nieuw": nieuw, "bevestigd": bevestigd,
             "afwijkend": afwijkend, "totaal": len(velden),
+            "zeker": zeker, "onzeker": onzeker,
         },
     }
 
@@ -389,7 +451,15 @@ async def _run_claude_mapping(dossier_id: str, context: str) -> tuple[dict, list
         logger.error("Claude response geen geldige JSON: %s", content[:500])
         return None
 
-    return parsed.get("merged_data", {}), parsed.get("velden", [])
+    merged_data = parsed.get("merged_data", {})
+    velden = parsed.get("velden", [])
+
+    # Post-processing: classificeer elk veld als zeker/onzeker
+    for veld in velden:
+        claude_source = veld.get("source", "extracted")
+        veld["layer"] = classify_veld(veld.get("pad", ""), claude_source)
+
+    return merged_data, velden
 
 
 # ---------------------------------------------------------------------------
@@ -624,13 +694,15 @@ async def apply_smart_import(
     target_id: str,
     context: str,
     selected_pads: list[str],
+    check_vragen_answers: list[dict] | None = None,
 ) -> dict:
     """Pas ALLEEN geselecteerde velden toe op het target.
 
     1. Haal cached velden op (met waarden)
     2. Lees huidige data van het target
     3. Merge alleen geselecteerde velden pad-voor-pad
-    4. Schrijf geüpdatete data terug
+    4. Merge check_vragen antwoorden (pad + waarde direct van adviseur)
+    5. Schrijf geüpdatete data terug
     """
     import copy
 
@@ -650,7 +722,7 @@ async def apply_smart_import(
     selected_set = set(selected_pads)
     selected_velden = [v for v in velden if v.get("pad") in selected_set]
 
-    if not selected_velden:
+    if not selected_velden and not check_vragen_answers:
         return {"imported": 0, "target_id": target_id, "context": context}
 
     # Stap 2: lees huidige data
@@ -664,7 +736,17 @@ async def apply_smart_import(
         if pad and waarde is not None:
             _set_nested(updated, pad, waarde)
 
-    # Stap 4: schrijf terug
+    # Stap 4: merge check_vragen antwoorden (adviseur-keuzes)
+    answers_count = 0
+    if check_vragen_answers:
+        for answer in check_vragen_answers:
+            pad = answer.get("pad", "")
+            waarde = answer.get("waarde")
+            if pad and waarde is not None:
+                _set_nested(updated, pad, waarde)
+                answers_count += 1
+
+    # Stap 5: schrijf terug
     if context == "aanvraag":
         table, field = "aanvragen", "data"
     else:
@@ -682,13 +764,16 @@ async def apply_smart_import(
             logger.error("Write %s/%s failed: %s %s", table, target_id, resp.status_code, resp.text)
             raise ValueError(f"Opslaan mislukt: {resp.text}")
 
-    logger.info("Smart import: %d velden naar %s %s", len(selected_velden), table, target_id)
+    total_imported = len(selected_velden) + answers_count
+    logger.info("Smart import: %d velden + %d check_vragen naar %s %s",
+                len(selected_velden), answers_count, table, target_id)
 
     return {
-        "imported": len(selected_velden),
+        "imported": total_imported,
         "target_id": target_id,
         "context": context,
         "velden": [{"label": v["label"], "pad": v["pad"]} for v in selected_velden],
+        "check_vragen_applied": answers_count,
     }
 
 

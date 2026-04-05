@@ -399,17 +399,21 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
         context: "berekening" of "aanvraag"
         selected_targets: lijst van veld-paden (bijv. ["aanvrager.persoon.achternaam"])
     """
-    if not body or not body.selected_targets:
-        raise HTTPException(400, "Geen velden geselecteerd")
+    if not body or (not body.selected_targets and not body.check_vragen_answers):
+        raise HTTPException(400, "Geen velden of check_vragen antwoorden geselecteerd")
     if body.context not in ("aanvraag", "berekening"):
         raise HTTPException(400, "context moet 'aanvraag' of 'berekening' zijn")
 
     try:
+        # Converteer CheckVraagAnswer objecten naar dicts
+        answers = [{"pad": a.pad, "waarde": a.waarde} for a in body.check_vragen_answers]
+
         result = await apply_smart_import(
             dossier_id=dossier_id,
             target_id=body.target_id,
             context=body.context,
             selected_pads=body.selected_targets,
+            check_vragen_answers=answers if answers else None,
         )
         return result
     except ValueError as _ex:
