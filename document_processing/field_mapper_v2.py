@@ -337,11 +337,25 @@ def map_extracted_to_form(
         - velden: Lijst van gemapte velden (voor UI: pad, label, waarde, bron)
         - check_vragen: Lijst van keuzemomenten (uit beslissingen)
     """
+    # Sorteer extracted_fields op bronprioriteit: paspoort > id_kaart > rijbewijs > rest
+    # Dit zorgt dat paspoort-data altijd voorrang krijgt boven rijbewijs
+    _BRON_PRIORITEIT = {
+        "paspoort": 0, "id_kaart": 1, "rijbewijs": 2,
+        "werkgeversverklaring": 3, "salarisstrook": 4, "loonstrook": 4,
+        "inkomen_ibl": 5, "taxatierapport": 6, "hypotheekoverzicht": 7,
+        "kadaster_eigendom": 8, "kadaster_hypotheek": 9,
+        "koopovereenkomst": 10, "jaaropgave": 11, "bankafschrift": 12,
+    }
+    sorted_fields = sorted(
+        extracted_fields,
+        key=lambda ef: _BRON_PRIORITEIT.get(ef.get("sectie", ""), 99),
+    )
+
     merged_data: dict = {}
     velden: list[dict] = []
     seen_pads: set[str] = set()
 
-    for ef in extracted_fields:
+    for ef in sorted_fields:
         sectie = ef.get("sectie", "")
         persoon = ef.get("persoon", "aanvrager")
         fields = ef.get("fields", {})
@@ -391,7 +405,7 @@ def map_extracted_to_form(
                 "pad": target_pad,
                 "label": _field_label(field_name),
                 "waarde": value,
-                "waarde_display": _format_display(value),
+                "waarde_display": _format_display(value, field_name),
                 "bron": sectie,
                 "status": "nieuw",
                 "source": "extracted",
@@ -521,13 +535,26 @@ def _field_label(field_name: str) -> str:
     return _FIELD_LABELS.get(field_name, field_name.replace("_", " ").title())
 
 
-def _format_display(value: Any) -> str:
+# Velden die GEEN bedrag zijn, ook al zijn het getallen ≥ 100
+_NOT_CURRENCY_FIELDS = {
+    "bouwjaar", "eigendomAandeelAanvrager", "eigendomAandeelPartner",
+    "bsn", "legitimatienummer", "hypotheeknummer", "kredietnummer",
+    "kvkNummer", "rsin", "looptijd", "renteVastPeriode",
+    "gemiddeldUrenPerWeek", "telefoonnummer", "huisnummer",
+    "postcode", "iban", "ibanAanvrager", "ibanPartner",
+}
+
+
+def _format_display(value: Any, field_name: str = "") -> str:
     """Format waarde voor weergave in UI."""
     if value is None:
         return "—"
     if isinstance(value, bool):
         return "Ja" if value else "Nee"
     if isinstance(value, (int, float)):
+        # Niet-bedrag velden: geen € teken
+        if field_name in _NOT_CURRENCY_FIELDS:
+            return str(int(value)) if value == int(value) else str(value)
         if abs(value) >= 100:
             return f"€ {value:,.0f}".replace(",", ".")
         return str(value)
