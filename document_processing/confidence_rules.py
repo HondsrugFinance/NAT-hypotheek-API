@@ -6,8 +6,6 @@ adviseur) is. Bouwt checkvragen uit onzekere velden met alternatieven.
 Prioriteit: ONZEKER_PREFIXES > ZEKER_PREFIXES > Claude's eigen oordeel.
 """
 
-from document_processing.smart_mapper import _get_nested, _set_nested
-
 # ---------------------------------------------------------------------------
 # Classificatieregels — welke paden zijn altijd zeker/onzeker?
 # ---------------------------------------------------------------------------
@@ -197,7 +195,10 @@ def build_zeker_prefill(merged_data: dict, velden: list[dict]) -> dict:
     """Bouw een gefilterd data-object met alleen zekere velden.
 
     Kopieert waarden uit merged_data voor alle paden waar layer='zeker'.
+    Lazy import om circulaire import te voorkomen.
     """
+    from document_processing.smart_mapper import _get_nested, _set_nested
+
     result = {}
     for veld in velden:
         if veld.get("layer") != "zeker":
