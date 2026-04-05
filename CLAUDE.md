@@ -760,7 +760,7 @@ De PDF template (`templates/samenvatting.html`) gebruikt het Hondsrug Finance kl
 
 ## Backlog
 
-Twee strategische doelen: **(A)** daadwerkelijk hypotheekaanvragen indienen en **(B)** workflow automatiseren.
+Drie strategische doelen: **(A)** hypotheekaanvragen indienen, **(B)** workflow automatiseren, en **(C)** frontend migreren van Lovable naar eigen Next.js app.
 
 ### Doel A — Hypotheekaanvragen indienen
 
@@ -779,8 +779,9 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 | B1 | SharePoint koppeling — klantmap + _inbox | ✅ Gereed |
 | B2 | Document processing — classificatie, extractie, IBL | ✅ Gereed |
 | B2.1 | Smart import naar berekening | ✅ Gereed (Claude smart mapper + cache) |
-| B2.2 | Smart import naar aanvraag | 🔄 Backend klaar, Lovable banner mist |
-| B2.3 | Import inhoudelijke fine-tuning | 🔄 Selectieve merge werkt, testen loopt |
+| B2.2 | Smart import naar aanvraag | ✅ Prefill bij nieuwe aanvraag werkt |
+| B2.3 | Import inhoudelijke fine-tuning | 🔄 Prompt aangescherpt, nog te verfijnen |
+| B2.4 | Gelaagd systeem (zekerheden vs onzekerheden) | 📋 Ontwerp klaar, bouwen volgende stap |
 | B3 | Statusmail automatisering | 📋 Backlog |
 | B4 | Calcasa desktoptaxatie | 📋 Backlog |
 | B5 | Chatbot & klantportaal | 📋 Backlog |
@@ -794,12 +795,40 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 | Bestandsnaamgeving + verplaatsen | ✅ |
 | Dossier-analyse (compleetheid, inkomensvergelijking) | ✅ |
 | Smart import naar berekening (Claude mapping + cache) | ✅ |
-| Smart import naar aanvraag | 🔄 Backend klaar |
+| Smart import naar aanvraag (prefill bij nieuwe aanvraag) | ✅ |
+| Gelaagd systeem (zekerheden direct, onzekerheden als checkvragen) | 📋 |
+| Config-waarden meegeven in Claude prompt (geldverstrekkers, labels) | 📋 |
 | Import cache (instant laden na documentverwerking) | ✅ |
 | Selectieve merge (alleen aangevinkte velden) | ✅ |
 | Deduplicatie (beste versie → klantmap, rest → archief) | 📋 |
 | Samenvoegen foto's (meerdere JPGs → 1 document) | 📋 |
 | Automatische trigger bij upload | 📋 |
+
+### Doel C — Frontend migratie (Lovable → Next.js)
+
+**Besluit:** migratie naar eigen Next.js/React app, maar pas nadat Doel A en B een werkend product opleveren dat adviseurs dagelijks gebruiken.
+
+**Waarom migreren:**
+- Lovable is een black box: niet debugbaar, prompt-roulette bij complexe wijzigingen
+- Type-mapping fouten (Lovable ↔ Python) zijn structurele bugbron
+- Geen SSR → slecht voor SEO/GEO (publieke site niet vindbaar voor Google en AI-zoekmachines)
+- Complexiteitsplafond: prompts worden steeds langer, Lovable kan complexe UI-logica niet betrouwbaar aan
+- Vendor lock-in en maandelijkse kosten voor iets dat we zelf kunnen hosten
+
+**Migratiestrategie:**
+1. ✅ Eerst Doel A + B afmaken en finetunen (huidig werk)
+2. 📋 Lovable GitHub repo (HondsrugFinance/hondsrug-insight) als startpunt nemen — is al React + Tailwind
+3. 📋 Opschonen, eigen Supabase client behouden, deploy naar Vercel/Netlify
+4. 📋 SSR + SEO/GEO optimalisatie voor publieke pagina's (structured data, meta-tags, sitemap)
+
+**Wat NIET verandert:** alle Python/FastAPI endpoints, Supabase tabellen, PDF-generatie, e-mail, document processing. Backend is frontend-agnostisch.
+
+| Item | Status |
+|------|--------|
+| Lovable codebase overnemen (GitHub sync) | 📋 Na Doel A+B |
+| Opschonen + eigen deploy (Vercel/Netlify) | 📋 |
+| SEO/GEO: SSR, structured data, meta-tags | 📋 |
+| Lovable abonnement opzeggen | 📋 Na volledige migratie |
 
 ### Lagere prioriteit
 
@@ -812,8 +841,8 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 
 ## Ontwerpprincipes
 
-### Lovable = domme frontend
-Lovable wordt ALLEEN gebruikt voor weergave en user-acties doorsturen. Alle logica (data ophalen, vergelijken, formatteren, groeperen, mergen, opslaan) zit in de Python backend. Lovable prompts moeten kort en simpel zijn. Bij twijfel: verplaats logica naar de backend.
+### Frontend = domme weergavelaag
+De frontend (nu Lovable, straks Next.js) wordt ALLEEN gebruikt voor weergave en user-acties doorsturen. Alle logica (data ophalen, vergelijken, formatteren, groeperen, mergen, opslaan) zit in de Python backend. Bij twijfel: verplaats logica naar de backend.
 
 ### Smart import architectuur
 - **Vergaarbak**: `extracted_fields` tabel (per document, per dossier)
