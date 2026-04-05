@@ -423,6 +423,45 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
         raise HTTPException(500, f"Importeren mislukt: {_ex}")
 
 
+@router.post("/{dossier_id}/rerun-analysis")
+async def rerun_analysis(dossier_id: str, request: Request):
+    """Draai stap 3 (dossier-analyse) opnieuw, zonder documenten te herverwerken.
+
+    Handig als stap 3 prompt is bijgewerkt (bijv. beslissingen toegevoegd)
+    maar documenten al verwerkt zijn.
+    """
+    from document_processing.pipeline_v2 import _run_dossier_analysis, _build_dossier_context
+
+    token = _extract_token(request)
+    headers = _sb_headers(token)
+
+    # Haal dossier op
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossiers",
+            headers=headers,
+            params={"select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url", "id": f"eq.{dossier_id}"},
+        )
+        resp.raise_for_status()
+        dossiers = resp.json()
+
+    if not dossiers:
+        raise HTTPException(404, "Dossier niet gevonden")
+
+    context = _build_dossier_context(dossiers[0])
+
+    try:
+        await _run_dossier_analysis(dossier_id, context)
+    except Exception as _ex:
+        raise HTTPException(500, f"Analyse mislukt: {_ex}")
+
+    # Cache ook opnieuw vullen met Python mapper
+    from document_processing.smart_mapper import populate_cache
+    await populate_cache(dossier_id)
+
+    return {"status": "completed", "dossier_id": dossier_id}
+
+
 @router.delete("/{dossier_id}/clear-cache")
 async def clear_cache(dossier_id: str, request: Request):
     """Verwijder alle import cache entries voor een dossier."""

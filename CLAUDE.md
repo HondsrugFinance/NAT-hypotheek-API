@@ -123,10 +123,12 @@ NAT-hypotheek-API/
 │   ├── step_combined.py        # Gecombineerde stap 1+2 voor simpele documenten
 │   ├── step1_extract_all.py    # "Vertel me alles" extractie (Claude Vision)
 │   ├── step2_structure.py      # Structurering + vergelijking
-│   ├── step3_dossier_analysis.py # Dossier-brede analyse (compleetheid, inkomen)
-│   ├── smart_mapper.py         # Claude-based schema mapping (vervangt handmatige mapping)
+│   ├── step3_dossier_analysis.py # Dossier-brede analyse + beslissingen (keuzemomenten)
+│   ├── field_mapper_v2.py      # Deterministische Python field mapping (extracted→AanvraagData)
+│   ├── smart_mapper.py         # Cache, prefill endpoint, apply-imports (geen Claude call meer)
+│   ├── config_loader.py        # Config-waarden laden voor prompts (geldverstrekkers, dropdowns)
+│   ├── confidence_rules.py     # Legacy classificatie (wordt uitgefaseerd door stap 3 beslissingen)
 │   ├── schemas_target.py       # AanvraagData + berekening schema's voor Claude prompt
-│   ├── import_service.py       # Legacy handmatige veld-mapping (vervangen door smart_mapper)
 │   ├── rename_move.py          # Bestandsnaamgeving + verplaatsen
 │   ├── text_detector.py        # PDF tekst detectie (PyPDF2 + Vision fallback)
 │   ├── ibl_runner.py           # IBL-tool wrapper (UWV → toetsinkomen)
@@ -781,7 +783,7 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 | B2.1 | Smart import naar berekening | ✅ Gereed (Claude smart mapper + cache) |
 | B2.2 | Smart import naar aanvraag | ✅ Prefill bij nieuwe aanvraag werkt |
 | B2.3 | Import inhoudelijke fine-tuning | 🔄 Prompt aangescherpt, nog te verfijnen |
-| B2.4 | Gelaagd systeem (zekerheden vs onzekerheden) | 📋 Ontwerp klaar, bouwen volgende stap |
+| B2.4 | Gelaagd systeem (AI analyseert, Python vertaalt) | 🔄 v2 gebouwd: field_mapper + beslissingen, testen |
 | B3 | Statusmail automatisering | 📋 Backlog |
 | B4 | Calcasa desktoptaxatie | 📋 Backlog |
 | B5 | Chatbot & klantportaal | 📋 Backlog |
@@ -796,7 +798,7 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 | Dossier-analyse (compleetheid, inkomensvergelijking) | ✅ |
 | Smart import naar berekening (Claude mapping + cache) | ✅ |
 | Smart import naar aanvraag (prefill bij nieuwe aanvraag) | ✅ |
-| Gelaagd systeem (zekerheden direct, onzekerheden als checkvragen) | 📋 |
+| Gelaagd systeem v2 (AI beslissingen + Python field mapper + checkvragen) | 🔄 Gebouwd, testen |
 | Config-waarden meegeven in Claude prompt (geldverstrekkers, labels) | 📋 |
 | Import cache (instant laden na documentverwerking) | ✅ |
 | Selectieve merge (alleen aangevinkte velden) | ✅ |
@@ -844,10 +846,12 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 ### Frontend = domme weergavelaag
 De frontend (nu Lovable, straks Next.js) wordt ALLEEN gebruikt voor weergave en user-acties doorsturen. Alle logica (data ophalen, vergelijken, formatteren, groeperen, mergen, opslaan) zit in de Python backend. Bij twijfel: verplaats logica naar de backend.
 
-### Smart import architectuur
+### Smart import architectuur (v2: AI analyseert, Python vertaalt)
 - **Vergaarbak**: `extracted_fields` tabel (per document, per dossier)
-- **Claude mapping**: `smart_mapper.py` — Claude krijgt schema + extracties, vult formulier in
+- **AI analyse**: `step3_dossier_analysis.py` — Claude analyseert alle documenten samen, produceert `beslissingen` (keuzemomenten)
+- **Python mapping**: `field_mapper_v2.py` — deterministische lookup-tabel: extracted_fields → AanvraagData paden (instant, geen API call)
+- **Beslissingen → checkvragen**: stap 3 `beslissingen` worden check_vragen voor de frontend (alleen echte keuzemomenten)
 - **Cache**: `import_cache` tabel — resultaat per (dossier, context), instant ophaalbaar
+- **Config-injectie**: `config_loader.py` — geldverstrekkers, energielabels etc. uit config/*.json in Claude prompts
 - **Selectieve merge**: `_set_nested()` — alleen aangevinkte velden schrijven, bestaande data intact
 - **Twee contexten**: `berekening` (~10 velden) en `aanvraag` (~50 velden)
-- **Per berekening/aanvraag onafhankelijk**: vergelijking gebeurt per target, niet per dossier
