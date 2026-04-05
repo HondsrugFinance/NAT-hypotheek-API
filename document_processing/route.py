@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from document_processing.pipeline_v2 import process_document_v2
-from document_processing.smart_mapper import generate_smart_import, apply_smart_import
+from document_processing.smart_mapper import generate_smart_import, apply_smart_import, get_prefill_data
 from document_processing.schemas import ProcessRequest, ApplyImportsRequest
 
 logger = logging.getLogger("nat-api.doc-processing")
@@ -417,3 +417,26 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
     except Exception as _ex:
         logger.error("Smart import apply mislukt: %s", _ex)
         raise HTTPException(500, f"Importeren mislukt: {_ex}")
+
+
+@router.get("/{dossier_id}/prefill-aanvraag")
+async def prefill_aanvraag(dossier_id: str, request: Request):
+    """Haal vooringevulde aanvraag-data op uit de import cache.
+
+    Retourneert merged_data die direct als startdata voor een nieuwe aanvraag
+    gebruikt kan worden. Instant als cache gevuld is, anders ~15s (Claude call).
+
+    Response:
+        {
+            "prefill_data": { ... AanvraagData ... },
+            "velden_count": 50,
+            "cached": true
+        }
+    """
+    try:
+        result = await get_prefill_data(dossier_id)
+        return result
+    except Exception as _ex:
+        import traceback
+        logger.error("Prefill aanvraag mislukt: %s\n%s", _ex, traceback.format_exc())
+        raise HTTPException(500, f"Prefill ophalen mislukt: {type(_ex).__name__}: {_ex}")

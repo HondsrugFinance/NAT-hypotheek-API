@@ -241,6 +241,55 @@ async def populate_cache(dossier_id: str):
             logger.error("Cache vullen mislukt voor %s context=%s: %s", dossier_id, ctx, ex)
 
 
+async def get_prefill_data(dossier_id: str) -> dict:
+    """Haal vooringevulde aanvraag-data op uit de cache.
+
+    Retourneert merged_data die direct als AanvraagData gebruikt kan worden.
+    Als cache leeg is, draait een Claude call (eerste keer).
+
+    Returns:
+        {
+            "prefill_data": { ... AanvraagData ... },
+            "velden_count": 50,
+            "cached": true,
+            "dossier_id": "..."
+        }
+    """
+    headers = _sb_headers()
+
+    # Probeer cache
+    cached = await _read_cache(headers, dossier_id, "aanvraag")
+    if cached and cached.get("merged_data"):
+        return {
+            "prefill_data": cached["merged_data"],
+            "velden_count": len(cached.get("velden", [])),
+            "cached": True,
+            "dossier_id": dossier_id,
+        }
+
+    # Geen cache → genereer (eerste keer, langzaam)
+    result = await _run_claude_mapping(dossier_id, "aanvraag")
+    if result is None:
+        return {
+            "prefill_data": {},
+            "velden_count": 0,
+            "cached": False,
+            "dossier_id": dossier_id,
+            "error": "Geen geëxtraheerde documenten gevonden",
+        }
+
+    merged_data, velden = result
+    groups = _build_groups(velden)
+    await _write_cache(headers, dossier_id, "aanvraag", merged_data, velden, groups)
+
+    return {
+        "prefill_data": merged_data,
+        "velden_count": len(velden),
+        "cached": False,
+        "dossier_id": dossier_id,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Cache lezen/schrijven
 # ---------------------------------------------------------------------------
