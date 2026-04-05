@@ -242,22 +242,14 @@ async def populate_cache(dossier_id: str):
 
 
 async def get_prefill_data(dossier_id: str) -> dict:
-    """Haal vooringevulde aanvraag-data op uit de cache.
+    """Haal vooringevulde aanvraag-data op uit de cache. NOOIT een Claude call.
 
-    Retourneert merged_data die direct als AanvraagData gebruikt kan worden.
-    Als cache leeg is, draait een Claude call (eerste keer).
-
-    Returns:
-        {
-            "prefill_data": { ... AanvraagData ... },
-            "velden_count": 50,
-            "cached": true,
-            "dossier_id": "..."
-        }
+    Als cache gevuld → retourneer instant.
+    Als cache leeg → retourneer leeg object + foutmelding.
+    De cache wordt gevuld door process-all (documentverwerking), niet hier.
     """
     headers = _sb_headers()
 
-    # Probeer cache
     cached = await _read_cache(headers, dossier_id, "aanvraag")
     if cached and cached.get("merged_data"):
         return {
@@ -267,26 +259,13 @@ async def get_prefill_data(dossier_id: str) -> dict:
             "dossier_id": dossier_id,
         }
 
-    # Geen cache → genereer (eerste keer, langzaam)
-    result = await _run_claude_mapping(dossier_id, "aanvraag")
-    if result is None:
-        return {
-            "prefill_data": {},
-            "velden_count": 0,
-            "cached": False,
-            "dossier_id": dossier_id,
-            "error": "Geen geëxtraheerde documenten gevonden",
-        }
-
-    merged_data, velden = result
-    groups = _build_groups(velden)
-    await _write_cache(headers, dossier_id, "aanvraag", merged_data, velden, groups)
-
+    # Geen cache → GEEN Claude call, retourneer leeg
     return {
-        "prefill_data": merged_data,
-        "velden_count": len(velden),
+        "prefill_data": {},
+        "velden_count": 0,
         "cached": False,
         "dossier_id": dossier_id,
+        "error": "Verwerk eerst documenten om gegevens automatisch in te vullen",
     }
 
 
