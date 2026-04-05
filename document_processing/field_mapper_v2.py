@@ -91,6 +91,10 @@ _DIENSTVERBAND_MAP = {
     "proeftijdVerstreken": "inkomen{Persoon}[0].loondienst.dienstverband.proeftijdVerstreken",
     "loonbeslag": "inkomen{Persoon}[0].loondienst.dienstverband.loonbeslag",
     "onderhandseLening": "inkomen{Persoon}[0].loondienst.dienstverband.onderhandseLening",
+    "gemiddeldUrenPerWeek": "inkomen{Persoon}[0].loondienst.dienstverband.gemiddeldUrenPerWeek",
+    "beroepstype": "inkomen{Persoon}[0].loondienst.dienstverband.beroepstype",
+    "dienstbetrekkingBijFamilie": "inkomen{Persoon}[0].loondienst.dienstverband.dienstbetrekkingBijFamilie",
+    "einddatumContract": "inkomen{Persoon}[0].loondienst.dienstverband.einddatumContract",
 }
 
 # WGV inkomen bedragen
@@ -104,6 +108,10 @@ _WGV_INKOMEN_MAP = {
     "overwerk": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.overwerk",
     "provisie": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.provisie",
     "dertiendeMaand": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.dertiendeMaand",
+    "structureelFlexibelBudget": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.structureelFlexibelBudget",
+    "variabelBrutoJaarinkomen": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.variabelBrutoJaarinkomen",
+    "vastToeslagOpHetInkomen": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.vastToeslagOpHetInkomen",
+    "vebAfgelopen12Maanden": "inkomen{Persoon}[0].loondienst.werkgeversverklaringCalc.vebAfgelopen12Maanden",
     "totaalWgvInkomen": "inkomen{Persoon}[0].jaarbedrag",
 }
 
@@ -173,10 +181,13 @@ _PENSIOEN_MAP = {
 
 # Verplichtingen
 _VERPLICHTING_MAP = {
-    "kredietbedrag": "verplichtingen[{idx}].kredietbedrag",
-    "maandbedrag": "verplichtingen[{idx}].maandbedrag",
-    "saldo": "verplichtingen[{idx}].saldo",
-    "kredietnummer": "verplichtingen[{idx}].kredietnummer",
+    "kredietbedrag": "verplichtingen[0].kredietbedrag",
+    "maandbedrag": "verplichtingen[0].maandbedrag",
+    "saldo": "verplichtingen[0].saldo",
+    "kredietnummer": "verplichtingen[0].kredietnummer",
+    "type": "verplichtingen[0].type",
+    "maatschappij": "verplichtingen[0].maatschappij",
+    "status": "verplichtingen[0].status",
 }
 
 # Bankgegevens
@@ -193,7 +204,7 @@ _SECTIE_MAPPINGS: dict[str, list[dict]] = {
     "id_kaart": [_PERSOON_MAP, _IDENTITEIT_MAP],
     "rijbewijs": [_PERSOON_MAP, _IDENTITEIT_MAP],
     "werkgeversverklaring": [_WERKGEVER_MAP, _DIENSTVERBAND_MAP, _WGV_INKOMEN_MAP],
-    "salarisstrook": [_WGV_INKOMEN_MAP],
+    "salarisstrook": [_WGV_INKOMEN_MAP, _WERKGEVER_MAP, _DIENSTVERBAND_MAP],
     "inkomen_ibl": [_IBL_MAP],
     "taxatierapport": [_WONING_MAP],
     "hypotheekoverzicht": [_HYPOTHEEK_MAP, _ADRES_MAP, _WONING_MAP],
@@ -206,11 +217,24 @@ _SECTIE_MAPPINGS: dict[str, list[dict]] = {
     "koopovereenkomst": [_WONING_MAP],
     "pensioenspecificatie": [_PENSIOEN_MAP],
     "upo": [_PENSIOEN_MAP],
-    # Documenten die vaak adresgegevens bevatten
+    "loonstrook": [_WGV_INKOMEN_MAP, _WERKGEVER_MAP, _DIENSTVERBAND_MAP],
+    # IB-aangifte bevat persoonsgegevens + adres
+    "ib_aangifte": [_PERSOON_MAP, _ADRES_MAP],
     "aangifte_inkomstenbelasting": [_PERSOON_MAP, _ADRES_MAP],
-    "loonstrook": [_WGV_INKOMEN_MAP, _WERKGEVER_MAP],
+    # Verplichtingen
+    "leningoverzicht": [_VERPLICHTING_MAP],
+    "bkr": [_VERPLICHTING_MAP],
+    "bkr_registratie": [_VERPLICHTING_MAP],
+    # Woningdocumenten
+    "concept_koopovereenkomst": [_WONING_MAP],
+    "verkoopovereenkomst": [_WONING_MAP],
+    "energielabel": [_WONING_MAP],
+    "koop_aanneemovereenkomst": [_WONING_MAP],
+    # Financieel
     "nota_van_afrekening": [_HYPOTHEEK_MAP],
-    "bkr_registratie": [],  # Verplichtingen apart afhandelen
+    "vermogensoverzicht": [_BANK_MAP],
+    # Juridisch
+    "beschikking_rechtbank": [_PERSOON_MAP],
 }
 
 # Velden die NIET ingevuld mogen worden door de mapper
@@ -328,7 +352,7 @@ def map_extracted_to_form(
         # Zoek de mapping-tabellen voor deze sectie
         mappings = _SECTIE_MAPPINGS.get(sectie, [])
         if not mappings:
-            logger.debug("Geen mapping voor sectie '%s', overslaan", sectie)
+            logger.warning("Unmapped sectie: '%s' (%d velden overgeslagen)", sectie, len(fields))
             continue
 
         for field_name, value in fields.items():
@@ -347,7 +371,8 @@ def map_extracted_to_form(
                     break
 
             if not target_pad:
-                # Veld niet in mapping → overslaan (geen onbekende velden invullen)
+                # Veld niet in mapping → loggen zodat we het kunnen toevoegen
+                logger.warning("Unmapped field: sectie=%s veld=%s waarde=%s", sectie, field_name, str(value)[:50])
                 continue
 
             # Vervang persoon-placeholders

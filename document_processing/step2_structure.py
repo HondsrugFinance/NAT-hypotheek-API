@@ -64,10 +64,60 @@ Partner: {partner or 'geen'}
 5. Meld inconsistenties met bestaande dossierdata
 6. Meld waarschuwingen (verlopen document, toekomstige datums, ontbrekende info)
 
-## Speciale veldnamen
-- Pensioenbijdrage: altijd "maandelijksePensioenbijdrage" (bedrag) en "pensioenbijdragePercentage" (%)
-- Bruto salaris: "brutoJaarsalaris" (jaar) of "brutoMaandloon" (maand)
-- Vakantiegeld: "vakantiegeldBedrag" (bedrag) en "vakantiegeldPercentage" (%)
+## VERPLICHTE VELDNAMEN — gebruik EXACT deze namen, geen synoniemen
+
+Persoonsgegevens:
+  voornamen, achternaam, tussenvoegsel, voorletters, geboortedatum,
+  geboorteplaats, geboorteland, nationaliteit, geslacht, bsn, roepnaam
+
+Legitimatie:
+  legitimatiesoort, legitimatienummer, afgiftedatum, geldigTot, afgifteplaats
+
+Adres/Contact:
+  straat, huisnummer, toevoeging, postcode, woonplaats, email, telefoonnummer
+
+Werkgever:
+  werkgeverNaam, werkgeverAdres, werkgeverPostcode, werkgeverPlaats,
+  kvkNummer, rsin
+
+Dienstverband:
+  functie, soortDienstverband, inDienstSinds, directeurAandeelhouder,
+  proeftijd, proeftijdVerstreken, loonbeslag, onderhandseLening,
+  gemiddeldUrenPerWeek, beroepstype, dienstbetrekkingBijFamilie,
+  einddatumContract
+
+WGV inkomen (werkgeversverklaring):
+  brutoJaarsalaris, brutoMaandloon, vakantiegeldBedrag, vakantiegeldPercentage,
+  eindejaarsuitkering, onregelmatigheidstoeslag, overwerk, provisie,
+  dertiendeMaand, structureelFlexibelBudget, variabelBrutoJaarinkomen,
+  vastToeslagOpHetInkomen, totaalWgvInkomen
+
+IBL (inkomensbepaling loondienst):
+  gemiddeldJaarToetsinkomen, maandelijksePensioenbijdrage
+
+Woning/Onderpand:
+  straat, huisnummer, toevoeging, postcode, woonplaats, typeWoning,
+  soortOnderpand, waardeWoning, wozWaarde, energielabel, bouwjaar,
+  erfpacht, jaarlijkseErfpacht, eigenaar, eigendomAandeelAanvrager,
+  eigendomAandeelPartner, woningToepassing, woningstatus, waardeVastgesteldMet
+
+Hypotheek:
+  geldverstrekker, hypotheeknummer, hoofdsom, inschrijving, nhg
+
+Leningdeel (per leningdeel):
+  bedrag, rentePercentage, aflosvorm, ingangsdatum, looptijd, einddatum,
+  ingangsdatumRvp, renteVastPeriode, einddatumRvp, fiscaalRegime
+
+Verplichtingen:
+  type, kredietbedrag, maandbedrag, saldo, kredietnummer,
+  ingangsdatum, einddatum, status, maatschappij
+
+Bank:
+  iban
+
+Pensioen:
+  ouderdomspensioenTotaalExclAow, aowBedrag, nabestaandenpensioenPartner,
+  nabestaandenpensioenKinderen, pensioenleeftijd
 
 ## Documenttype-specifieke instructies
 
