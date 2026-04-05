@@ -419,6 +419,22 @@ async def apply_imports_endpoint(dossier_id: str, request: Request, body: ApplyI
         raise HTTPException(500, f"Importeren mislukt: {_ex}")
 
 
+@router.delete("/{dossier_id}/clear-cache")
+async def clear_cache(dossier_id: str, request: Request):
+    """Verwijder alle import cache entries voor een dossier."""
+    import httpx, os
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.delete(
+            f"{url}/rest/v1/import_cache",
+            headers=headers,
+            params={"dossier_id": f"eq.{dossier_id}"},
+        )
+    return {"deleted": True, "status": resp.status_code}
+
+
 @router.get("/{dossier_id}/prefill-aanvraag")
 async def prefill_aanvraag(dossier_id: str, request: Request):
     """Haal vooringevulde aanvraag-data op uit de import cache.
