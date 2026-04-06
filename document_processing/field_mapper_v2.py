@@ -171,13 +171,9 @@ _LENINGDEEL_MAP = {
     "fiscaalRegime": "hypotheken[0].leningdelen[{idx}].fiscaalRegime",
 }
 
-# Pensioen (uit pensioenspecificatie / UPO)
-_PENSIOEN_MAP = {
-    "ouderdomspensioenTotaalExclAow": "inkomen{Persoon}[1].jaarbedrag",
-    "aowBedrag": "inkomen{Persoon}[2].jaarbedrag",
-    "nabestaandenpensioenPartner": "inkomen{Persoon}[0].pensioenData.partnerpensioen.verzekerdVoor",
-    "pensioenleeftijd": "inkomen{Persoon}[0].pensioenData.ouderdomspensioen.ingangsdatum",
-}
+# Pensioen — wordt NIET via simpele mapping afgehandeld maar via _set_derived_fields
+# omdat pensioen volledige inkomen-items vereist met type="pensioen" en type="uitkering"
+_PENSIOEN_MAP = {}  # leeg — pensioen gaat via speciale logica
 
 # Verplichtingen
 _VERPLICHTING_MAP = {
@@ -243,17 +239,113 @@ _SKIP_FIELDS = {
     "einddatum",  # Default = AOW-datum in Lovable
 }
 
+# WGV deelbedragen: skip als waarde 0 (ruis, alleen relevant als > 0)
+_SKIP_IF_ZERO = {
+    "overwerk", "provisie", "dertiendeMaand", "structureelFlexibelBudget",
+    "variabelBrutoJaarinkomen", "vastToeslagOpHetInkomen", "vebAfgelopen12Maanden",
+    "onregelmatigheidstoeslag", "eindejaarsuitkering",
+}
+
 # Waarde-transformaties voor dropdown-velden
-_VALUE_TRANSFORMS: dict[str, dict[str, str]] = {
+_BOOL_TO_JA_NEE = {True: "Ja", False: "Nee", "True": "Ja", "False": "Nee", "true": "Ja", "false": "Nee", "Ja": "Ja", "Nee": "Nee"}
+
+_VALUE_TRANSFORMS: dict[str, dict] = {
     "geslacht": {"M": "man", "V": "vrouw", "m": "man", "v": "vrouw", "Man": "man", "Vrouw": "vrouw"},
     "legitimatiesoort": {
         "Paspoort": "paspoort", "paspoort": "paspoort",
         "ID-kaart": "europese_id", "Europese ID": "europese_id", "ID kaart": "europese_id",
+        "rijbewijs": None,  # Rijbewijs is geen geldig legitimatietype voor hypotheek → negeren
     },
-    "directeurAandeelhouder": {"True": "Ja", "true": "Ja", "False": "Nee", "false": "Nee", True: "Ja", False: "Nee"},
-    "proeftijd": {"True": "Ja", "true": "Ja", "False": "Nee", "false": "Nee", True: "Ja", False: "Nee"},
-    "loonbeslag": {"True": "Ja", "true": "Ja", "False": "Nee", "false": "Nee", True: "Ja", False: "Nee"},
-    "onderhandseLening": {"True": "Ja", "true": "Ja", "False": "Nee", "false": "Nee", True: "Ja", False: "Nee"},
+    "directeurAandeelhouder": _BOOL_TO_JA_NEE,
+    "proeftijd": _BOOL_TO_JA_NEE,
+    "proeftijdVerstreken": _BOOL_TO_JA_NEE,
+    "loonbeslag": _BOOL_TO_JA_NEE,
+    "onderhandseLening": _BOOL_TO_JA_NEE,
+    "dienstbetrekkingBijFamilie": _BOOL_TO_JA_NEE,
+    "nhg": _BOOL_TO_JA_NEE,
+    "erfpacht": _BOOL_TO_JA_NEE,
+
+    # Dienstverband: document-tekst → Lovable dropdown
+    "soortDienstverband": {
+        "arbeidsovereenkomst voor onbepaalde tijd": "Loondienst – vast",
+        "arbeidsovereenkomst voor bepaalde tijd": "Loondienst – zonder intentieverklaring",
+        "arbeidsovereenkomst onbepaalde tijd": "Loondienst – vast",
+        "arbeidsovereenkomst bepaalde tijd": "Loondienst – zonder intentieverklaring",
+        "vast": "Loondienst – vast",
+        "onbepaalde tijd": "Loondienst – vast",
+        "bepaalde tijd": "Loondienst – zonder intentieverklaring",
+        "Loondienst – vast": "Loondienst – vast",
+    },
+
+    # Type woning: document-tekst → Lovable dropdown (woning/appartement/overig)
+    "typeWoning": {
+        "Tussen-/schakelwoning": "woning", "tussenwoning": "woning",
+        "Vrijstaande woning": "woning", "vrijstaand": "woning",
+        "Hoekwoning": "woning", "hoekwoning": "woning",
+        "2-onder-1-kap": "woning", "2-onder-1-kapwoning": "woning",
+        "Semi-bungalow": "woning", "Bungalow": "woning",
+        "Rijtjeswoning": "woning", "Geschakelde woning": "woning",
+        "woning": "woning", "Woning": "woning",
+        "appartement": "appartement", "Appartement": "appartement",
+        "Galerijflat": "appartement", "Bovenwoning": "appartement",
+        "Benedenwoning": "appartement", "Maisonnette": "appartement",
+        "appartementsrecht": "appartement",
+    },
+
+    # Soort onderpand: document-tekst → Lovable dropdown
+    "soortOnderpand": {
+        "Tussen-/schakelwoning": "tussenwoning", "Tussenwoning": "tussenwoning",
+        "Vrijstaande woning": "vrijstaand", "Vrijstaand": "vrijstaand",
+        "Semi-bungalow": "vrijstaand", "Bungalow": "vrijstaand",
+        "Hoekwoning": "hoekwoning",
+        "2-onder-1-kap": "2-onder-1-kap", "2-onder-1-kapwoning": "2-onder-1-kap",
+        "Galerijflat": "galerijflat", "galerijflat": "galerijflat",
+        "Bovenwoning": "bovenwoning", "Benedenwoning": "benedenwoning",
+        "Maisonnette": "maisonnette",
+        "appartementsrecht": "galerijflat",
+        "Woning": "tussenwoning",  # generieke fallback
+        "Woonboerderij": "woonboerderij",
+    },
+
+    # Energielabel
+    "energielabel": {
+        "Onbekend": "geen_label", "onbekend": "geen_label",
+        "Geen label": "geen_label", "geen label": "geen_label",
+        "N.v.t.": "geen_label",
+    },
+
+    # Woning toepassing
+    "woningToepassing": {
+        "eigenbewoond": "eigen_woning", "eigen bewoning": "eigen_woning",
+        "Eigen bewoning": "eigen_woning", "eigen_woning": "eigen_woning",
+        "huur": "huurwoning", "huurwoning": "huurwoning",
+    },
+
+    # Woning status
+    "woningstatus": {
+        "verkregen_via_verdeling": "behouden",
+        "bestaande bouw": None,  # Geen geldige woningstatus → weglaten
+        "Bestaande bouw": None,
+        "behouden": "behouden", "verkopen": "verkopen",
+        "verkocht_onder_voorbehoud": "verkocht_onder_voorbehoud",
+        "verkocht_definitief": "verkocht_definitief",
+    },
+
+    # Waarde vastgesteld met
+    "waardeVastgesteldMet": {
+        "taxatierapport": "taxatierapport", "Taxatierapport": "taxatierapport",
+        "desktoptaxatie": "desktoptaxatie", "Desktoptaxatie": "desktoptaxatie",
+        "akte van verdeling": None,  # Geen geldige optie → weglaten
+    },
+
+    # Eigenaar: probeer te matchen, anders weglaten
+    "eigenaar": {
+        "gezamenlijk": "gezamenlijk", "Gezamenlijk": "gezamenlijk",
+        "aanvrager": "aanvrager", "Aanvrager": "aanvrager",
+        "partner": "partner", "Partner": "partner",
+        "Volle eigendom": None,  # Niet te mappen zonder context → weglaten
+        "verkoper": None,  # Niet relevant → weglaten
+    },
 }
 
 
@@ -270,17 +362,27 @@ def _resolve_persoon_pad(pad_template: str, persoon: str) -> str:
 
 def _transform_value(field_name: str, value: Any) -> Any:
     """Transformeer waarden naar Lovable-compatibele formaten."""
+    # Lege strings → None (niet invullen)
+    if value == "" or value is None:
+        return None
+
+    # Skip 0-waarden voor WGV deelbedragen (ruis)
+    if field_name in _SKIP_IF_ZERO and (value == 0 or value == 0.0):
+        return None
+
     if field_name in _VALUE_TRANSFORMS:
         transforms = _VALUE_TRANSFORMS[field_name]
         if value in transforms:
             return transforms[value]
         # String versie proberen
-        if str(value) in transforms:
-            return transforms[str(value)]
-
-    # Lege strings → None (niet invullen)
-    if value == "" or value is None:
-        return None
+        str_val = str(value).strip()
+        if str_val in transforms:
+            return transforms[str_val]
+        # Lowercase proberen
+        if str_val.lower() in {k.lower() if isinstance(k, str) else k: k for k in transforms}:
+            for k, v in transforms.items():
+                if isinstance(k, str) and k.lower() == str_val.lower():
+                    return v
 
     return value
 
@@ -447,6 +549,41 @@ def _set_derived_fields(merged_data: dict, extracted_fields: list[dict], velden:
             datum = ef.get("fields", {}).get("datumInDienst") or ef.get("fields", {}).get("inDienstSinds")
             if datum:
                 _set_nested(merged_data, f"{prefix}.ingangsdatum", datum)
+
+        # Pensioen: maak aparte inkomen-items met type="pensioen" en "uitkering"
+        if sectie in ("pensioenspecificatie", "upo"):
+            fields = ef.get("fields", {})
+            pensioen_bedrag = fields.get("ouderdomspensioenTotaalExclAow")
+            aow_bedrag = fields.get("aowBedrag")
+
+            if pensioen_bedrag:
+                pensioen_prefix = f"inkomen{p}[1]"
+                _set_nested(merged_data, f"{pensioen_prefix}.type", "pensioen")
+                _set_nested(merged_data, f"{pensioen_prefix}.soort", "ouderdomspensioen")
+                _set_nested(merged_data, f"{pensioen_prefix}.inkomstenbron", "Pensioenfonds")
+                _set_nested(merged_data, f"{pensioen_prefix}.jaarbedrag", pensioen_bedrag)
+                velden.append({
+                    "pad": f"{pensioen_prefix}.jaarbedrag",
+                    "label": "Ouderdomspensioen (excl. AOW)",
+                    "waarde": pensioen_bedrag,
+                    "waarde_display": _format_display(pensioen_bedrag, "jaarbedrag"),
+                    "bron": sectie, "status": "nieuw", "source": "extracted",
+                })
+
+            if aow_bedrag:
+                aow_prefix = f"inkomen{p}[2]"
+                _set_nested(merged_data, f"{aow_prefix}.type", "uitkering")
+                _set_nested(merged_data, f"{aow_prefix}.soort", "AOW")
+                _set_nested(merged_data, f"{aow_prefix}.inkomstenbron", "Sociale Verzekeringsbank")
+                _set_nested(merged_data, f"{aow_prefix}.jaarbedrag", aow_bedrag)
+                _set_nested(merged_data, f"{aow_prefix}.isAOW", True)
+                velden.append({
+                    "pad": f"{aow_prefix}.jaarbedrag",
+                    "label": "AOW-uitkering",
+                    "waarde": aow_bedrag,
+                    "waarde_display": _format_display(aow_bedrag, "jaarbedrag"),
+                    "bron": sectie, "status": "nieuw", "source": "extracted",
+                })
 
 
 def _build_check_vragen_from_beslissingen(beslissingen: list[dict]) -> list[dict]:
