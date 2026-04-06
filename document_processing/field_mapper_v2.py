@@ -43,7 +43,7 @@ _PERSOON_MAP = {
 _IDENTITEIT_MAP = {
     "documentnummer": "{persoon}.identiteit.legitimatienummer",
     "legitimatienummer": "{persoon}.identiteit.legitimatienummer",
-    "bsn": "{persoon}.identiteit.bsn",
+    # bsn: bewust NIET gemapped (privacy, staat in _SKIP_FIELDS)
     "documentsoort": "{persoon}.identiteit.legitimatiesoort",
     "legitimatiesoort": "{persoon}.identiteit.legitimatiesoort",
     "afgiftedatum": "{persoon}.identiteit.afgiftedatum",
@@ -233,18 +233,22 @@ _SECTIE_MAPPINGS: dict[str, list[dict]] = {
     "beschikking_rechtbank": [_PERSOON_MAP],
 }
 
-# Velden die NIET ingevuld mogen worden door de mapper
-# (Lovable heeft defaults die niet overschreven mogen worden)
+# Velden die NOOIT ingevuld mogen worden door de mapper
 _SKIP_FIELDS = {
-    "einddatum",  # Default = AOW-datum in Lovable
+    "einddatum",  # Default = AOW-datum in Lovable, niet overschrijven
+    "bsn",        # Privacy-gevoelig, niet opslaan in aanvraag (backlog: zwartlakken)
+    # WGV sub-inkomens: alleen het totaal (totaalWgvInkomen) telt
+    "brutoJaarsalaris", "brutoMaandloon",
+    "vakantiegeldBedrag", "vakantiegeldPercentage",
+    "eindejaarsuitkering", "onregelmatigheidstoeslag",
+    "overwerk", "provisie", "dertiendeMaand",
+    "structureelFlexibelBudget", "variabelBrutoJaarinkomen",
+    "vastToeslagOpHetInkomen", "vebAfgelopen12Maanden",
+    "pensioenbijdragePercentage",
 }
 
-# WGV deelbedragen: skip als waarde 0 (ruis, alleen relevant als > 0)
-_SKIP_IF_ZERO = {
-    "overwerk", "provisie", "dertiendeMaand", "structureelFlexibelBudget",
-    "variabelBrutoJaarinkomen", "vastToeslagOpHetInkomen", "vebAfgelopen12Maanden",
-    "onregelmatigheidstoeslag", "eindejaarsuitkering",
-}
+# _SKIP_IF_ZERO niet meer nodig — WGV deelbedragen staan nu in _SKIP_FIELDS
+_SKIP_IF_ZERO: set[str] = set()
 
 # Waarde-transformaties voor dropdown-velden
 _BOOL_TO_JA_NEE = {True: "Ja", False: "Nee", "True": "Ja", "False": "Nee", "true": "Ja", "false": "Nee", "Ja": "Ja", "Nee": "Nee"}
