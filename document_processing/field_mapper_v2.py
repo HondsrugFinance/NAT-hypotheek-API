@@ -628,6 +628,41 @@ def _set_derived_fields(merged_data: dict, extracted_fields: list[dict], velden:
                     "bron": sectie, "status": "nieuw", "source": "extracted",
                 })
 
+            # Nabestaandenpensioen
+            nb_partner = fields.get("nabestaandenpensioenPartner")
+            nb_kinderen = fields.get("nabestaandenpensioenKinderen")
+            pensioenleeftijd = fields.get("pensioenleeftijd")
+
+            if nb_partner:
+                _set_nested(merged_data, f"inkomen{p}[0].pensioenData.partnerpensioen.verzekerdVoor", nb_partner)
+                velden.append({
+                    "pad": f"inkomen{p}[0].pensioenData.partnerpensioen.verzekerdVoor",
+                    "label": "Nabestaandenpensioen partner",
+                    "waarde": nb_partner,
+                    "waarde_display": _format_display(nb_partner, "nabestaandenpensioenPartner"),
+                    "bron": sectie, "status": "nieuw", "source": "extracted",
+                })
+
+            if nb_kinderen:
+                _set_nested(merged_data, f"inkomen{p}[0].pensioenData.wezenpensioen.verzekerd", nb_kinderen)
+                velden.append({
+                    "pad": f"inkomen{p}[0].pensioenData.wezenpensioen.verzekerd",
+                    "label": "Wezenpensioen",
+                    "waarde": nb_kinderen,
+                    "waarde_display": _format_display(nb_kinderen, "nabestaandenpensioenKinderen"),
+                    "bron": sectie, "status": "nieuw", "source": "extracted",
+                })
+
+            if pensioenleeftijd:
+                _set_nested(merged_data, f"inkomen{p}[1].pensioenData.ouderdomspensioen.ingangsdatum", str(pensioenleeftijd))
+                velden.append({
+                    "pad": f"inkomen{p}[1].pensioenData.ouderdomspensioen.ingangsdatum",
+                    "label": "Pensioenleeftijd",
+                    "waarde": pensioenleeftijd,
+                    "waarde_display": str(pensioenleeftijd),
+                    "bron": sectie, "status": "nieuw", "source": "extracted",
+                })
+
 
     # Afgeleide velden na alle extracties
     for person_prefix in ["aanvrager", "partner"]:
