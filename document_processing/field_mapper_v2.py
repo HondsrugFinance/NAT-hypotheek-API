@@ -583,11 +583,15 @@ def _ensure_required_structure(data: dict):
         if "id" not in inschrijving:
             inschrijving["id"] = str(uuid.uuid4())
         if "onderpandWoningIds" not in inschrijving:
-            inschrijving["onderpandWoningIds"] = []
+            # Koppel aan eerste woning als die er is
+            woningen = data.get("woningen", [])
+            inschrijving["onderpandWoningIds"] = [woningen[0]["id"]] if woningen and "id" in woningen[0] else []
         if "eigenaar" not in inschrijving:
             inschrijving["eigenaar"] = ""
         if "rangorde" not in inschrijving:
             inschrijving["rangorde"] = 1
+        if "inschrijving" not in inschrijving:
+            inschrijving["inschrijving"] = None  # Lovable verwacht dit veld
         # nhg: moet boolean zijn, niet string
         if isinstance(inschrijving.get("nhg"), str):
             inschrijving["nhg"] = inschrijving["nhg"].lower() in ("ja", "true", "yes")
