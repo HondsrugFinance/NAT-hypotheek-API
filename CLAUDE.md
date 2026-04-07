@@ -848,10 +848,14 @@ De frontend (nu Lovable, straks Next.js) wordt ALLEEN gebruikt voor weergave en 
 
 ### Smart import architectuur (v2: AI analyseert, Python vertaalt)
 - **Vergaarbak**: `extracted_fields` tabel (per document, per dossier)
-- **AI analyse**: `step3_dossier_analysis.py` — Claude analyseert alle documenten samen, produceert `beslissingen` (keuzemomenten)
+- **AI analyse**: `step3_dossier_analysis.py` — Claude analyseert alle documenten samen, produceert `beslissingen`
 - **Python mapping**: `field_mapper_v2.py` — deterministische lookup-tabel: extracted_fields → AanvraagData paden (instant, geen API call)
-- **Beslissingen → checkvragen**: stap 3 `beslissingen` worden check_vragen voor de frontend (alleen echte keuzemomenten)
+- **Python checkvragen**: inkomen (WGV vs IBL), doelstelling, woningwaarde — gegenereerd in Python, niet afhankelijk van Claude
+- **Stap 3 checkvragen**: geldverstrekker, ondernemersinkomen — uit Claude analyse
+- **Post-processing**: achternaam/tussenvoegsel split, geldigTot berekening, legitimatiesoort afleiden, voorletters afleiden
 - **Cache**: `import_cache` tabel — resultaat per (dossier, context), instant ophaalbaar
 - **Config-injectie**: `config_loader.py` — geldverstrekkers, energielabels etc. uit config/*.json in Claude prompts
-- **Selectieve merge**: `_set_nested()` — alleen aangevinkte velden schrijven, bestaande data intact
-- **Twee contexten**: `berekening` (~10 velden) en `aanvraag` (~50 velden)
+- **Bronprioriteit**: paspoort > ID > WGV > salarisstrook > IBL > taxatierapport > hypotheekoverzicht
+- **Niet mappen**: BSN (privacy), WGV sub-bedragen (alleen totaal), adres (Lovable prefill), einddatum (AOW default)
+- **Documentatie**: `docs/DOCUMENT-EXTRACTIE.md` — compleet overzicht van het extractieproces
+- **Master Excel**: `docs/prefill-mapping-master.xlsx` — levend document: alle velden, bronnen, feedback
