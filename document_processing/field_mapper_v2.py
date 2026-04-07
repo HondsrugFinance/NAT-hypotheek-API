@@ -199,39 +199,53 @@ _BANK_MAP = {
 # Sectie → mapping tabel koppeling
 # Sommige secties gebruiken meerdere mappings
 _SECTIE_MAPPINGS: dict[str, list[dict]] = {
+    # Identificatie: paspoort/ID zijn leidend. Rijbewijs NIET gebruiken
+    # (kan van ex-partner zijn, is geen geldig legitimatiebewijs voor hypotheek)
     "paspoort": [_PERSOON_MAP, _IDENTITEIT_MAP],
     "id_kaart": [_PERSOON_MAP, _IDENTITEIT_MAP],
-    "rijbewijs": [_PERSOON_MAP, _IDENTITEIT_MAP],
+    # rijbewijs: bewust NIET gemapped (kan van ex-partner zijn, geen geldig legitimatiebewijs)
+
+    # Inkomen: WGV > loonstrook > jaaropgave. IBL apart.
     "werkgeversverklaring": [_WERKGEVER_MAP, _DIENSTVERBAND_MAP, _WGV_INKOMEN_MAP],
     "salarisstrook": [_WGV_INKOMEN_MAP, _WERKGEVER_MAP, _DIENSTVERBAND_MAP],
-    "inkomen_ibl": [_IBL_MAP],
-    "taxatierapport": [_WONING_MAP],
-    "hypotheekoverzicht": [_HYPOTHEEK_MAP, _ADRES_MAP, _WONING_MAP],
-    "kadaster_eigendom": [_WONING_MAP],
-    "kadaster_hypotheek": [_HYPOTHEEK_MAP],
-    "jaaropgave": [_BANK_MAP, _WGV_INKOMEN_MAP],
-    "bankafschrift": [_BANK_MAP],
-    "echtscheidingsconvenant": [_WONING_MAP, _HYPOTHEEK_MAP],
-    "akte_van_verdeling": [_PERSOON_MAP, _WONING_MAP],
-    "koopovereenkomst": [_WONING_MAP],
-    "pensioenspecificatie": [_PENSIOEN_MAP],
-    "upo": [_PENSIOEN_MAP],
     "loonstrook": [_WGV_INKOMEN_MAP, _WERKGEVER_MAP, _DIENSTVERBAND_MAP],
-    # IB-aangifte bevat persoonsgegevens + adres
-    "ib_aangifte": [_PERSOON_MAP, _ADRES_MAP],
-    "aangifte_inkomstenbelasting": [_PERSOON_MAP, _ADRES_MAP],
-    # Verplichtingen
-    "leningoverzicht": [_VERPLICHTING_MAP],
-    "bkr": [_VERPLICHTING_MAP],
-    "bkr_registratie": [_VERPLICHTING_MAP],
-    # Woningdocumenten
+    "inkomen_ibl": [_IBL_MAP],
+    "jaaropgave": [_BANK_MAP, _WGV_INKOMEN_MAP],
+
+    # Woning: taxatierapport leidend, koopovereenkomst secundair
+    "taxatierapport": [_WONING_MAP],
+    "koopovereenkomst": [_WONING_MAP],
     "concept_koopovereenkomst": [_WONING_MAP],
     "verkoopovereenkomst": [_WONING_MAP],
     "energielabel": [_WONING_MAP],
     "koop_aanneemovereenkomst": [_WONING_MAP],
+    "kadaster_eigendom": [_WONING_MAP],
+
+    # Hypotheek: hypotheekoverzicht leidend. GEEN adres mappen (komt uit Lovable).
+    "hypotheekoverzicht": [_HYPOTHEEK_MAP, _WONING_MAP],  # _ADRES_MAP VERWIJDERD
+    "kadaster_hypotheek": [_HYPOTHEEK_MAP],
+
     # Financieel
+    "bankafschrift": [_BANK_MAP],
     "nota_van_afrekening": [_HYPOTHEEK_MAP],
     "vermogensoverzicht": [_BANK_MAP],
+
+    # Verplichtingen
+    "leningoverzicht": [_VERPLICHTING_MAP],
+    "bkr": [_VERPLICHTING_MAP],
+    "bkr_registratie": [_VERPLICHTING_MAP],
+
+    # Pensioen
+    "pensioenspecificatie": [_PENSIOEN_MAP],
+    "upo": [_PENSIOEN_MAP],
+
+    # Juridisch: alleen persoon + woning, GEEN adres
+    "echtscheidingsconvenant": [_WONING_MAP, _HYPOTHEEK_MAP, _PERSOON_MAP],
+    "akte_van_verdeling": [_PERSOON_MAP, _WONING_MAP],
+
+    # IB-aangifte: GEEN adres mappen (komt uit Lovable)
+    "ib_aangifte": [_PERSOON_MAP],
+    "aangifte_inkomstenbelasting": [_PERSOON_MAP],
     # Juridisch
     "beschikking_rechtbank": [_PERSOON_MAP],
 }
