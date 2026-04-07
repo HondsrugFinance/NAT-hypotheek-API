@@ -628,6 +628,52 @@ def _add_python_check_vragen(check_vragen: list, merged_data: dict, extracted_fi
                 "aanbeveling": 0,
             })
 
+    # Woningwaarde: als taxatierapport EN hypotheekoverzicht verschillende waarden hebben
+    woningen = merged_data.get("woningen", [])
+    if woningen and "woningwaarde" not in existing_types:
+        waarde_woning = woningen[0].get("waardeWoning")
+        woz_waarde = woningen[0].get("wozWaarde")
+
+        # Zoek of er meerdere bronnen zijn met verschillende waarden
+        waarden = {}
+        for ef in extracted_fields:
+            fields = ef.get("fields", {})
+            sectie = ef.get("sectie", "")
+            for veld in ("marktwaarde", "waardeWoning", "taxatiewaarde"):
+                if veld in fields and fields[veld]:
+                    waarden[sectie] = fields[veld]
+
+        if len(waarden) >= 2:
+            unieke = set(waarden.values())
+            if len(unieke) >= 2:
+                opties = []
+                for bron, waarde in waarden.items():
+                    opties.append({
+                        "label": f"\u20ac {waarde:,.0f} ({bron})".replace(",", "."),
+                        "pad": "woningen[0].waardeWoning",
+                        "waarde": waarde,
+                    })
+                check_vragen.append({
+                    "id": "woningwaarde",
+                    "vraag": "Welke woningwaarde hanteren?",
+                    "opties": opties,
+                    "bron": ", ".join(waarden.keys()),
+                    "evidence": "Verschillende waarden in documenten",
+                    "categorie": "woning",
+                    "pad": "woningen[0].waardeWoning",
+                    "aanbeveling": 0,
+                })
+
+    # Geldverstrekker: als de waarde "Onbekend" is maar er IS een checkvraag met alternatieven
+    # → gebruik de aanbevolen optie als default
+    hi = merged_data.get("hypotheekInschrijvingen", [])
+    if hi and hi[0].get("geldverstrekker") in ("Onbekend", "onbekend", ""):
+        for cv in check_vragen:
+            if cv.get("id") == "geldverstrekker" and cv.get("opties"):
+                aanbeveling_idx = cv.get("aanbeveling", 0)
+                if aanbeveling_idx < len(cv["opties"]):
+                    hi[0]["geldverstrekker"] = cv["opties"][aanbeveling_idx].get("waarde", "Onbekend")
+
 
 def _ensure_required_structure(data: dict):
     """Garandeer dat de verplichte structuur aanwezig is zodat Lovable niet crasht.
