@@ -71,6 +71,12 @@ Bepaal ook of het bij de aanvrager, partner, gezamenlijk of ex-partner hoort.
 Let op gehuwde namen: "Slinger-Aap" kan matchen op "Slinger" (aanvrager) of "Aap" (partner meisjesnaam).
 Let op: "Burg. van [stad]" op een paspoort betekent Burgemeester van [stad] → afgifteplaats = [stad].
 
+BELANGRIJK bij paspoort/ID:
+- Op een Nederlands paspoort staat de GEBOORTENAAM, niet de getrouwde naam.
+  De achternaam op het paspoort is altijd de eigen achternaam (meisjesnaam/geboortenaam).
+  Voorbeeld: als iemand "Van Hall-van der Lee" heet, staat op het paspoort: achternaam="van der Lee".
+- Split ALTIJD achternaam en tussenvoegsel: "van der Lee" → tussenvoegsel="van der", achternaam="Lee".
+
 ## Stap 2: Volledige extractie
 Geef ALLE informatie uit het document, gestructureerd in categorieën:
 

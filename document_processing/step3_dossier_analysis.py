@@ -94,6 +94,10 @@ Analyseer het complete dossier en geef:
    - Proeftijd niet verstreken
    - Loonbeslag
    - Document betreft een andere woning/partner dan verwacht
+   - EX-PARTNER CHECK: als er een echtscheidingsconvenant of akte van verdeling is,
+     check of namen uit die documenten (ex-partner) NIET verward worden met de huidige partner.
+     Als een naam uit echtscheidingsstukken ook voorkomt als "partner" in andere documenten,
+     meld dit als waarschuwing: "Naam [X] komt voor in echtscheidingsstukken — is dit een ex-partner?"
 
 5. **Samenvatting**: Korte status van het dossier in 2-3 zinnen.
 
