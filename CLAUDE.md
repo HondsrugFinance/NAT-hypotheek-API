@@ -137,6 +137,12 @@ NAT-hypotheek-API/
 │   ├── classifier.py           # Document classificatie
 │   └── extractor.py            # Document extractie
 │
+├── email_intake/               # Automatische document ontvangst via email
+│   ├── __init__.py
+│   ├── monitor.py              # Graph API email polling (4 mailboxen)
+│   ├── matcher.py              # Afzender → dossier matching
+│   └── route.py                # POST /email-intake/poll, GET /email-intake/status
+│
 ├── energielabel/               # EP-Online energielabel opvragen
 │   ├── __init__.py
 │   └── ep_online_client.py     # EP-Online API v5 client (RVO)
@@ -233,7 +239,24 @@ POST /doc-processing/{dossier_id}/process-all       # Batch: scan _inbox + verwe
 GET  /doc-processing/{dossier_id}/extracted          # Alle extracties ophalen
 GET  /doc-processing/{dossier_id}/available-imports  # Smart import preview (uit cache)
 POST /doc-processing/{dossier_id}/apply-imports      # Geselecteerde velden importeren
+POST /doc-processing/cron/scan-inboxes              # Cron: scan _inbox folders (X-Cron-Secret)
 ```
+
+### Automatische Document Trigger
+```
+POST /webhooks/document-uploaded                     # Supabase webhook: auto-verwerking bij INSERT
+```
+Supabase webhook op `documents` tabel INSERT → start verwerking automatisch.
+Debounce: stap 3 (totaalanalyse) wacht 30s na laatste upload.
+
+### Email Intake
+```
+POST /email-intake/poll                              # Cron: check mailboxen (X-Cron-Secret)
+GET  /email-intake/status                            # Laatste poll status
+```
+Pollt 4 mailboxen (alex@, quido@, stephan@, info@) elke 2 min via Graph API.
+Alleen emails van bekende klanten (match op emailadres in dossier) worden verwerkt.
+Bijlagen → SharePoint _inbox → automatische verwerking → concept-bevestigingsmail in Outlook adviseur.
 
 **Smart import flow:**
 1. `process-all` verwerkt documenten → extracties in `extracted_fields` + cache in `import_cache`
@@ -804,7 +827,8 @@ Vereist: actuele rentes in de tool + HDN-export om aanvragen elektronisch te ver
 | Selectieve merge (alleen aangevinkte velden) | ✅ |
 | Deduplicatie (beste versie → klantmap, rest → archief) | 📋 |
 | Samenvoegen foto's (meerdere JPGs → 1 document) | 📋 |
-| Automatische trigger bij upload | 📋 |
+| Automatische trigger bij upload | ✅ Webhook + cron polling |
+| Email intake (klant mailt documenten) | ✅ 4 mailboxen, Graph API, concept-bevestigingsmail |
 
 ### Doel C — Frontend migratie (Lovable → Next.js)
 
