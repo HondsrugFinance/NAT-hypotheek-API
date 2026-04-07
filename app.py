@@ -130,9 +130,15 @@ app.include_router(document_router)
 logger.info("Document API endpoints registered: POST /documents/upload, GET /documents/{id}, GET /documents/{id}/ontbrekend")
 
 # --- Document Processing Pipeline (OCR, classificatie, extractie) ---
-from document_processing.route import router as doc_processing_router
+from document_processing.route import router as doc_processing_router, webhook_router as doc_webhook_router
 app.include_router(doc_processing_router)
-logger.info("Document Processing endpoints registered: POST /documents/{id}/process, GET /documents/{id}/extracted")
+app.include_router(doc_webhook_router)
+logger.info("Document Processing endpoints registered: POST /documents/{id}/process, GET /documents/{id}/extracted, POST /webhooks/document-uploaded")
+
+# --- Email Intake (automatische document ontvangst via email) ---
+from email_intake.route import router as email_intake_router
+app.include_router(email_intake_router)
+logger.info("Email Intake endpoints registered: POST /email-intake/poll, GET /email-intake/status")
 
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")

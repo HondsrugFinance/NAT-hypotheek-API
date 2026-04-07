@@ -1,5 +1,6 @@
 """Endpoints voor document processing pipeline."""
 
+import asyncio
 import logging
 import os
 
@@ -13,10 +14,106 @@ from document_processing.schemas import ProcessRequest, ApplyImportsRequest
 logger = logging.getLogger("nat-api.doc-processing")
 
 router = APIRouter(prefix="/doc-processing", tags=["document-processing"])
+webhook_router = APIRouter(tags=["webhooks"])
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+# --- Debounce: stap 3 pas draaien 30s na laatste document ---
+_step3_timers: dict[str, asyncio.Task] = {}
+
+
+async def _delayed_step3(dossier_id: str, delay: float = 30.0):
+    """Wacht {delay} seconden, draai dan stap 3 + cache voor dit dossier."""
+    await asyncio.sleep(delay)
+    try:
+        from document_processing.pipeline_v2 import _run_dossier_analysis, _build_dossier_context
+
+        headers = _sb_headers()
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=headers,
+                params={
+                    "select": "id,dossiernummer,klant_naam,klant_contact_gegevens,sharepoint_url",
+                    "id": f"eq.{dossier_id}",
+                },
+            )
+            resp.raise_for_status()
+            dossiers = resp.json()
+
+        if dossiers:
+            context = _build_dossier_context(dossiers[0])
+            await _run_dossier_analysis(dossier_id, context)
+            logger.info("Debounce stap 3 voltooid voor dossier %s", dossier_id)
+
+        # Cache vullen
+        from document_processing.smart_mapper import populate_cache
+        await populate_cache(dossier_id)
+        logger.info("Import cache gevuld voor dossier %s", dossier_id)
+    except asyncio.CancelledError:
+        logger.info("Debounce stap 3 geannuleerd voor dossier %s (nieuw document)", dossier_id)
+    except Exception as e:
+        logger.error("Debounce stap 3 mislukt voor dossier %s: %s", dossier_id, e)
+    finally:
+        _step3_timers.pop(dossier_id, None)
+
+
+def _schedule_step3(dossier_id: str, delay: float = 30.0):
+    """Schedule stap 3 met debounce. Annuleert eventuele vorige timer."""
+    existing = _step3_timers.get(dossier_id)
+    if existing and not existing.done():
+        existing.cancel()
+    _step3_timers[dossier_id] = asyncio.create_task(_delayed_step3(dossier_id, delay))
+
+
+@webhook_router.post("/webhooks/document-uploaded")
+async def webhook_document_uploaded(request: Request):
+    """Supabase Database Webhook — start automatische verwerking bij nieuw document.
+
+    Triggered bij INSERT op de documents tabel. Verwerkt het document
+    asynchroon (fire-and-forget) en scheduled stap 3 met 30s debounce.
+    """
+    secret = request.headers.get("X-Webhook-Secret", "")
+    if not WEBHOOK_SECRET or secret != WEBHOOK_SECRET:
+        raise HTTPException(401, "Ongeldig webhook secret")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ongeldige JSON payload")
+
+    event_type = payload.get("type", "")
+    if event_type and event_type != "INSERT":
+        return {"status": "skipped", "reason": f"event_type_{event_type}"}
+
+    record = payload.get("record", {})
+    document_id = record.get("id")
+    dossier_id = record.get("dossier_id")
+    status = record.get("status", "")
+
+    if not document_id:
+        return {"status": "skipped", "reason": "no_document_id"}
+
+    if status != "pending":
+        return {"status": "skipped", "reason": f"status_{status}"}
+
+    logger.info("Webhook: automatische verwerking gestart voor document %s (dossier %s)", document_id, dossier_id)
+
+    async def _process_and_schedule():
+        try:
+            await process_document_v2(document_id, skip_step3=True)
+            if dossier_id:
+                _schedule_step3(dossier_id)
+        except Exception as e:
+            logger.error("Webhook verwerking mislukt voor document %s: %s", document_id, e)
+
+    asyncio.create_task(_process_and_schedule())
+
+    return {"status": "accepted", "document_id": document_id}
 
 
 def _sb_headers(access_token: str | None = None) -> dict:
@@ -565,3 +662,112 @@ async def prefill_aanvraag(dossier_id: str, request: Request):
         import traceback
         logger.error("Prefill aanvraag mislukt: %s\n%s", _ex, traceback.format_exc())
         raise HTTPException(500, f"Prefill ophalen mislukt: {type(_ex).__name__}: {_ex}")
+
+
+# --- Cron: polling fallback voor SharePoint-directe uploads ---
+
+@router.post("/cron/scan-inboxes")
+async def cron_scan_inboxes(request: Request):
+    """Scan _inbox folders van actieve dossiers voor ongeregistreerde bestanden.
+
+    Beveiligd met X-Cron-Secret header. Bedoeld als cron job (elke 5 min).
+    Registreert onbekende bestanden in documents tabel → webhook triggered verwerking.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    from sharepoint import client as sp_client
+    import re
+    from urllib.parse import unquote
+
+    if not sp_client.is_configured():
+        return {"status": "skipped", "reason": "sharepoint_not_configured"}
+
+    headers = _sb_headers()
+
+    # Haal actieve dossiers op met SharePoint URL
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{SUPABASE_URL}/rest/v1/dossiers",
+            headers=headers,
+            params={
+                "select": "id,dossiernummer,sharepoint_url",
+                "sharepoint_url": "not.is.null",
+                "sharepoint_url": "neq.pending",
+                "order": "created_at.desc",
+                "limit": "50",
+            },
+        )
+        resp.raise_for_status()
+        dossiers = resp.json()
+
+    total_registered = 0
+    scanned = 0
+
+    for dossier in dossiers:
+        dossier_id = dossier["id"]
+        sharepoint_url = dossier.get("sharepoint_url", "")
+        if not sharepoint_url or sharepoint_url == "pending":
+            continue
+
+        # Extract mapnaam uit URL
+        decoded = unquote(sharepoint_url)
+        match = re.search(r"1\.Klanten/([^?]+)", decoded)
+        if not match:
+            continue
+
+        mapnaam = match.group(1).rstrip("/")
+        inbox_pad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{mapnaam}/_inbox"
+
+        try:
+            items = await sp_client.list_folder(inbox_pad)
+            bestanden = [item for item in items if item.get("file") and not item.get("folder")]
+        except Exception:
+            continue  # Map bestaat niet of is leeg
+
+        scanned += 1
+
+        for item in bestanden:
+            bestandsnaam = item.get("name", "")
+            mime = item.get("file", {}).get("mimeType", "application/octet-stream")
+            size = item.get("size", 0)
+
+            # Check of al geregistreerd
+            async with httpx.AsyncClient(timeout=10) as client:
+                check = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/documents",
+                    headers=headers,
+                    params={
+                        "select": "id",
+                        "dossier_id": f"eq.{dossier_id}",
+                        "bestandsnaam": f"eq.{bestandsnaam}",
+                    },
+                )
+                if check.json():
+                    continue
+
+            # Registreer → INSERT triggert webhook → verwerking
+            doc_record = {
+                "dossier_id": dossier_id,
+                "bestandsnaam": bestandsnaam,
+                "sharepoint_pad": f"{inbox_pad}/{bestandsnaam}",
+                "bron": "sharepoint",
+                "status": "pending",
+                "mime_type": mime,
+                "bestandsgrootte": size,
+            }
+            async with httpx.AsyncClient(timeout=10) as client:
+                ins = await client.post(
+                    f"{SUPABASE_URL}/rest/v1/documents",
+                    headers={**headers, "Prefer": "return=representation"},
+                    json=doc_record,
+                )
+                if ins.status_code in (200, 201):
+                    total_registered += 1
+
+    return {
+        "status": "ok",
+        "dossiers_scanned": scanned,
+        "documents_registered": total_registered,
+    }
