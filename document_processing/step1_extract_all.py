@@ -75,7 +75,10 @@ Let op: "Burg. van [stad]" op een paspoort betekent Burgemeester van [stad] → 
 Geef ALLE informatie uit het document, gestructureerd in categorieën:
 
 ### Persoonsgegevens
-Namen, voorletters, tussenvoegsel, achternaam, geboortedatum, geboorteplaats, geslacht, nationaliteit, etc.
+ALTIJD apart extraheren: voornamen, tussenvoegsel, achternaam (NOOIT als één string).
+Voorbeeld: "Aranxtha Alana van der Lee" → voornamen="Aranxtha Alana", tussenvoegsel="van der", achternaam="Lee"
+Ook: voorletters, geboortedatum, geboorteplaats, geslacht, nationaliteit.
+Bij paspoort/ID: legitimatienummer, afgiftedatum, geldigTot, afgifteplaats.
 
 ### Adressen
 Alle adressen die op het document staan (van personen, werkgevers, instanties).
@@ -99,7 +102,11 @@ Alles wat opvalt: inconsistenties, ontbrekende vinkjes, toekomstige datums, etc.
   Tel alle pensioen-inhoudingen op. NIET meetellen: WGA-Hiaat, WIA, PAWW.
 - Bij werkgeversverklaringen: noteer expliciet als velden "Nee" of "€0" zijn (loonbeslag: Nee, 13e maand: €0).
 - Bij een nota van afrekening: dit is GEEN hypotheekoverzicht. Classificeer correct.
-- Bij paspoort: MRZ-regels bevatten geboorteland en extra info.
+- Bij paspoort/ID: extraheer ALTIJD apart: voornamen, tussenvoegsel, achternaam, geboortedatum,
+  geboorteplaats, geslacht, nationaliteit, legitimatienummer, afgiftedatum, geldigTot, afgifteplaats.
+  MRZ-regels bevatten geboorteland en extra info. GELDIG TOT staat altijd op het document.
+- Bij pensioenspecificatie/UPO: extraheer ALTIJD: ouderdomspensioen per fonds, AOW-bedrag,
+  nabestaandenpensioen partner, wezenpensioen. Gebruik "te bereiken" bedragen.
 
 Antwoord in exact dit JSON formaat:
 {{

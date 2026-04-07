@@ -123,21 +123,38 @@ Pensioen:
 ## Documenttype-specifieke instructies
 
 ### Bij paspoort / ID-kaart:
-- ACHTERNAAM en TUSSENVOEGSEL ALTIJD apart splitsen.
+
+ALLE onderstaande velden zijn VERPLICHT. Als een veld niet gevonden kan worden, meld dit als waarschuwing.
+
+Voorbeeld van CORRECTE output bij een paspoort:
+  "voornamen": "Aranxtha Alana",
+  "tussenvoegsel": "van der",
+  "achternaam": "Lee",
+  "voorletters": "A.A.",
+  "geslacht": "V",
+  "geboortedatum": "1997-07-14",
+  "geboorteplaats": "Weesp",
+  "nationaliteit": "Nederlandse",
+  "legitimatiesoort": "paspoort",
+  "legitimatienummer": "NMHJR4073",
+  "afgiftedatum": "2016-06-23",
+  "geldigTot": "2026-06-23",
+  "afgifteplaats": "Wijdemeren"
+
+REGELS:
+- ACHTERNAAM en TUSSENVOEGSEL ALTIJD apart splitsen. Dit is de BELANGRIJKSTE regel.
+  Op een Nederlands paspoort staat de achternaam in de MRZ-zone EN bovenaan het document.
   Voorbeelden: "van der Lee" → tussenvoegsel="van der", achternaam="Lee"
   "de Jong" → tussenvoegsel="de", achternaam="Jong"
-  "Van Hall" → tussenvoegsel="van", achternaam="Hall" (let op: op paspoort staat tussenvoegsel vaak met hoofdletter)
-  "Brust" → tussenvoegsel="", achternaam="Brust"
-  Als je twijfelt: kijk of het woord een bekend Nederlands tussenvoegsel is (van, de, van de, van der, den, ter, ten, het, in 't).
-- LEGITIMATIESOORT: ALTIJD invullen. Bij paspoort: legitimatiesoort="paspoort". Bij ID-kaart: legitimatiesoort="id_kaart".
-- GELDIG TOT: ALTIJD invullen als het op het document staat. Dit is een cruciaal veld.
-- AFGIFTEDATUM: ALTIJD invullen.
-- BSN (burgerservicenummer): ALTIJD exact 9 cijfers. Als het minder of meer is, is het GEEN BSN.
-  Meld dit als waarschuwing: "BSN heeft [X] cijfers, moet 9 zijn — controleer of dit een BSN is"
-- Documentnummer: kan NOOIT een klinker bevatten (geen A, E, I, O of U).
-  Als je een klinker ziet, is het waarschijnlijk een OCR-fout:
-  O → 0 (nul), I → 1 (één). Corrigeer dit automatisch en meld het als waarschuwing.
-- "Burg. van [stad]" = Burgemeester van [stad] → afgifteplaats = [stad]
+  "Van Hall" → tussenvoegsel="van", achternaam="Hall"
+  "Brust" → tussenvoegsel (leeg), achternaam="Brust"
+  Bekende tussenvoegsels: van, de, van de, van der, den, ter, ten, het, in 't, van den, van het.
+- LEGITIMATIESOORT: ALTIJD "paspoort" bij paspoort, "id_kaart" bij ID-kaart. NOOIT leeg laten.
+- GELDIG TOT: ALTIJD invullen. Staat op ELKE paspoort/ID. Als je het niet vindt: meld als waarschuwing.
+- AFGIFTEDATUM: ALTIJD invullen. Staat op ELKE paspoort/ID.
+- AFGIFTEPLAATS: ALTIJD invullen. "Burg. van [stad]" = afgifteplaats = [stad].
+- BSN: ALTIJD exact 9 cijfers. Als minder of meer: meld als waarschuwing.
+- Documentnummer: kan NOOIT een klinker bevatten (A, E, I, O, U = OCR-fout: O→0, I→1).
 - Geslacht: M of V (niet M/F of V/F)
 - Voorletters: afleiden uit voornamen (eerste letters + punten)
 
@@ -174,22 +191,28 @@ Pensioen:
 - FiscaalRegime: "box1_na_2013" voor leningen na 2013, "box1_voor_2013" voor leningen vóór 2013, "box3" voor box 3.
 
 ### Bij pensioenspecificatie / UPO:
-- BEREKEN totaal ouderdomspensioen EXCLUSIEF AOW. Tel alle pensioenfondsen op behalve SVB/AOW.
-  Sla op als "ouderdomspensioenTotaalExclAow".
-- Sla AOW apart op als "aowBedrag" (het "te bereiken" bedrag van SVB).
-- NABESTAANDENPENSIOEN — dit zijn VERPLICHTE velden, altijd invullen als ze op het document staan:
-  * "nabestaandenpensioenPartner": het TOTALE nabestaandenpensioen voor de partner (alle fondsen opgeteld)
-  * "nabestaandenpensioenKinderen": het TOTALE wezenpensioen (alle fondsen opgeteld)
-  * Bepaal welk scenario van toepassing is:
-    - Bereken AOW-datum op basis van geboortedatum + pensioenleeftijd
-    - Als AOW-datum in de toekomst → scenario "voor pensionering"
-    - Als AOW-datum in het verleden → scenario "na pensionering"
-    - Gebruik het juiste scenario-bedrag
-  * Als het document "nabestaandenpensioen" of "partnerpensioen" vermeldt: ALTIJD extraheren
-- "pensioenleeftijd": de pensioenleeftijd zoals vermeld op het document (bijv. 67, 68)
-- "weduweWeduwnaar": true als uit het document blijkt dat persoon weduwe/weduwnaar is
-  (bijv. ontvangt nabestaandenpensioen als nabestaande)
-- Gebruik altijd de "te bereiken" bedragen, niet de "opgebouwd" bedragen.
+
+ALLE onderstaande velden zijn VERPLICHT als ze op het document staan.
+
+Voorbeeld van CORRECTE output:
+  "ouderdomspensioenTotaalExclAow": 19249,
+  "aowBedrag": 20929,
+  "nabestaandenpensioenPartner": 8500,
+  "nabestaandenpensioenKinderen": 3200,
+  "pensioenleeftijd": 67
+
+REGELS:
+- "ouderdomspensioenTotaalExclAow": SOM van alle pensioenfondsen EXCLUSIEF SVB/AOW.
+  Tel de "te bereiken" bedragen op van elk fonds. NIET de "opgebouwd" bedragen.
+- "aowBedrag": het "te bereiken" AOW-bedrag van SVB. Dit staat apart vermeld.
+- "nabestaandenpensioenPartner": het TOTALE nabestaandenpensioen voor de partner.
+  Dit staat op het document als "nabestaandenpensioen", "partnerpensioen" of "Anw-hiaatpensioen".
+  Tel alle fondsen op. Als dit bedrag op het document staat: ALTIJD invullen, NOOIT overslaan.
+- "nabestaandenpensioenKinderen": het TOTALE wezenpensioen. ALTIJD invullen als vermeld.
+- "pensioenleeftijd": de pensioenleeftijd (bijv. 67, 68). Staat op elk pensioenoverzicht.
+- Bepaal scenario: AOW-datum in de toekomst = "voor pensionering", anders "na pensionering".
+  Gebruik het bedrag van het juiste scenario.
+- "weduweWeduwnaar": true als persoon nabestaandenpensioen ontvangt als nabestaande.
 
 Antwoord in exact dit JSON formaat:
 {{
