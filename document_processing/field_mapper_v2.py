@@ -559,11 +559,74 @@ def map_extracted_to_form(
     # Zet vaste waarden die afleidbaar zijn
     _set_derived_fields(merged_data, extracted_fields, velden)
 
+    # Zorg dat verplichte structuur compleet is (voorkom Lovable crashes)
+    _ensure_required_structure(merged_data)
+
     # Bouw check_vragen uit stap 3 beslissingen
     check_vragen = _build_check_vragen_from_beslissingen(beslissingen or [])
 
     logger.info("Field mapper: %d velden gemapped, %d checkvragen", len(velden), len(check_vragen))
     return merged_data, velden, check_vragen
+
+
+def _ensure_required_structure(data: dict):
+    """Garandeer dat de verplichte structuur aanwezig is zodat Lovable niet crasht.
+
+    Lovable verwacht bepaalde arrays en objecten. Als de mapper ze niet vult
+    maar er WEL gerelateerde data is, moeten de verplichte velden met defaults
+    worden aangevuld.
+    """
+    import uuid
+
+    # hypotheekInschrijvingen: elk item moet id, onderpandWoningIds, eigenaar, rangorde hebben
+    for inschrijving in data.get("hypotheekInschrijvingen", []):
+        if "id" not in inschrijving:
+            inschrijving["id"] = str(uuid.uuid4())
+        if "onderpandWoningIds" not in inschrijving:
+            inschrijving["onderpandWoningIds"] = []
+        if "eigenaar" not in inschrijving:
+            inschrijving["eigenaar"] = ""
+        if "rangorde" not in inschrijving:
+            inschrijving["rangorde"] = 1
+        # nhg: moet boolean zijn, niet string
+        if isinstance(inschrijving.get("nhg"), str):
+            inschrijving["nhg"] = inschrijving["nhg"].lower() in ("ja", "true", "yes")
+
+    # hypotheken: elk item moet id, inschrijvingId, leningdelen array hebben
+    for hyp in data.get("hypotheken", []):
+        if "id" not in hyp:
+            hyp["id"] = str(uuid.uuid4())
+        if "inschrijvingId" not in hyp:
+            # Koppel aan eerste inschrijving als die er is
+            inschr = data.get("hypotheekInschrijvingen", [])
+            hyp["inschrijvingId"] = inschr[0]["id"] if inschr else ""
+        # Leningdelen: elk moet id hebben
+        for ld in hyp.get("leningdelen", []):
+            if "id" not in ld:
+                ld["id"] = str(uuid.uuid4())
+
+    # woningen: elk item moet id hebben
+    for woning in data.get("woningen", []):
+        if "id" not in woning:
+            woning["id"] = str(uuid.uuid4())
+
+    # vermogenSectie: moet items array hebben
+    if "vermogenSectie" in data:
+        if "items" not in data["vermogenSectie"]:
+            data["vermogenSectie"]["items"] = []
+        if "iban" not in data["vermogenSectie"]:
+            data["vermogenSectie"]["iban"] = {"ibanAanvrager": "", "ibanPartner": ""}
+
+    # verplichtingen: elk item moet id hebben
+    for verpl in data.get("verplichtingen", []):
+        if "id" not in verpl:
+            verpl["id"] = str(uuid.uuid4())
+
+    # inkomen items: elk moet id hebben
+    for prefix in ("inkomenAanvrager", "inkomenPartner"):
+        for item in data.get(prefix, []):
+            if "id" not in item:
+                item["id"] = str(uuid.uuid4())
 
 
 def _set_derived_fields(merged_data: dict, extracted_fields: list[dict], velden: list[dict]):
