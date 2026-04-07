@@ -168,6 +168,7 @@ REGELS:
   Dit zijn: bruto jaarsalaris + vakantietoeslag + 13e maand + eindejaarsuitkering + ORT +
   overwerk + provisie + flexibel budget + bijdrage levensloop + consign. toeslag + eventuele andere posten.
   Sla dit op als veld "totaalWgvInkomen".
+- gemiddeldUrenPerWeek: ALTIJD invullen. Staat op de WGV als "Aantal uren per week" of "Arbeidsduur".
 - Neem ALLE posten op, ook als ze €0 zijn (dit bevestigt dat ze bewust zijn ingevuld).
 - COMPLEETHEIDSCHECK: controleer of alle verplichte velden zijn ingevuld:
   * Loonbeslag/looncessie: MOET ja of nee zijn
@@ -192,8 +193,10 @@ REGELS:
   ]
 - Extraheer OOK de overstijgende gegevens: geldverstrekker, hypotheeknummer, hoofdsom, inschrijving, nhg, wozWaarde.
 - Als het overzicht meerdere leningdelen bevat (bijv. annuïtair + aflossingsvrij), maak aparte entries.
+- INGANGSDATUM per leningdeel: ALTIJD invullen als deze op het document staat. Dit is cruciaal.
 - RenteVastPeriode in JAREN (niet maanden). Looptijd in MAANDEN.
 - FiscaalRegime: "box1_na_2013" voor leningen na 2013, "box1_voor_2013" voor leningen vóór 2013, "box3" voor box 3.
+  Als ingangsdatum >= 2013 → ALTIJD "box1_na_2013" (niet "box1_voor_2013").
 
 ### Bij pensioenspecificatie / UPO:
 
