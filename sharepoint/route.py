@@ -186,7 +186,11 @@ async def upload_naar_klantmap(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """Upload een bestand naar de klantmap op SharePoint."""
+    """Upload een bestand naar de _inbox van de klantmap op SharePoint.
+
+    Bestanden komen in _inbox terecht zodat de document processing pipeline
+    ze kan verwerken (classificatie, extractie, hernoemen, verplaatsen).
+    """
     if not sp_client.is_configured():
         raise HTTPException(503, "SharePoint niet geconfigureerd")
 
@@ -224,9 +228,13 @@ async def upload_naar_klantmap(
     clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
     hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{dossiernummer} {clean_naam}"
 
+    # Upload naar _inbox (niet hoofdmap) zodat document processing pipeline
+    # het bestand kan verwerken (classificatie, extractie, hernoemen, verplaatsen)
+    inbox_pad = f"{hoofdpad}/_inbox"
+
     try:
         result = await sp_client.upload_file(
-            hoofdpad,
+            inbox_pad,
             file.filename or "document",
             content,
             file.content_type or "application/octet-stream",
