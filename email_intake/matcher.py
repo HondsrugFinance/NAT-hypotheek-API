@@ -36,36 +36,18 @@ async def match_sender_to_dossier(sender_email: str) -> dict | None:
     """
     headers = _sb_headers()
     sender_lower = sender_email.lower().strip()
+    select_fields = "id,dossiernummer,klant_naam,klant_email,klant_contact_gegevens,sharepoint_url"
 
     # Strategie 1: exact match op klant_email
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/dossiers",
-            headers=headers,
-            params={
-                "select": "id,dossiernummer,klant_naam,klant_email,klant_contact_gegevens,sharepoint_url",
-                "klant_email": f"ilike.{sender_lower}",
-                "status": "not.in.(afgerond,nazorg)",
-                "order": "created_at.desc",
-                "limit": "1",
-            },
-        )
-        resp.raise_for_status()
-        rows = resp.json()
-        if rows:
-            logger.info("Match op klant_email: %s → dossier %s", sender_lower, rows[0]["dossiernummer"])
-            return rows[0]
-
-    # Strategie 2: JSONB match op contact gegevens (aanvrager + partner email)
-    for persoon in ("aanvrager", "partner"):
+    try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{SUPABASE_URL}/rest/v1/dossiers",
                 headers=headers,
                 params={
-                    "select": "id,dossiernummer,klant_naam,klant_email,klant_contact_gegevens,sharepoint_url",
-                    f"klant_contact_gegevens->{persoon}->>email": f"ilike.{sender_lower}",
-                    "status": "not.in.(afgerond,nazorg)",
+                    "select": select_fields,
+                    "klant_email": f"eq.{sender_lower}",
+                    "status": "neq.afgerond",
                     "order": "created_at.desc",
                     "limit": "1",
                 },
@@ -73,10 +55,35 @@ async def match_sender_to_dossier(sender_email: str) -> dict | None:
             resp.raise_for_status()
             rows = resp.json()
             if rows:
-                logger.info(
-                    "Match op contact %s email: %s → dossier %s",
-                    persoon, sender_lower, rows[0]["dossiernummer"],
-                )
+                logger.info("Match op klant_email: %s → dossier %s", sender_lower, rows[0]["dossiernummer"])
                 return rows[0]
+    except Exception as e:
+        logger.debug("Strategie 1 (klant_email) mislukt: %s", e)
+
+    # Strategie 2: JSONB match op contact gegevens (aanvrager + partner email)
+    for persoon in ("aanvrager", "partner"):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/dossiers",
+                    headers=headers,
+                    params={
+                        "select": select_fields,
+                        f"klant_contact_gegevens->{persoon}->>email": f"eq.{sender_lower}",
+                        "status": "neq.afgerond",
+                        "order": "created_at.desc",
+                        "limit": "1",
+                    },
+                )
+                resp.raise_for_status()
+                rows = resp.json()
+                if rows:
+                    logger.info(
+                        "Match op contact %s email: %s → dossier %s",
+                        persoon, sender_lower, rows[0]["dossiernummer"],
+                    )
+                    return rows[0]
+        except Exception as e:
+            logger.debug("Strategie 2 (%s email) mislukt: %s", persoon, e)
 
     return None
