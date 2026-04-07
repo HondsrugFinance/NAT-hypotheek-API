@@ -565,8 +565,68 @@ def map_extracted_to_form(
     # Bouw check_vragen uit stap 3 beslissingen
     check_vragen = _build_check_vragen_from_beslissingen(beslissingen or [])
 
+    # Python-gegenereerde checkvragen (onafhankelijk van Claude stap 3)
+    _add_python_check_vragen(check_vragen, merged_data, extracted_fields)
+
     logger.info("Field mapper: %d velden gemapped, %d checkvragen", len(velden), len(check_vragen))
     return merged_data, velden, check_vragen
+
+
+def _add_python_check_vragen(check_vragen: list, merged_data: dict, extracted_fields: list):
+    """Voeg checkvragen toe die Python zelf kan detecteren, onafhankelijk van stap 3."""
+    existing_types = {cv.get("id") for cv in check_vragen}
+
+    # Inkomen keuze: als WGV + IBL beide beschikbaar
+    for person, prefix in [("aanvrager", "inkomenAanvrager"), ("partner", "inkomenPartner")]:
+        inkomen = merged_data.get(prefix, [])
+        if not inkomen:
+            continue
+
+        jaarbedrag = inkomen[0].get("jaarbedrag")
+        ibl = inkomen[0].get("loondienst", {}).get("gemiddeldJaarToetsinkomen")
+
+        if jaarbedrag and ibl and f"inkomen_keuze_{person}" not in existing_types:
+            check_vragen.append({
+                "id": f"inkomen_keuze_{person}",
+                "vraag": f"Welk inkomen hanteren voor de {person}?",
+                "opties": [
+                    {"label": f"WGV: \u20ac {jaarbedrag:,.0f}".replace(",", "."), "pad": f"{prefix}[0].jaarbedrag", "waarde": jaarbedrag},
+                    {"label": f"IBL: \u20ac {ibl:,.0f}".replace(",", "."), "pad": f"{prefix}[0].jaarbedrag", "waarde": ibl},
+                ],
+                "bron": "werkgeversverklaring, UWV",
+                "evidence": "Twee inkomensberekeningen beschikbaar",
+                "categorie": "inkomen",
+                "pad": f"{prefix}[0].jaarbedrag",
+                "aanbeveling": 0,
+            })
+
+    # Doelstelling: altijd als checkvraag als die niet al bestaat
+    if "doelstelling" not in existing_types and not merged_data.get("doelstelling"):
+        # Detecteer mogelijke doelstelling uit documenten
+        has_koop = any(ef.get("sectie") == "koopovereenkomst" for ef in extracted_fields)
+        has_hyp = any(ef.get("sectie") == "hypotheekoverzicht" for ef in extracted_fields)
+        has_echtscheiding = any(ef.get("sectie") in ("echtscheidingsconvenant", "akte_van_verdeling") for ef in extracted_fields)
+
+        opties = []
+        if has_koop:
+            opties.append({"label": "Aankoop bestaande bouw", "pad": "doelstelling", "waarde": "aankoop_bestaande_bouw"})
+        if has_echtscheiding:
+            opties.append({"label": "Partner uitkopen", "pad": "doelstelling", "waarde": "partner_uitkopen"})
+        if has_hyp and not has_koop:
+            opties.append({"label": "Hypotheek verhogen", "pad": "doelstelling", "waarde": "hypotheek_verhogen"})
+            opties.append({"label": "Hypotheek oversluiten", "pad": "doelstelling", "waarde": "hypotheek_oversluiten"})
+
+        if opties:
+            check_vragen.append({
+                "id": "doelstelling",
+                "vraag": "Wat is het doel van deze hypotheekaanvraag?",
+                "opties": opties,
+                "bron": "",
+                "evidence": "Afgeleid uit aanwezige documenten",
+                "categorie": "algemeen",
+                "pad": "doelstelling",
+                "aanbeveling": 0,
+            })
 
 
 def _ensure_required_structure(data: dict):
