@@ -107,14 +107,25 @@ Analyseer het complete dossier en geef:
    - Een waarde op het document NIET matcht met een bekende optie uit TOEGESTANE WAARDEN
    - De adviseur een STRATEGISCHE keuze moet maken die niet uit documenten volgt
 
-   Extra beslissingstypen:
-   - "ondernemersinkomen": als er inkomen uit onderneming is gedetecteerd
-     (IB-aangifte, jaarrekening met winsten), maak een beslissing met opties:
+   VERPLICHTE beslissingstypen (maak deze ALTIJD aan als de situatie van toepassing is):
+
+   - "inkomen_keuze": ALTIJD aanmaken als er zowel WGV-inkomen als IBL-inkomen beschikbaar is.
+     Optie A: "WGV: €[totaalWgvInkomen] (werkgeversverklaring)" met waarde=het WGV bedrag
+     Optie B: "IBL: €[gemiddeldJaarToetsinkomen] (UWV inkomensbepaling)" met waarde=het IBL bedrag
+     type="inkomen_keuze", persoon="aanvrager" of "partner"
+
+   - "geldverstrekker": aanmaken als de geldverstrekker op het document niet in de TOEGESTANE WAARDEN staat.
+     Optie A: dichtstbijzijnde match uit TOEGESTANE WAARDEN
+     Optie B: originele naam van het document
+
+   - "doelstelling": ALTIJD aanmaken. Leid af uit documenten:
+     koopovereenkomst → aankoop
+     echtscheidingsconvenant → partner uitkopen
+     hypotheekoverzicht zonder koopovereenkomst → verhogen/oversluiten
+
+   - "ondernemersinkomen": als er inkomen uit onderneming is gedetecteerd.
      Optie A: "Verwerk winsten afgelopen 3 jaar: [jaar1] €X, [jaar2] €Y, [jaar3] €Z"
      Optie B: "Handmatig toevoegen (complex inkomen)"
-     Toon de geëxtraheerde jaarwinsten in de optie-labels.
-   - "doelstelling": als uit de documenten een doelstelling af te leiden is
-     (bijv. koopovereenkomst → aankoop, hypotheekoverzicht zonder koopovereenkomst → oversluiten/verhogen)
 
    Wat GEEN beslissing is:
    - Een waarde die letterlijk uit één document komt zonder ambiguïteit
