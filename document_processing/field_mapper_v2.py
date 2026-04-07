@@ -37,6 +37,9 @@ _PERSOON_MAP = {
     "nationaliteit": "{persoon}.persoon.nationaliteit",
     "geslacht": "{persoon}.persoon.geslacht",
     "roepnaam": "{persoon}.persoon.roepnaam",
+    "eerderGehuwd": "{persoon}.persoon.eerderGehuwd",
+    "datumEchtscheiding": "{persoon}.persoon.datumEchtscheiding",
+    "weduweWeduwnaar": "{persoon}.persoon.weduweWeduwnaar",
 }
 
 # Legitimatie (paspoort, ID-kaart)
@@ -475,8 +478,30 @@ def map_extracted_to_form(
             logger.warning("Unmapped sectie: '%s' (%d velden overgeslagen)", sectie, len(fields))
             continue
 
+        # Speciaal: leningdelen array (uit hypotheekoverzicht)
+        if "leningdelen" in fields and isinstance(fields["leningdelen"], list):
+            for idx, ld in enumerate(fields["leningdelen"]):
+                if not isinstance(ld, dict):
+                    continue
+                for ld_field, ld_value in ld.items():
+                    if ld_field in _SKIP_FIELDS:
+                        continue
+                    ld_value = _transform_value(ld_field, ld_value)
+                    if ld_value is None:
+                        continue
+                    if ld_field in _LENINGDEEL_MAP:
+                        pad = _LENINGDEEL_MAP[ld_field].replace("{idx}", str(idx))
+                        if pad not in seen_pads:
+                            seen_pads.add(pad)
+                            _set_nested(merged_data, pad, ld_value)
+                            velden.append({
+                                "pad": pad, "label": _field_label(ld_field),
+                                "waarde": ld_value, "waarde_display": _format_display(ld_value, ld_field),
+                                "bron": sectie, "status": "nieuw", "source": "extracted",
+                            })
+
         for field_name, value in fields.items():
-            if field_name in _SKIP_FIELDS:
+            if field_name in _SKIP_FIELDS or field_name == "leningdelen":
                 continue
 
             value = _transform_value(field_name, value)
@@ -590,6 +615,50 @@ def _set_derived_fields(merged_data: dict, extracted_fields: list[dict], velden:
                 })
 
 
+    # Afgeleide velden na alle extracties
+    for person_prefix in ["aanvrager", "partner"]:
+        persoon_data = merged_data.get(person_prefix, {}).get("persoon", {})
+
+        # Voorletters afleiden uit voornamen
+        voornamen = persoon_data.get("voornamen", "")
+        if voornamen and not persoon_data.get("voorletters"):
+            voorletters = ".".join(n[0].upper() for n in voornamen.split() if n) + "."
+            _set_nested(merged_data, f"{person_prefix}.persoon.voorletters", voorletters)
+            velden.append({
+                "pad": f"{person_prefix}.persoon.voorletters", "label": "Voorletters",
+                "waarde": voorletters, "waarde_display": voorletters,
+                "bron": "(afgeleid)", "status": "nieuw", "source": "inferred",
+            })
+
+        # Roepnaam: eerste voornaam als Lovable het niet al heeft
+        if voornamen and not persoon_data.get("roepnaam"):
+            roepnaam = voornamen.split()[0] if voornamen.split() else ""
+            if roepnaam:
+                _set_nested(merged_data, f"{person_prefix}.persoon.roepnaam", roepnaam)
+
+        # Legitimatiesoort afleiden uit welke documenten er zijn
+        ident = merged_data.get(person_prefix, {}).get("identiteit", {})
+        if ident.get("legitimatienummer") and not ident.get("legitimatiesoort"):
+            # Check of er een paspoort-extractie is voor deze persoon
+            has_paspoort = any(
+                ef.get("sectie") in ("paspoort",) and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
+                for ef in extracted_fields
+            )
+            has_id = any(
+                ef.get("sectie") in ("id_kaart",) and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
+                for ef in extracted_fields
+            )
+            if has_paspoort:
+                _set_nested(merged_data, f"{person_prefix}.identiteit.legitimatiesoort", "paspoort")
+            elif has_id:
+                _set_nested(merged_data, f"{person_prefix}.identiteit.legitimatiesoort", "europese_id")
+
+    # heeftPartner afleiden
+    has_partner_docs = any(ef.get("persoon") == "partner" for ef in extracted_fields)
+    if has_partner_docs and not merged_data.get("heeftPartner"):
+        _set_nested(merged_data, "heeftPartner", True)
+
+
 def _build_check_vragen_from_beslissingen(beslissingen: list[dict]) -> list[dict]:
     """Vertaal stap 3 beslissingen naar check_vragen format voor de frontend."""
     check_vragen = []
@@ -620,12 +689,14 @@ _BESLISSING_PAD_MAP = {
     "inkomen_keuze": "inkomen{Persoon}[0].jaarbedrag",
     "geldverstrekker": "hypotheekInschrijvingen[0].geldverstrekker",
     "doelstelling": "doelstelling",
+    "ondernemersinkomen": "inkomen{Persoon}[0].jaarbedrag",
 }
 
 _BESLISSING_CATEGORIE_MAP = {
     "inkomen_keuze": "inkomen",
     "geldverstrekker": "hypotheek",
     "doelstelling": "algemeen",
+    "ondernemersinkomen": "inkomen",
 }
 
 

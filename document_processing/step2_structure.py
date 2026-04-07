@@ -68,7 +68,8 @@ Partner: {partner or 'geen'}
 
 Persoonsgegevens:
   voornamen, achternaam, tussenvoegsel, voorletters, geboortedatum,
-  geboorteplaats, geboorteland, nationaliteit, geslacht, bsn, roepnaam
+  geboorteplaats, geboorteland, nationaliteit, geslacht, bsn, roepnaam,
+  eerderGehuwd, datumEchtscheiding, weduweWeduwnaar
 
 Legitimatie:
   legitimatiesoort, legitimatienummer, afgiftedatum, geldigTot, afgifteplaats
@@ -122,6 +123,15 @@ Pensioen:
 ## Documenttype-specifieke instructies
 
 ### Bij paspoort / ID-kaart:
+- ACHTERNAAM en TUSSENVOEGSEL ALTIJD apart splitsen.
+  Voorbeelden: "van der Lee" → tussenvoegsel="van der", achternaam="Lee"
+  "de Jong" → tussenvoegsel="de", achternaam="Jong"
+  "Van Hall" → tussenvoegsel="van", achternaam="Hall" (let op: op paspoort staat tussenvoegsel vaak met hoofdletter)
+  "Brust" → tussenvoegsel="", achternaam="Brust"
+  Als je twijfelt: kijk of het woord een bekend Nederlands tussenvoegsel is (van, de, van de, van der, den, ter, ten, het, in 't).
+- LEGITIMATIESOORT: ALTIJD invullen. Bij paspoort: legitimatiesoort="paspoort". Bij ID-kaart: legitimatiesoort="id_kaart".
+- GELDIG TOT: ALTIJD invullen als het op het document staat. Dit is een cruciaal veld.
+- AFGIFTEDATUM: ALTIJD invullen.
 - BSN (burgerservicenummer): ALTIJD exact 9 cijfers. Als het minder of meer is, is het GEEN BSN.
   Meld dit als waarschuwing: "BSN heeft [X] cijfers, moet 9 zijn — controleer of dit een BSN is"
 - Documentnummer: kan NOOIT een klinker bevatten (geen A, E, I, O of U).
@@ -149,16 +159,36 @@ Pensioen:
   Meld ELKE ontbrekende of niet-ingevulde veld als waarschuwing:
   "WGV onvolledig: [veldnaam] is niet ingevuld"
 
+### Bij hypotheekoverzicht:
+- Extraheer ELKE leningdeel APART. Gebruik een array "leningdelen" in de fields:
+  "leningdelen": [
+    {{"bedrag": 150000, "rentePercentage": 4.5, "aflosvorm": "annuitair", "ingangsdatum": "2020-01-01",
+      "looptijd": 360, "einddatum": "2050-01-01", "ingangsdatumRvp": "2020-01-01",
+      "renteVastPeriode": 10, "einddatumRvp": "2030-01-01", "fiscaalRegime": "box1_na_2013",
+      "restschuld": 140000}},
+    ...
+  ]
+- Extraheer OOK de overstijgende gegevens: geldverstrekker, hypotheeknummer, hoofdsom, inschrijving, nhg, wozWaarde.
+- Als het overzicht meerdere leningdelen bevat (bijv. annuïtair + aflossingsvrij), maak aparte entries.
+- RenteVastPeriode in JAREN (niet maanden). Looptijd in MAANDEN.
+- FiscaalRegime: "box1_na_2013" voor leningen na 2013, "box1_voor_2013" voor leningen vóór 2013, "box3" voor box 3.
+
 ### Bij pensioenspecificatie / UPO:
 - BEREKEN totaal ouderdomspensioen EXCLUSIEF AOW. Tel alle pensioenfondsen op behalve SVB/AOW.
   Sla op als "ouderdomspensioenTotaalExclAow".
 - Sla AOW apart op als "aowBedrag" (het "te bereiken" bedrag van SVB).
-- NABESTAANDENPENSIOEN: bepaal welk scenario van toepassing is:
-  * Bereken AOW-datum op basis van geboortedatum + pensioenleeftijd
-  * Als AOW-datum in de toekomst → scenario "voor pensionering" is van toepassing
-  * Als AOW-datum in het verleden → scenario "na pensionering"
-  * Tel alle nabestaandenpensioenen per fonds op voor het juiste scenario
-  * Sla op als "nabestaandenpensioenPartner" (totaal) en "nabestaandenpensioenKinderen" (per kind)
+- NABESTAANDENPENSIOEN — dit zijn VERPLICHTE velden, altijd invullen als ze op het document staan:
+  * "nabestaandenpensioenPartner": het TOTALE nabestaandenpensioen voor de partner (alle fondsen opgeteld)
+  * "nabestaandenpensioenKinderen": het TOTALE wezenpensioen (alle fondsen opgeteld)
+  * Bepaal welk scenario van toepassing is:
+    - Bereken AOW-datum op basis van geboortedatum + pensioenleeftijd
+    - Als AOW-datum in de toekomst → scenario "voor pensionering"
+    - Als AOW-datum in het verleden → scenario "na pensionering"
+    - Gebruik het juiste scenario-bedrag
+  * Als het document "nabestaandenpensioen" of "partnerpensioen" vermeldt: ALTIJD extraheren
+- "pensioenleeftijd": de pensioenleeftijd zoals vermeld op het document (bijv. 67, 68)
+- "weduweWeduwnaar": true als uit het document blijkt dat persoon weduwe/weduwnaar is
+  (bijv. ontvangt nabestaandenpensioen als nabestaande)
 - Gebruik altijd de "te bereiken" bedragen, niet de "opgebouwd" bedragen.
 
 Antwoord in exact dit JSON formaat:

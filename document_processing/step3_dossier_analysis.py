@@ -103,6 +103,15 @@ Analyseer het complete dossier en geef:
    - Een waarde op het document NIET matcht met een bekende optie uit TOEGESTANE WAARDEN
    - De adviseur een STRATEGISCHE keuze moet maken die niet uit documenten volgt
 
+   Extra beslissingstypen:
+   - "ondernemersinkomen": als er inkomen uit onderneming is gedetecteerd
+     (IB-aangifte, jaarrekening met winsten), maak een beslissing met opties:
+     Optie A: "Verwerk winsten afgelopen 3 jaar: [jaar1] €X, [jaar2] €Y, [jaar3] €Z"
+     Optie B: "Handmatig toevoegen (complex inkomen)"
+     Toon de geëxtraheerde jaarwinsten in de optie-labels.
+   - "doelstelling": als uit de documenten een doelstelling af te leiden is
+     (bijv. koopovereenkomst → aankoop, hypotheekoverzicht zonder koopovereenkomst → oversluiten/verhogen)
+
    Wat GEEN beslissing is:
    - Een waarde die letterlijk uit één document komt zonder ambiguïteit
    - Werkgever-details (postcode, adres, KvK) — dat zijn feiten
