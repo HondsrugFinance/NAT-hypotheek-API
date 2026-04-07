@@ -644,22 +644,53 @@ def _set_derived_fields(merged_data: dict, extracted_fields: list[dict], velden:
                 "bron": "(afgeleid)", "status": "nieuw", "source": "inferred",
             })
 
+        # Achternaam split fallback: als achternaam mist maar er IS een paspoort-extractie
+        # met een volledige naam, probeer te splitsen op bekende tussenvoegsels
+        if not persoon_data.get("achternaam"):
+            # Zoek in extracted_fields naar een achternaam-achtig veld
+            _TUSSENVOEGSELS = {"van", "de", "van de", "van der", "den", "ter", "ten", "het", "in", "van den", "van het"}
+            for ef in extracted_fields:
+                if ef.get("persoon", "") not in (person_prefix, "gezamenlijk"):
+                    continue
+                if ef.get("sectie", "") not in ("paspoort", "id_kaart"):
+                    continue
+                fields = ef.get("fields", {})
+                # Check of er een 'naam' of 'achternaam' veld is dat niet gesplitst is
+                full_name = fields.get("naam", "") or fields.get("achternaam_volledig", "") or fields.get("achternaam", "")
+                if not full_name:
+                    continue
+                # Probeer te splitsen
+                parts = full_name.split()
+                if len(parts) >= 2:
+                    # Check van achteren: langste tussenvoegsel-match
+                    best_tv = ""
+                    for i in range(len(parts) - 1):
+                        candidate = " ".join(parts[:i+1]).lower()
+                        if candidate in _TUSSENVOEGSELS:
+                            best_tv = " ".join(parts[:i+1])
+                    if best_tv:
+                        achternaam = " ".join(parts[len(best_tv.split()):])
+                        _set_nested(merged_data, f"{person_prefix}.persoon.tussenvoegsel", best_tv.lower())
+                        _set_nested(merged_data, f"{person_prefix}.persoon.achternaam", achternaam)
+                        logger.info("Naam gesplitst: '%s' -> tv='%s', naam='%s'", full_name, best_tv, achternaam)
+                    break
+
         # Roepnaam: eerste voornaam als Lovable het niet al heeft
         if voornamen and not persoon_data.get("roepnaam"):
             roepnaam = voornamen.split()[0] if voornamen.split() else ""
             if roepnaam:
                 _set_nested(merged_data, f"{person_prefix}.persoon.roepnaam", roepnaam)
 
-        # Legitimatiesoort afleiden uit welke documenten er zijn
-        ident = merged_data.get(person_prefix, {}).get("identiteit", {})
-        if ident.get("legitimatienummer") and not ident.get("legitimatiesoort"):
-            # Check of er een paspoort-extractie is voor deze persoon
+        # Legitimatiesoort ALTIJD afleiden uit welke documenten er zijn
+        # (step 2 levert dit niet betrouwbaar)
+        current_soort = merged_data.get(person_prefix, {}).get("identiteit", {}).get("legitimatiesoort", "")
+        if not current_soort or current_soort not in ("paspoort", "europese_id"):
             has_paspoort = any(
-                ef.get("sectie") in ("paspoort",) and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
+                ef.get("sectie") == "paspoort" and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
                 for ef in extracted_fields
             )
             has_id = any(
-                ef.get("sectie") in ("id_kaart",) and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
+                ef.get("sectie") == "id_kaart" and ef.get("persoon", "") in (person_prefix, "gezamenlijk")
                 for ef in extracted_fields
             )
             if has_paspoort:

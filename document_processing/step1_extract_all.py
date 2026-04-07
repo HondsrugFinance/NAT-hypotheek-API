@@ -75,10 +75,25 @@ Let op: "Burg. van [stad]" op een paspoort betekent Burgemeester van [stad] → 
 Geef ALLE informatie uit het document, gestructureerd in categorieën:
 
 ### Persoonsgegevens
-ALTIJD apart extraheren: voornamen, tussenvoegsel, achternaam (NOOIT als één string).
-Voorbeeld: "Aranxtha Alana van der Lee" → voornamen="Aranxtha Alana", tussenvoegsel="van der", achternaam="Lee"
-Ook: voorletters, geboortedatum, geboorteplaats, geslacht, nationaliteit.
-Bij paspoort/ID: legitimatienummer, afgiftedatum, geldigTot, afgifteplaats.
+ALTIJD apart extraheren in DEZE velden (nooit als één string):
+
+"persoonsgegevens": {{
+  "voornamen": "Aranxtha Alana",
+  "tussenvoegsel": "van der",
+  "achternaam": "Lee",
+  "geboortedatum": "1997-07-14",
+  "geboorteplaats": "Weesp",
+  "geslacht": "V",
+  "nationaliteit": "Nederlandse",
+  "legitimatiesoort": "paspoort",
+  "legitimatienummer": "NMHJR4073",
+  "afgiftedatum": "2016-06-23",
+  "geldigTot": "2026-06-23",
+  "afgifteplaats": "Wijdemeren"
+}}
+
+Bekende tussenvoegsels: van, de, van de, van der, den, ter, ten, het, in 't, van den, van het.
+Split ALTIJD: "Van Hall" → tussenvoegsel="van", achternaam="Hall".
 
 ### Adressen
 Alle adressen die op het document staan (van personen, werkgevers, instanties).
