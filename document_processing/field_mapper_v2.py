@@ -559,6 +559,9 @@ def map_extracted_to_form(
     # Zet vaste waarden die afleidbaar zijn
     _set_derived_fields(merged_data, extracted_fields, velden)
 
+    # Business rules: corrigeer bekende fouten en leid af wat kan
+    _apply_business_rules(merged_data, extracted_fields)
+
     # Zorg dat verplichte structuur compleet is (voorkom Lovable crashes)
     _ensure_required_structure(merged_data)
 
@@ -686,6 +689,83 @@ def _add_python_check_vragen(check_vragen: list, merged_data: dict, extracted_fi
                 aanbeveling_idx = cv.get("aanbeveling", 0)
                 if aanbeveling_idx < len(cv["opties"]):
                     hi[0]["geldverstrekker"] = cv["opties"][aanbeveling_idx].get("waarde", "Onbekend")
+
+
+def _apply_business_rules(data: dict, extracted_fields: list):
+    """Corrigeer bekende fouten en leid af wat afleidbaar is.
+
+    Dit zijn regels die niet in de mapping-tabel passen maar wel deterministisch zijn.
+    """
+
+    # 1. eerderGehuwd: true als er echtscheidingsconvenant of akte van verdeling is
+    has_echtscheiding = any(
+        ef.get("sectie") in ("echtscheidingsconvenant", "beschikking_rechtbank", "akte_van_verdeling")
+        for ef in extracted_fields
+    )
+    if has_echtscheiding:
+        _set_nested(data, "aanvrager.persoon.eerderGehuwd", True)
+
+    # 2. woningToepassing: als er een woning is maar toepassing leeg → "eigen_woning"
+    for woning in data.get("woningen", []):
+        if not woning.get("woningToepassing"):
+            woning["woningToepassing"] = "eigen_woning"
+
+    # 3. hypotheekInschrijving eigenaar: afleiden uit heeftPartner
+    for inschrijving in data.get("hypotheekInschrijvingen", []):
+        if not inschrijving.get("eigenaar"):
+            if data.get("heeftPartner"):
+                inschrijving["eigenaar"] = "gezamenlijk"
+            else:
+                inschrijving["eigenaar"] = "aanvrager"
+
+    # 4. hypotheekInschrijving inschrijving: null i.p.v. 0 (Lovable toont €0)
+    for inschrijving in data.get("hypotheekInschrijvingen", []):
+        if inschrijving.get("inschrijving") == 0:
+            inschrijving["inschrijving"] = None
+
+    # 5. Fiscaal regime: corrigeer "box1_voor_2013" als ingangsdatum na 2013
+    for hyp in data.get("hypotheken", []):
+        for ld in hyp.get("leningdelen", []):
+            regime = ld.get("fiscaalRegime", "")
+            ingangsdatum = ld.get("ingangsdatum", "")
+            if regime == "box1_voor_2013" and ingangsdatum:
+                try:
+                    jaar = int(ingangsdatum[:4]) if len(ingangsdatum) >= 4 else 0
+                    if jaar >= 2013:
+                        ld["fiscaalRegime"] = "box1_na_2013"
+                except (ValueError, TypeError):
+                    pass
+            # Als fiscaalRegime leeg is maar ingangsdatum er is → afleiden
+            if not regime and ingangsdatum:
+                try:
+                    jaar = int(ingangsdatum[:4]) if len(ingangsdatum) >= 4 else 0
+                    ld["fiscaalRegime"] = "box1_na_2013" if jaar >= 2013 else "box1_voor_2013"
+                except (ValueError, TypeError):
+                    ld["fiscaalRegime"] = "box1_na_2013"
+
+    # 6. brutoSalaris: als het gelijk is aan gemiddeldJaarToetsinkomen → verwijderen
+    # (IBL toetsinkomen hoort niet in brutoSalaris)
+    for prefix in ("inkomenAanvrager", "inkomenPartner"):
+        items = data.get(prefix, [])
+        if not items:
+            continue
+        ld_data = items[0].get("loondienst", {})
+        wgv = ld_data.get("werkgeversverklaringCalc", {})
+        ibl = ld_data.get("gemiddeldJaarToetsinkomen")
+        bruto = wgv.get("brutoSalaris")
+        if bruto and ibl and abs(float(bruto) - float(ibl)) < 1:
+            # brutoSalaris = IBL → verwijderen (is fout)
+            wgv["brutoSalaris"] = None
+
+    # 7. Pensioen: pensioenData.ouderdomspensioen.bedrag vullen uit jaarbedrag
+    for prefix in ("inkomenAanvrager", "inkomenPartner"):
+        items = data.get(prefix, [])
+        for item in items:
+            if item.get("type") == "pensioen" and item.get("jaarbedrag"):
+                pd = item.get("pensioenData", {})
+                op = pd.get("ouderdomspensioen", {})
+                if not op.get("bedrag"):
+                    _set_nested(item, "pensioenData.ouderdomspensioen.bedrag", item["jaarbedrag"])
 
 
 def _ensure_required_structure(data: dict):
