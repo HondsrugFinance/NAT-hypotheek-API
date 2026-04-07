@@ -634,32 +634,35 @@ def _add_python_check_vragen(check_vragen: list, merged_data: dict, extracted_fi
         waarde_woning = woningen[0].get("waardeWoning")
         woz_waarde = woningen[0].get("wozWaarde")
 
-        # Zoek of er meerdere bronnen zijn met verschillende waarden
+        # Woningwaarde: alleen taxatierapport en Calcasa/desktoptaxatie als bronnen
+        # (bij bestaande bouw). Andere bronnen zijn niet relevant.
+        relevante_bronnen = {"taxatierapport", "desktoptaxatie", "calcasa"}
         waarden = {}
         for ef in extracted_fields:
             fields = ef.get("fields", {})
             sectie = ef.get("sectie", "")
+            if sectie not in relevante_bronnen:
+                continue
             for veld in ("marktwaarde", "waardeWoning", "taxatiewaarde"):
                 if veld in fields and fields[veld]:
-                    waarden[sectie] = fields[veld]
+                    waarden[sectie] = int(fields[veld])
+
+        # Voeg ook hypotheekoverzicht waarde toe als er geen taxatierapport is
+        if not waarden:
+            for ef in extracted_fields:
+                if ef.get("sectie") == "hypotheekoverzicht":
+                    fields = ef.get("fields", {})
+                    for veld in ("marktwaarde", "waardeWoning"):
+                        if veld in fields and fields[veld]:
+                            waarden["hypotheekoverzicht"] = int(fields[veld])
 
         if len(waarden) >= 2:
-            # Groepeer bronnen per unieke waarde
-            waarde_bronnen: dict[int, list[str]] = {}
-            for bron, waarde in waarden.items():
-                w = int(waarde)
-                if w not in waarde_bronnen:
-                    waarde_bronnen[w] = []
-                waarde_bronnen[w].append(bron)
-
-            if len(waarde_bronnen) >= 2:
+            unieke = set(waarden.values())
+            if len(unieke) >= 2:
                 opties = []
-                for waarde, bronnen_lijst in sorted(waarde_bronnen.items(), reverse=True):
-                    bronnen_str = ", ".join(bronnen_lijst[:2])  # max 2 bronnen tonen
-                    if len(bronnen_lijst) > 2:
-                        bronnen_str += f" +{len(bronnen_lijst)-2}"
+                for bron, waarde in waarden.items():
                     opties.append({
-                        "label": f"\u20ac {waarde:,.0f} ({bronnen_str})".replace(",", "."),
+                        "label": f"\u20ac {waarde:,.0f} ({bron})".replace(",", "."),
                         "pad": "woningen[0].waardeWoning",
                         "waarde": waarde,
                     })
