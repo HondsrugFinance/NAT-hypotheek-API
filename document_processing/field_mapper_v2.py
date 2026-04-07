@@ -644,12 +644,22 @@ def _add_python_check_vragen(check_vragen: list, merged_data: dict, extracted_fi
                     waarden[sectie] = fields[veld]
 
         if len(waarden) >= 2:
-            unieke = set(waarden.values())
-            if len(unieke) >= 2:
+            # Groepeer bronnen per unieke waarde
+            waarde_bronnen: dict[int, list[str]] = {}
+            for bron, waarde in waarden.items():
+                w = int(waarde)
+                if w not in waarde_bronnen:
+                    waarde_bronnen[w] = []
+                waarde_bronnen[w].append(bron)
+
+            if len(waarde_bronnen) >= 2:
                 opties = []
-                for bron, waarde in waarden.items():
+                for waarde, bronnen_lijst in sorted(waarde_bronnen.items(), reverse=True):
+                    bronnen_str = ", ".join(bronnen_lijst[:2])  # max 2 bronnen tonen
+                    if len(bronnen_lijst) > 2:
+                        bronnen_str += f" +{len(bronnen_lijst)-2}"
                     opties.append({
-                        "label": f"\u20ac {waarde:,.0f} ({bron})".replace(",", "."),
+                        "label": f"\u20ac {waarde:,.0f} ({bronnen_str})".replace(",", "."),
                         "pad": "woningen[0].waardeWoning",
                         "waarde": waarde,
                     })
