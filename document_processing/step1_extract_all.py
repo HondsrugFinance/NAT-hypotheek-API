@@ -119,7 +119,9 @@ Alles wat opvalt: inconsistenties, ontbrekende vinkjes, toekomstige datums, etc.
 - Bij een nota van afrekening: dit is GEEN hypotheekoverzicht. Classificeer correct.
 - Bij paspoort/ID: extraheer ALTIJD apart: voornamen, tussenvoegsel, achternaam, geboortedatum,
   geboorteplaats, geslacht, nationaliteit, legitimatienummer, afgiftedatum, geldigTot, afgifteplaats.
-  MRZ-regels bevatten geboorteland en extra info. GELDIG TOT staat altijd op het document.
+  AFGIFTEDATUM = veld 9 "datum van afgifte" (bijv. "13 JUL/JUL 2016" → 2016-07-13).
+  GELDIG TOT = veld 10 "geldig tot / date of expiry" (bijv. "13 JUL/JUL 2026" → 2026-07-13).
+  MRZ-regels bevatten geboorteland en extra info.
 - Bij pensioenspecificatie/UPO: extraheer ALTIJD: ouderdomspensioen per fonds, AOW-bedrag,
   nabestaandenpensioen partner, wezenpensioen. Gebruik "te bereiken" bedragen.
 

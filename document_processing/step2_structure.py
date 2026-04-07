@@ -151,7 +151,12 @@ REGELS:
   Bekende tussenvoegsels: van, de, van de, van der, den, ter, ten, het, in 't, van den, van het.
 - LEGITIMATIESOORT: ALTIJD "paspoort" bij paspoort, "id_kaart" bij ID-kaart. NOOIT leeg laten.
 - GELDIG TOT: ALTIJD invullen. Staat op ELKE paspoort/ID. Als je het niet vindt: meld als waarschuwing.
-- AFGIFTEDATUM: ALTIJD invullen. Staat op ELKE paspoort/ID.
+- AFGIFTEDATUM: ALTIJD invullen. Staat op ELKE paspoort/ID als veld 9 "datum van afgifte".
+  Format op paspoort: "13 JUL/JUL 2016" → afgiftedatum = "2016-07-13".
+  Nederlandse maanden: JAN=01, FEB=02, MRT/MAA=03, APR=04, MEI/MAY=05, JUN=06,
+  JUL=07, AUG=08, SEP=09, OKT/OCT=10, NOV=11, DEC=12.
+- GELDIG TOT: staat op ELKE paspoort/ID als veld 10 "geldig tot / date of expiry".
+  Zelfde format. ALTIJD invullen.
 - AFGIFTEPLAATS: ALTIJD invullen. "Burg. van [stad]" = afgifteplaats = [stad].
 - BSN: ALTIJD exact 9 cijfers. Als minder of meer: meld als waarschuwing.
 - Documentnummer: kan NOOIT een klinker bevatten (A, E, I, O, U = OCR-fout: O→0, I→1).
