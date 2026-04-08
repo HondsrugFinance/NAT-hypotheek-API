@@ -85,6 +85,8 @@ ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip(
 if not ALLOWED_ORIGINS:
     ALLOWED_ORIGINS = [
         "https://hondsrug-insight.lovable.app",
+        "https://app.hondsrugfinance.nl",
+        "https://hondsrug-insight.vercel.app",
         "http://localhost:5173",
         "http://localhost:3000",
     ]
@@ -92,7 +94,7 @@ if not ALLOWED_ORIGINS:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.lovable\.app|https://.*\.lovableproject\.com",
+    allow_origin_regex=r"https://.*\.lovable\.app|https://.*\.lovableproject\.com|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
