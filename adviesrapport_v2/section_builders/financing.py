@@ -287,10 +287,11 @@ def build_financing_section(
         else:
             rvp_display = format_rvp_jaren(ld.rvp)
 
-        # Aftrekbaar: restant voor bestaand/meenemen, anders originele looptijd
+        # Aftrekbaar: gebruik restant_aftrekbaar als gevuld (bijv. voor-2013 regime),
+        # anders originele looptijd
         if ld.bedrag_box1 <= 0:
             aftrekbaar = "n.v.t."
-        elif is_bestaand and ld.restant_aftrekbaar is not None:
+        elif ld.restant_aftrekbaar is not None:
             aftrekbaar = format_looptijd_jaren(ld.restant_aftrekbaar)
         else:
             aftrekbaar = format_looptijd_jaren(ld.org_lpt)
@@ -330,7 +331,12 @@ def build_financing_section(
         for ld in elders_ld:
             bedrag = ld.totaal_bedrag
             bruto_pm = _bruto_maandlast_leningdeel(ld)
-            aftrekbaar = format_looptijd_jaren(ld.org_lpt) if ld.bedrag_box1 > 0 else "n.v.t."
+            if ld.bedrag_box1 <= 0:
+                aftrekbaar = "n.v.t."
+            elif ld.restant_aftrekbaar is not None:
+                aftrekbaar = format_looptijd_jaren(ld.restant_aftrekbaar)
+            else:
+                aftrekbaar = format_looptijd_jaren(ld.org_lpt)
             rvp_display = format_rvp_jaren(ld.restant_rvp) if ld.restant_rvp is not None else format_rvp_jaren(ld.rvp)
 
             elders_rows = [
