@@ -1182,6 +1182,17 @@ def _build_pensioen_chart_data(
             except Exception:
                 max_hyp = 0
 
+            # Debug: log elke 5 jaar + rond AOW
+            if y % 5 == 0 or (aow_jaar_aanvrager and abs(jaar - aow_jaar_aanvrager) <= 1):
+                logger.info(
+                    "Chart jaar %d: ink_a=%.0f ink_p=%.0f aow=%s projected=%d delen "
+                    "box1=%.0f box3=%.0f max_hyp=%.0f items=%d",
+                    jaar, ink_a, ink_p, ontvangt_aow, len(projected),
+                    sum(p.get("hoofdsom_box1", 0) for p in projected),
+                    sum(p.get("hoofdsom_box3", 0) for p in projected),
+                    max_hyp, len(data.aanvrager.inkomen.items),
+                )
+
         jaren.append({
             "jaar": jaar,
             "max_hypotheek": round(max_hyp),
