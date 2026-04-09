@@ -777,6 +777,12 @@ def _extract_inkomen_from_aanvraag(items: list, aow_datum: date | None = None) -
         _item_ingangsdatum = str(item.get("ingangsdatum") or "")
         _item_einddatum = str(item.get("einddatum") or "")
         _item_bron = str(item.get("inkomstenbron") or item.get("soort") or item_type)
+
+        # Loondienst/onderneming/roz zonder einddatum: stopt bij AOW
+        # Lovable toont de einddatum in de UI maar slaat het niet altijd op
+        if not _item_einddatum and aow_datum and item_type in ("loondienst",):
+            _item_einddatum = aow_datum.isoformat()
+
         if jaarbedrag > 0:
             inkomen_items.append(NormalizedInkomenItem(
                 bedrag=jaarbedrag,
