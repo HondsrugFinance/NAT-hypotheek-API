@@ -1858,6 +1858,7 @@ def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBes
         for ld in ld_items:
             looptijd_raw = _to_float(ld.get("looptijd") or ld.get("origineleLooptijd"))
             rentevast_raw = _to_float(ld.get("renteVastPeriode") or ld.get("rentevastePeriode"))
+            rente_aftrek_tot = str(ld.get("renteAftrekTot") or ld.get("renteaftrekTot") or "").strip()
             leningdelen.append({
                 "bedrag": _to_float(ld.get("bedrag") or ld.get("hoofdsom")),
                 "rente": _to_float(ld.get("rentePercentage") or ld.get("rente")),
@@ -1865,6 +1866,7 @@ def _extract_hypotheken_from_aanvraag(aanvraag_data: dict) -> list[NormalizedBes
                 "looptijd": int(looptijd_raw) if looptijd_raw else 0,
                 "rentevast": int(rentevast_raw) if rentevast_raw else 0,
                 "ingangsdatum": str(ld.get("ingangsdatum") or "").strip(),
+                "renteAftrekTot": rente_aftrek_tot,
             })
 
         result.append(NormalizedBestaandeHypotheek(

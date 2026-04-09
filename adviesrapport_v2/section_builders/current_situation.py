@@ -326,12 +326,15 @@ def build_current_situation_section(
             has_looptijd = any(ld.get("looptijd") for ld in hyp.leningdelen)
             has_rentevast = any(ld.get("rentevast") for ld in hyp.leningdelen)
             has_ingangsdatum = any(ld.get("ingangsdatum") for ld in hyp.leningdelen)
+            has_renteaftrek = any(ld.get("renteAftrekTot") for ld in hyp.leningdelen)
 
             headers = ["Leningdeel", "Bedrag", "Aflosvorm", "Rente"]
             if has_looptijd:
                 headers.append("Looptijd")
             if has_rentevast:
                 headers.append("Rentevast")
+            if has_renteaftrek:
+                headers.append("Renteaftrek tot")
             if has_ingangsdatum:
                 headers.append("Ingangsdatum")
 
@@ -352,6 +355,9 @@ def build_current_situation_section(
                 if has_rentevast:
                     rv = ld.get("rentevast", 0)
                     row.append(f"{rv} jaar" if rv else "-")
+                if has_renteaftrek:
+                    aftrek_tot = ld.get("renteAftrekTot", "")
+                    row.append(format_datum(aftrek_tot) if aftrek_tot else "-")
                 if has_ingangsdatum:
                     igd = ld.get("ingangsdatum", "")
                     row.append(format_datum(igd) if igd else "-")
