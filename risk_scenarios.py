@@ -236,8 +236,8 @@ def _bereken_scenario(
     if scenario1:
         max_annuitair = scenario1['annuitair']['max_box1']
         max_niet_annuitair = scenario1['niet_annuitair']['max_box1']
-        # Gebruik het hogere van de twee
-        max_hypotheek = max(max_annuitair, max_niet_annuitair)
+        # Gebruik altijd annuitaire toets (GHF-norm)
+        max_hypotheek = max_annuitair
     else:
         max_hypotheek = 0
 

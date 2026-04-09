@@ -53,7 +53,7 @@ def build_retirement_section(
     # Bereken max tekort over alle scenarios
     _max_tekort_pensioen = 0
     for sc in aow_scenarios:
-        _max_hyp = max(sc.get("max_hypotheek_annuitair", 0), sc.get("max_hypotheek_niet_annuitair", 0))
+        _max_hyp = max(0, sc.get("max_hypotheek_annuitair", 0))
         _schuld = sc.get("restschuld_op_peildatum", hypotheek)
         if _schuld > 0 and _schuld > _max_hyp:
             _max_tekort_pensioen = max(_max_tekort_pensioen, _schuld - _max_hyp)
@@ -163,11 +163,7 @@ def build_retirement_section(
                     "sub": True,
                 })
             rows.append({"label": "", "value": ""})
-            max_hyp = max(
-                0,
-                sc.get("max_hypotheek_annuitair", 0),
-                sc.get("max_hypotheek_niet_annuitair", 0),
-            )
+            max_hyp = max(0, sc.get("max_hypotheek_annuitair", 0))
             rows.append({
                 "label": "Maximale hypotheek na AOW",
                 "value": format_bedrag(max_hyp),
@@ -233,11 +229,7 @@ def build_retirement_section(
                 "bold": True,
             })
             col_rows.append({"label": "", "value": ""})
-            max_hyp = max(
-                0,
-                sc.get("max_hypotheek_annuitair", 0),
-                sc.get("max_hypotheek_niet_annuitair", 0),
-            )
+            max_hyp = max(0, sc.get("max_hypotheek_annuitair", 0))
             col_rows.append({
                 "label": "Maximale hypotheek",
                 "value": format_bedrag(max_hyp),

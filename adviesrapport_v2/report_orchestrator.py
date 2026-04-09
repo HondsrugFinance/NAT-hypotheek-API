@@ -299,10 +299,10 @@ def generate_sections(
     max_hyp_partner_alleen = 0
     if not data.alleenstaand and data.partner:
         max_hyp_aanvrager_alleen = _bereken_max_hypotheek_alleenstaand(
-            data.aanvrager.inkomen.hoofd_inkomen, data.financiering.energielabel,
+            data.inkomen_aanvrager_huidig, data.financiering.energielabel,
         )
         max_hyp_partner_alleen = _bereken_max_hypotheek_alleenstaand(
-            data.partner.inkomen.hoofd_inkomen, data.financiering.energielabel,
+            data.inkomen_partner_huidig, data.financiering.energielabel,
         )
 
     # --- Beschikbare buffer (spaargeld/beleggingen minus inbreng) ---
@@ -545,10 +545,7 @@ def _extract_per_person(
             return None
         result = []
         for sc in aow_scenarios:
-            max_hyp = max(
-                sc.get("max_hypotheek_annuitair", 0),
-                sc.get("max_hypotheek_niet_annuitair", 0),
-            )
+            max_hyp = sc.get("max_hypotheek_annuitair", 0)
             werkelijk = sc.get("restschuld_op_peildatum", round(hypotheek))
             result.append({
                 "naam": _naam_voor(sc.get("van_toepassing_op", "aanvrager")),
@@ -786,11 +783,7 @@ def _bereken_max_hypotheek(data: NormalizedDossierData) -> tuple[float, float]:
     debug = result.get("debug", {})
     toetsrente = debug.get("toets_rente", 0.05)
 
-    max_hyp = max(
-        0,
-        scenario1["annuitair"]["max_box1"],
-        scenario1["niet_annuitair"]["max_box1"],
-    )
+    max_hyp = max(0, scenario1["annuitair"]["max_box1"])
     return max_hyp, toetsrente
 
 
