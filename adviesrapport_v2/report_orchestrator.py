@@ -1063,18 +1063,20 @@ def _build_pensioen_chart_data(
     naam_aanvrager = (data.aanvrager.naam or "aanvr.").split()[0]
     naam_partner = ((data.partner.naam if data.partner else None) or "partner").split()[0]
 
-    # Bepaal AOW-jaren per persoon direct uit geboortedatum (niet uit scenario's)
+    # Bepaal AOW-datums en -jaren per persoon direct uit geboortedatum
     aow_jaar_aanvrager = None
+    aow_datum_aanvrager = None
     aow_jaar_partner = None
+    aow_datum_partner = None
     try:
-        _aow_dt = bereken_aow_datum(date.fromisoformat(data.aanvrager.geboortedatum))
-        aow_jaar_aanvrager = _aow_dt.year
+        aow_datum_aanvrager = bereken_aow_datum(date.fromisoformat(data.aanvrager.geboortedatum))
+        aow_jaar_aanvrager = aow_datum_aanvrager.year
     except (ValueError, TypeError):
         pass
     if data.partner and data.partner.geboortedatum:
         try:
-            _aow_dt_p = bereken_aow_datum(date.fromisoformat(data.partner.geboortedatum))
-            aow_jaar_partner = _aow_dt_p.year
+            aow_datum_partner = bereken_aow_datum(date.fromisoformat(data.partner.geboortedatum))
+            aow_jaar_partner = aow_datum_partner.year
         except (ValueError, TypeError):
             pass
 
@@ -1129,6 +1131,14 @@ def _build_pensioen_chart_data(
             max_hyp = max_hypotheek_huidig
         else:
             peildatum = date(jaar, 1, 1)
+            # In het AOW-jaar: gebruik AOW-datum als peildatum voor inkomen
+            # zodat inkomen en woonquote consistent zijn (geen piek door
+            # hoog loondienst + ruime AOW-woonquote in hetzelfde jaar)
+            inkomen_peildatum = peildatum
+            if aow_datum_aanvrager and jaar == aow_jaar_aanvrager:
+                inkomen_peildatum = aow_datum_aanvrager
+            elif aow_datum_partner and jaar == aow_jaar_partner:
+                inkomen_peildatum = aow_datum_partner
             projected = projecteer_hypotheekdelen(delen_api, elapsed_mnd, peildatum)
 
             # Renteaftrek: als restant_aftrekbaar verstreken, verplaats box1 → box3
@@ -1142,13 +1152,8 @@ def _build_pensioen_chart_data(
                             pd["hoofdsom_box1"] = 0
 
             # Inkomen: bepaal per datum welke inkomensitems actief zijn
-            # Debug: dump items eenmalig bij AOW-jaar
-            if aow_jaar_aanvrager and jaar == aow_jaar_aanvrager + 1 and data.aanvrager.inkomen.items:
-                for itm in data.aanvrager.inkomen.items:
-                    logger.info("  ITEM: type=%s bedrag=%.0f ingang='%s' eind='%s'",
-                                itm.type, itm.bedrag, itm.ingangsdatum, itm.einddatum)
-            ink_a = data.aanvrager.inkomen.totaal_op_datum(peildatum)
-            ink_p = data.partner.inkomen.totaal_op_datum(peildatum) if data.partner else 0
+            ink_a = data.aanvrager.inkomen.totaal_op_datum(inkomen_peildatum)
+            ink_p = data.partner.inkomen.totaal_op_datum(inkomen_peildatum) if data.partner else 0
             aanvrager_is_aow = aow_jaar_aanvrager and jaar >= aow_jaar_aanvrager
             partner_is_aow = aow_jaar_partner and jaar >= aow_jaar_partner
 
