@@ -7,31 +7,50 @@ from adviesrapport_v2.formatters import format_bedrag, format_datum, format_loop
 from adviesrapport_v2.section_builders._align import align_tables_in_columns
 
 
-def _inkomen_tabel(persoon, label_prefix: str = "") -> dict:
-    """Bouw inkomen-tabel voor één persoon."""
+def _inkomen_tabel(persoon, is_aow: bool = False) -> dict:
+    """Bouw inkomen-tabel voor één persoon.
+
+    Als is_aow=True: toon AOW-uitkering + pensioen + overig (huidige situatie).
+    Anders: toon loondienst/onderneming/uitkering etc.
+    """
     ink = persoon.inkomen
     rows = []
     totaal = 0
 
-    if ink.loondienst > 0:
-        rows.append(["Loondienst", format_bedrag(ink.loondienst)])
-        totaal += ink.loondienst
-    if ink.onderneming > 0:
-        rows.append(["Onderneming", format_bedrag(ink.onderneming)])
-        totaal += ink.onderneming
-    if ink.roz > 0:
-        rows.append(["ROZ", format_bedrag(ink.roz)])
-        totaal += ink.roz
-    if ink.uitkering > 0:
-        rows.append(["Uitkering", format_bedrag(ink.uitkering)])
-        totaal += ink.uitkering
-    overig_totaal = ink.overig + ink.overig_tijdelijk
-    if overig_totaal > 0:
-        rows.append(["Overig inkomen", format_bedrag(overig_totaal)])
-        totaal += overig_totaal
-    if ink.partneralimentatie_ontvangen > 0:
-        rows.append(["Partneralimentatie ontvangen", format_bedrag(ink.partneralimentatie_ontvangen)])
-        totaal += ink.partneralimentatie_ontvangen
+    if is_aow:
+        # Persoon is AOW-gerechtigd: toon AOW-inkomen als huidig inkomen
+        if ink.aow_uitkering > 0:
+            rows.append(["AOW-uitkering", format_bedrag(ink.aow_uitkering)])
+            totaal += ink.aow_uitkering
+        if ink.pensioen > 0:
+            rows.append(["Pensioen", format_bedrag(ink.pensioen)])
+            totaal += ink.pensioen
+        if ink.overig > 0:
+            rows.append(["Overig inkomen", format_bedrag(ink.overig)])
+            totaal += ink.overig
+        if ink.partneralimentatie_ontvangen > 0:
+            rows.append(["Partneralimentatie ontvangen", format_bedrag(ink.partneralimentatie_ontvangen)])
+            totaal += ink.partneralimentatie_ontvangen
+    else:
+        if ink.loondienst > 0:
+            rows.append(["Loondienst", format_bedrag(ink.loondienst)])
+            totaal += ink.loondienst
+        if ink.onderneming > 0:
+            rows.append(["Onderneming", format_bedrag(ink.onderneming)])
+            totaal += ink.onderneming
+        if ink.roz > 0:
+            rows.append(["ROZ", format_bedrag(ink.roz)])
+            totaal += ink.roz
+        if ink.uitkering > 0:
+            rows.append(["Uitkering", format_bedrag(ink.uitkering)])
+            totaal += ink.uitkering
+        overig_totaal = ink.overig + ink.overig_tijdelijk
+        if overig_totaal > 0:
+            rows.append(["Overig inkomen", format_bedrag(overig_totaal)])
+            totaal += overig_totaal
+        if ink.partneralimentatie_ontvangen > 0:
+            rows.append(["Partneralimentatie ontvangen", format_bedrag(ink.partneralimentatie_ontvangen)])
+            totaal += ink.partneralimentatie_ontvangen
 
     if not rows:
         rows.append(["Geen inkomen opgegeven", "€ 0"])
@@ -104,7 +123,11 @@ def _persoon_rows(persoon) -> list[dict]:
     return rows
 
 
-def build_current_situation_section(data: NormalizedDossierData) -> dict:
+def build_current_situation_section(
+    data: NormalizedDossierData,
+    aanvrager_is_aow: bool = False,
+    partner_is_aow: bool = False,
+) -> dict:
     """Bouw de huidige situatie sectie met subsections."""
     subsections = []
 
@@ -188,15 +211,16 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
             subsections.append({"subtitle": "Werkgever", "columns": cols})
 
     # --- Inkomen ---
+    # Bij AOW-gerechtigden: toon AOW+pensioen als huidig inkomen
     if data.alleenstaand:
         subsections.append({
             "subtitle": "Inkomen",
-            "tables": [_inkomen_tabel(data.aanvrager)],
+            "tables": [_inkomen_tabel(data.aanvrager, is_aow=aanvrager_is_aow)],
         })
     else:
         inkomen_cols = [
-            {"title": data.aanvrager.naam, "tables": [_inkomen_tabel(data.aanvrager)]},
-            {"title": data.partner.naam, "tables": [_inkomen_tabel(data.partner)]},
+            {"title": data.aanvrager.naam, "tables": [_inkomen_tabel(data.aanvrager, is_aow=aanvrager_is_aow)]},
+            {"title": data.partner.naam, "tables": [_inkomen_tabel(data.partner, is_aow=partner_is_aow)]},
         ]
         align_tables_in_columns(inkomen_cols)
         subsections.append({
@@ -205,22 +229,42 @@ def build_current_situation_section(data: NormalizedDossierData) -> dict:
         })
 
     # --- Inkomen na AOW ---
-    if data.aanvrager.inkomen.totaal_aow > 0 or (data.partner and data.partner.inkomen.totaal_aow > 0):
+    # Alleen tonen voor personen die nog NIET AOW-gerechtigd zijn
+    a_heeft_aow_data = not aanvrager_is_aow and data.aanvrager.inkomen.totaal_aow > 0
+    p_heeft_aow_data = (not partner_is_aow and data.partner and data.partner.inkomen.totaal_aow > 0)
+
+    if a_heeft_aow_data or p_heeft_aow_data:
         if data.alleenstaand:
-            subsections.append({
-                "subtitle": "Inkomen na AOW",
-                "tables": [_inkomen_aow_tabel(data.aanvrager)],
-            })
+            if a_heeft_aow_data:
+                subsections.append({
+                    "subtitle": "Inkomen na AOW",
+                    "tables": [_inkomen_aow_tabel(data.aanvrager)],
+                })
         else:
-            aow_cols = [
-                {"title": data.aanvrager.naam, "tables": [_inkomen_aow_tabel(data.aanvrager)]},
-                {"title": data.partner.naam, "tables": [_inkomen_aow_tabel(data.partner)]},
-            ]
-            align_tables_in_columns(aow_cols)
-            subsections.append({
-                "subtitle": "Inkomen na AOW",
-                "columns": aow_cols,
-            })
+            # Stel: alleen kolommen tonen voor personen die nog niet AOW zijn
+            if a_heeft_aow_data and p_heeft_aow_data:
+                # Beiden nog niet AOW → twee kolommen
+                aow_cols = [
+                    {"title": data.aanvrager.naam, "tables": [_inkomen_aow_tabel(data.aanvrager)]},
+                    {"title": data.partner.naam, "tables": [_inkomen_aow_tabel(data.partner)]},
+                ]
+                align_tables_in_columns(aow_cols)
+                subsections.append({
+                    "subtitle": "Inkomen na AOW",
+                    "columns": aow_cols,
+                })
+            elif a_heeft_aow_data:
+                # Alleen aanvrager nog niet AOW
+                subsections.append({
+                    "subtitle": f"Inkomen na AOW — {data.aanvrager.naam}",
+                    "tables": [_inkomen_aow_tabel(data.aanvrager)],
+                })
+            elif p_heeft_aow_data:
+                # Alleen partner nog niet AOW
+                subsections.append({
+                    "subtitle": f"Inkomen na AOW — {data.partner.naam}",
+                    "tables": [_inkomen_aow_tabel(data.partner)],
+                })
 
     # --- Bestaande woning ---
     for i, woning in enumerate(data.bestaande_woningen):

@@ -348,7 +348,11 @@ def generate_sections(
         alle_personen_aow=_alle_personen_aow,
     ))
 
-    sections.append(build_current_situation_section(data))
+    sections.append(build_current_situation_section(
+        data,
+        aanvrager_is_aow=_aanvrager_is_aow,
+        partner_is_aow=_partner_is_aow,
+    ))
 
     sections.append(build_financing_section(data, bruto_maandlast))
 
