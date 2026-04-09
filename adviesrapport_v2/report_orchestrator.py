@@ -298,11 +298,14 @@ def generate_sections(
     max_hyp_aanvrager_alleen = 0
     max_hyp_partner_alleen = 0
     if not data.alleenstaand and data.partner:
+        # Bij AOW-gerechtigden: gebruik AOW-inkomen als huidig inkomen
+        ink_a_relatie = inkomen_aanvrager_aow if _aanvrager_is_aow else data.inkomen_aanvrager_huidig
+        ink_p_relatie = inkomen_partner_aow if _partner_is_aow else data.inkomen_partner_huidig
         max_hyp_aanvrager_alleen = _bereken_max_hypotheek_alleenstaand(
-            data.inkomen_aanvrager_huidig, data.financiering.energielabel,
+            ink_a_relatie, data.financiering.energielabel, ontvangt_aow=_aanvrager_is_aow,
         )
         max_hyp_partner_alleen = _bereken_max_hypotheek_alleenstaand(
-            data.inkomen_partner_huidig, data.financiering.energielabel,
+            ink_p_relatie, data.financiering.energielabel, ontvangt_aow=_partner_is_aow,
         )
 
     # --- Beschikbare buffer (spaargeld/beleggingen minus inbreng) ---
@@ -390,6 +393,8 @@ def generate_sections(
         max_hyp_partner_alleen=max_hyp_partner_alleen,
         max_hypotheek_huidig=max_hypotheek,
         beschikbare_buffer=beschikbare_buffer,
+        inkomen_aanvrager=ink_a_relatie if not data.alleenstaand and data.partner else data.inkomen_aanvrager_huidig,
+        inkomen_partner=ink_p_relatie if not data.alleenstaand and data.partner else data.inkomen_partner_huidig,
     )
     if relatie_section:
         sections.append(relatie_section)
@@ -787,13 +792,13 @@ def _bereken_max_hypotheek(data: NormalizedDossierData) -> tuple[float, float]:
     return max_hyp, toetsrente
 
 
-def _bereken_max_hypotheek_alleenstaand(inkomen: float, energielabel: str) -> float:
+def _bereken_max_hypotheek_alleenstaand(inkomen: float, energielabel: str, ontvangt_aow: bool = False) -> float:
     """Bereken max hypotheek als alleenstaande (voor relatiebeëindiging)."""
     inputs = {
         "hoofd_inkomen_aanvrager": inkomen,
         "hoofd_inkomen_partner": 0,
         "alleenstaande": "JA",
-        "ontvangt_aow": "NEE",
+        "ontvangt_aow": "JA" if ontvangt_aow else "NEE",
         "energielabel": energielabel,
         "hypotheek_delen": [{
             "aflos_type": "Annuïteit",
@@ -1167,11 +1172,7 @@ def _build_pensioen_chart_data(
                 result = calculator_final.calculate(inputs)
                 s1 = result.get("scenario1")
                 if s1:
-                    max_hyp = max(
-                        0,
-                        s1["annuitair"]["max_box1"],
-                        s1["niet_annuitair"]["max_box1"],
-                    )
+                    max_hyp = max(0, s1["annuitair"]["max_box1"])
                 else:
                     max_hyp = 0
             except Exception:

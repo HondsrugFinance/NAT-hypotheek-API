@@ -12,10 +12,16 @@ def build_risk_relationship_section(
     max_hyp_partner_alleen: float,
     max_hypotheek_huidig: float,
     beschikbare_buffer: float = 0,
+    inkomen_aanvrager: float | None = None,
+    inkomen_partner: float | None = None,
 ) -> dict | None:
     """Bouw de relatiebeëindiging sectie (alleen bij stel)."""
     if data.alleenstaand or not data.partner:
         return None
+
+    # Gebruik meegegeven inkomen (AOW-aware) of fallback naar data
+    ink_a = inkomen_aanvrager if inkomen_aanvrager is not None else data.inkomen_aanvrager_huidig
+    ink_p = inkomen_partner if inkomen_partner is not None else data.inkomen_partner_huidig
 
     hypotheek = data.totale_hypotheekschuld
 
@@ -80,8 +86,8 @@ def build_risk_relationship_section(
         {
             "title": f"{data.aanvrager.titel_naam} alleen",
             "rows": [
-                {"label": "Resterend inkomen", "value": format_bedrag(data.inkomen_aanvrager_huidig), "bold": True},
-                {"label": f"Inkomen {data.aanvrager.korte_naam}", "value": format_bedrag(data.inkomen_aanvrager_huidig), "sub": True},
+                {"label": "Resterend inkomen", "value": format_bedrag(ink_a), "bold": True},
+                {"label": f"Inkomen {data.aanvrager.korte_naam}", "value": format_bedrag(ink_a), "sub": True},
                 {"label": "Maximale hypotheek", "value": format_bedrag(max_hyp_aanvrager_alleen), "sub": True},
             ],
             "chart_data": {
@@ -96,8 +102,8 @@ def build_risk_relationship_section(
         {
             "title": f"{data.partner.titel_naam} alleen",
             "rows": [
-                {"label": "Resterend inkomen", "value": format_bedrag(data.inkomen_partner_huidig), "bold": True},
-                {"label": f"Inkomen {data.partner.korte_naam}", "value": format_bedrag(data.inkomen_partner_huidig), "sub": True},
+                {"label": "Resterend inkomen", "value": format_bedrag(ink_p), "bold": True},
+                {"label": f"Inkomen {data.partner.korte_naam}", "value": format_bedrag(ink_p), "sub": True},
                 {"label": "Maximale hypotheek", "value": format_bedrag(max_hyp_partner_alleen), "sub": True},
             ],
             "chart_data": {
