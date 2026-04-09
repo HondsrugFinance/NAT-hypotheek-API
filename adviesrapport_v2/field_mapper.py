@@ -110,6 +110,24 @@ class NormalizedLeningdeel:
         }
 
 
+def _parse_datum_inline(val: str):
+    """Parse datum string (YYYY-MM-DD, DD-MM-YYYY, met of zonder T-tijd) naar date of None."""
+    if not val or not val.strip():
+        return None
+    val = val.strip()
+    if "T" in val:
+        val = val.split("T")[0]
+    from datetime import date as _date, datetime as _dt
+    try:
+        return _date.fromisoformat(val)
+    except (ValueError, TypeError):
+        pass
+    try:
+        return _dt.strptime(val, "%d-%m-%Y").date()
+    except (ValueError, TypeError):
+        return None
+
+
 @dataclass
 class NormalizedInkomenItem:
     """Individueel inkomensitem met datumbereik."""
@@ -173,23 +191,16 @@ class NormalizedInkomen:
         Returns:
             Totaal jaarbedrag van alle actieve inkomensitems.
         """
-        from datetime import date as _date
         totaal = 0.0
         for item in self.items:
             if item.ingangsdatum:
-                try:
-                    start = _date.fromisoformat(item.ingangsdatum)
-                    if peildatum < start:
-                        continue
-                except (ValueError, TypeError):
-                    pass
+                start = _parse_datum_inline(item.ingangsdatum)
+                if start and peildatum < start:
+                    continue
             if item.einddatum:
-                try:
-                    eind = _date.fromisoformat(item.einddatum)
-                    if peildatum >= eind:
-                        continue
-                except (ValueError, TypeError):
-                    pass
+                eind = _parse_datum_inline(item.einddatum)
+                if eind and peildatum >= eind:
+                    continue
             totaal += item.bedrag
         return totaal
 
@@ -524,12 +535,9 @@ class NormalizedDossierData:
                 continue
             # Check einddatum: als verstreken, verplichting niet meer actief
             if v.einddatum:
-                try:
-                    eind = _date.fromisoformat(v.einddatum)
-                    if peildatum >= eind:
-                        continue  # Verplichting afgelopen
-                except (ValueError, TypeError):
-                    pass
+                eind = _parse_datum_inline(v.einddatum)
+                if eind and peildatum >= eind:
+                    continue  # Verplichting afgelopen
             # Verplichting is actief
             if "studie" in v.type:
                 studielening += v.maandbedrag
