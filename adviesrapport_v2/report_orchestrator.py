@@ -1142,6 +1142,11 @@ def _build_pensioen_chart_data(
                             pd["hoofdsom_box1"] = 0
 
             # Inkomen: bepaal per datum welke inkomensitems actief zijn
+            # Debug: dump items eenmalig bij AOW-jaar
+            if aow_jaar_aanvrager and jaar == aow_jaar_aanvrager + 1 and data.aanvrager.inkomen.items:
+                for itm in data.aanvrager.inkomen.items:
+                    logger.info("  ITEM: type=%s bedrag=%.0f ingang='%s' eind='%s'",
+                                itm.type, itm.bedrag, itm.ingangsdatum, itm.einddatum)
             ink_a = data.aanvrager.inkomen.totaal_op_datum(peildatum)
             ink_p = data.partner.inkomen.totaal_op_datum(peildatum) if data.partner else 0
             aanvrager_is_aow = aow_jaar_aanvrager and jaar >= aow_jaar_aanvrager
