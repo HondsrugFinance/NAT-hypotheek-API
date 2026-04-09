@@ -231,12 +231,12 @@ class NormalizedPersoon:
 
     @property
     def korte_naam(self) -> str:
-        """Roepnaam of voorletters+achternaam — voor teksten en tabellen."""
-        return self.voornaam if self.voornaam else (self.voorletters_achternaam or self.naam)
+        """Voornaam+achternaam of voorletters+achternaam — voor teksten en tabellen."""
+        return self.naam if self.voornaam else (self.voorletters_achternaam or self.naam)
 
     @property
     def titel_naam(self) -> str:
-        """Roepnaam+achternaam of voorletters+achternaam — voor titels."""
+        """Voornaam+achternaam of voorletters+achternaam — voor titels."""
         return self.naam if self.voornaam else (self.voorletters_achternaam or self.naam)
 
 
