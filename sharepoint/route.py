@@ -106,15 +106,56 @@ async def maak_klantmap(body: KlantmapRequest, request: Request):
     )
 
 
+async def _find_klantmap_by_dossiernummer(dossiernummer: str) -> dict | None:
+    """Zoek een klantmap op SharePoint via prefix-match op dossiernummer.
+
+    Kijkt in SHAREPOINT_KLANTEN_ROOT naar een map die start met "{dossiernummer} ".
+    Dit maakt naam-wijzigingen van de klant onschadelijk voor de koppeling —
+    zolang het dossiernummer in de mapnaam staat, wordt hij gevonden.
+
+    Returns het folder-item dict (name, id, webUrl, ...) of None.
+    """
+    try:
+        alle_mappen = await sp_client.list_folder(sp_client.SHAREPOINT_KLANTEN_ROOT)
+    except GraphAPIError as e:
+        logger.warning("SHAREPOINT_KLANTEN_ROOT niet leesbaar: %s", e.message)
+        return None
+
+    prefix = f"{dossiernummer} "
+    for item in alle_mappen:
+        if "folder" in item and item.get("name", "").startswith(prefix):
+            return item
+    return None
+
+
+async def _persist_sharepoint_url(dossier_id: str, access_token: str | None, web_url: str) -> None:
+    """Schrijf gevonden sharepoint_url terug naar Supabase (self-healing)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/dossiers",
+                headers=supabase_headers(access_token),
+                params={"id": f"eq.{dossier_id}"},
+                json={"sharepoint_url": web_url},
+            )
+    except Exception as e:
+        logger.warning("sharepoint_url opslaan mislukt voor %s: %s", dossier_id, e)
+
+
 @router.get("/klantmap/{dossier_id}", response_model=KlantmapInhoudResponse)
 async def lees_klantmap(dossier_id: str, request: Request):
-    """Haal de inhoud van een klantmap op."""
+    """Haal de inhoud van een klantmap op.
+
+    Zoekt de klantmap op SharePoint via prefix-match op dossiernummer —
+    onafhankelijk van de exacte mapnaam. Als de map gevonden is en de
+    sharepoint_url nog niet in Supabase staat, wordt die daar teruggeschreven.
+    """
     if not sp_client.is_configured():
         raise HTTPException(503, "SharePoint niet geconfigureerd")
 
     access_token = _extract_access_token(request)
 
-    # Dossier ophalen voor SharePoint pad
+    # Dossier ophalen voor dossiernummer
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -136,12 +177,18 @@ async def lees_klantmap(dossier_id: str, request: Request):
     if not dossiernummer:
         raise HTTPException(400, "Dossier heeft geen dossiernummer")
 
-    # Mapnaam reconstrueren
-    naam_deel = _build_mapnaam(dossier)
-    import re
-    clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
-    mapnaam = f"{dossiernummer} {clean_naam}"
+    # Zoek klantmap via prefix-match op dossiernummer
+    folder = await _find_klantmap_by_dossiernummer(dossiernummer)
+    if not folder:
+        raise HTTPException(404, f"Geen klantmap gevonden voor {dossiernummer}")
+
+    mapnaam = folder["name"]
+    web_url = folder.get("webUrl") or ""
     hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{mapnaam}"
+
+    # Self-healing: schrijf gevonden URL terug naar Supabase als nog niet ingevuld
+    if web_url and dossier.get("sharepoint_url") != web_url:
+        await _persist_sharepoint_url(dossier_id, access_token, web_url)
 
     try:
         items_raw = await sp_client.list_folder(hoofdpad)
@@ -175,7 +222,7 @@ async def lees_klantmap(dossier_id: str, request: Request):
         ))
 
     return KlantmapInhoudResponse(
-        sharepoint_url=dossier.get("sharepoint_url"),
+        sharepoint_url=web_url or dossier.get("sharepoint_url"),
         items=items,
     )
 
@@ -224,9 +271,11 @@ async def upload_naar_klantmap(
     if not dossiernummer:
         raise HTTPException(400, "Dossier heeft geen dossiernummer")
 
-    naam_deel = _build_mapnaam(dossier)
-    clean_naam = re.sub(r'["*:<>?/\\|]', '', naam_deel).rstrip('. ')
-    hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{dossiernummer} {clean_naam}"
+    # Zoek klantmap via prefix-match op dossiernummer (tolerant voor naam-wijzigingen)
+    folder = await _find_klantmap_by_dossiernummer(dossiernummer)
+    if not folder:
+        raise HTTPException(404, f"Geen klantmap gevonden voor {dossiernummer}")
+    hoofdpad = f"{sp_client.SHAREPOINT_KLANTEN_ROOT}/{folder['name']}"
 
     # Upload naar _inbox (niet hoofdmap) zodat document processing pipeline
     # het bestand kan verwerken (classificatie, extractie, hernoemen, verplaatsen)
