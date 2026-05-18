@@ -60,6 +60,60 @@ async def scraper_status():
     return _last_run
 
 
+@router.post("/test-mini")
+async def scraper_test_mini(request: Request):
+    """Mini-scrape: 1 Fastlane call + parsing test (zonder Supabase, zonder loop).
+
+    Doet exact wat 1 stap van de scraper doet: fetch + parse + naam-normalisatie.
+    Snel (~2s) en toont of er onderweg iets fout gaat.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import time
+    from rentes.scraper.sources.fastlane import FastlaneScraper
+
+    start = time.time()
+    scraper = FastlaneScraper()
+
+    out = {
+        "auth_configured": bool(scraper.auth_token and scraper.user_hash),
+    }
+
+    try:
+        import httpx
+        url = scraper._build_ltv_url(58, 120, "C", False)
+        out["url"] = url
+
+        async with httpx.AsyncClient(timeout=10.0, headers=scraper._headers()) as client:
+            resp = await scraper._fetch(client, url)
+        out["http_status"] = resp.status_code
+
+        rates = scraper._parse_ltv_response(
+            resp.json(), aflosvorm="annuitair", rentevaste_periode=10,
+            energielabel="C", nhg=False,
+        )
+        out["rates_parsed"] = len(rates)
+        out["unique_banks"] = len(set(r.geldverstrekker for r in rates))
+        if rates:
+            sample = rates[0]
+            out["sample_rate"] = {
+                "geldverstrekker": sample.geldverstrekker,
+                "productlijn": sample.productlijn,
+                "ltv": sample.ltv_categorie,
+                "rente": sample.rente,
+            }
+        out["success"] = True
+    except Exception as e:
+        out["exception_type"] = type(e).__name__
+        out["exception_message"] = str(e)[:500]
+        out["success"] = False
+
+    out["duration_seconds"] = round(time.time() - start, 2)
+    return out
+
+
 @router.get("/diagnostic")
 async def scraper_diagnostic(request: Request):
     """Diagnostiek endpoint: test of Fastlane API bereikbaar is vanaf deze server.
