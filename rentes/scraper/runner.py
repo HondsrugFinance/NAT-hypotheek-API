@@ -113,16 +113,66 @@ class ScrapeOrchestrator:
                 if key not in best_rates:
                     best_rates[key] = rate
 
-        # 7. Opslaan
+        # 7. Opslaan rentes
         stored = 0
         if not self.dry_run and best_rates:
             stored = await self._store_rates(list(best_rates.values()))
             validation.stored = stored
 
-        # 8. Log run
+        # 8. Opslaan kortingen (alleen Fastlane heeft die nu)
+        kortingen_stored = 0
+        if not self.dry_run:
+            all_kortingen = []
+            for r in processed_results:
+                if r.success:
+                    all_kortingen.extend(getattr(r, 'kortingen', []) or [])
+            if all_kortingen:
+                kortingen_stored = await self._store_kortingen(all_kortingen)
+
+        # 9. Log run
         await self._log_run(processed_results, validation)
 
-        return self._build_summary(processed_results, validation, stored)
+        summary = self._build_summary(processed_results, validation, stored)
+        summary["kortingen_opgeslagen"] = kortingen_stored
+        return summary
+
+    async def _store_kortingen(self, kortingen) -> int:
+        """Sla kortingen op in Supabase rente_kortingen tabel.
+
+        Upsert op (geldverstrekker, productlijn, korting_type, peildatum).
+        """
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            return 0
+
+        peildatum = date.today().isoformat()
+        rows = [
+            {
+                "geldverstrekker": k.geldverstrekker,
+                "productlijn": k.productlijn,
+                "korting_type": k.korting_type,
+                "staffel": k.staffel,
+                "omschrijving": k.omschrijving,
+                "peildatum": peildatum,
+            }
+            for k in kortingen
+        ]
+
+        if not rows:
+            return 0
+
+        url = f"{SUPABASE_URL}/rest/v1/rente_kortingen"
+        headers = _supabase_headers()
+        headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, json=rows)
+                resp.raise_for_status()
+            logger.info("[runner] %d kortingen opgeslagen in rente_kortingen", len(rows))
+            return len(rows)
+        except Exception as e:
+            logger.error("[runner] Fout bij opslaan kortingen: %s", e)
+            return 0
 
     async def _load_previous_rates(self) -> dict[tuple, float]:
         """Laad meest recente rentes uit Supabase voor trendcheck."""

@@ -65,19 +65,22 @@ AFLOSVORMEN = {
 
 # Rentevaste periodes in MAANDEN (Fastlane gebruikt maanden, niet jaren)
 # 1 = variabel (1 maand), de rest is jaren * 12
-# Default: 7 meest-gebruikte periodes. Volledige lijst via PERIODES_MAANDEN_FULL.
+# Alle gangbare periodes. Banken die een periode niet aanbieden krijgen lege rates.
 PERIODES_MAANDEN = [
     1,    # variabel
     12,   # 1 jaar
+    24,   # 2 jaar
+    36,   # 3 jaar
+    48,   # 4 jaar
     60,   # 5 jaar
+    72,   # 6 jaar
+    84,   # 7 jaar
     120,  # 10 jaar
+    144,  # 12 jaar
     180,  # 15 jaar
     240,  # 20 jaar
+    300,  # 25 jaar
     360,  # 30 jaar
-]
-
-PERIODES_MAANDEN_FULL = [
-    1, 12, 24, 36, 60, 72, 84, 120, 144, 180, 204, 240, 300, 360,
 ]
 
 def periode_maanden_naar_jaren(maanden: int) -> int:
@@ -86,10 +89,16 @@ def periode_maanden_naar_jaren(maanden: int) -> int:
         return 0  # variabel
     return maanden // 12
 
-# Energielabels die we standaard scrapen (alleen C voor basis-rente).
-# Energielabel-kortingen worden apart afgeleid (via A vs G vergelijk).
-ENERGIELABELS = ["C"]
-ENERGIELABELS_VOOR_KORTING_DERIVATION = ["A", "G"]
+# Basis-rente scrape met label "G" (= 0% korting bij alle banken, matcht
+# wat banken publiceren als "Geen energielabel beschikbaar").
+ENERGIELABELS = ["G"]
+
+# Voor kortingen-derivation: vergelijk label A/B/C/D vs G.
+# Side-scrape doet 1 call per label op een ankerpunt (10jr 80% LTV annuitair),
+# en gebruikt het verschil als korting voor alle producten van die bank.
+ENERGIELABELS_VOOR_KORTING = ["A", "B", "C", "D"]
+KORTING_ANKER_PERIODE_MND = 120  # 10 jaar (meest representatief)
+KORTING_ANKER_LTV_SEGMENT = 80   # 80% LTV
 
 # LTV-staffel mapping: index in riskCategories array → onze database LTV-categorie
 # riskCategories order: 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110
@@ -277,31 +286,125 @@ class FastlaneScraper(BaseScraper):
 
                             await self._rate_limit()
 
-            # 2. Overbruggingsrentes (1 call, alle producten)
+            # 2. Energielabel-kortingen afleiden: scrape label A/B/C/D op ankerpunt,
+            # vergelijk met basis (label G) op zelfde punt → delta = korting
+            all_kortingen: list = []
             try:
-                resp = await self._fetch_fastlane(client, self._build_bridging_url())
-                pages_fetched += 1
-                bridging_rates = self._parse_bridging_response(resp.json())
-                all_rates.extend(bridging_rates)
+                ankur_rates = await self._scrape_kortingen(client)
+                all_kortingen.extend(ankur_rates)
+                pages_fetched += len(ENERGIELABELS_VOOR_KORTING) + 1  # +1 voor basis-call
             except Exception as e:
-                msg = f"Fout bij overbrugging: {e}"
+                msg = f"Fout bij kortingen-scrape: {e}"
                 logger.error("[fastlane] %s", msg)
                 errors.append(msg)
 
+            # 3. Overbruggingsrentes (1 call, alle producten) — nog niet geïmplementeerd,
+            # response heeft alleen finDataCode. Wordt later toegevoegd.
+
         duration = time.time() - start
         logger.info(
-            "[fastlane] Klaar: %d rentes van %d calls in %.1fs (%d fouten)",
-            len(all_rates), pages_fetched, duration, len(errors),
+            "[fastlane] Klaar: %d rentes + %d kortingen, %d calls in %.1fs (%d fouten)",
+            len(all_rates), len(all_kortingen), pages_fetched, duration, len(errors),
         )
 
         return ScrapeResult(
             bron=self.name,
             success=len(all_rates) > 0,
             rates=all_rates,
+            kortingen=all_kortingen,
             errors=errors,
             duration_seconds=duration,
             pages_fetched=pages_fetched,
         )
+
+    async def _scrape_kortingen(self, client: httpx.AsyncClient) -> list:
+        """Bereken energielabel-korting per geldverstrekker.
+
+        Doet 1 call met label G (basis) en 1 call per label A/B/C/D op het ankerpunt
+        (10jr annuïtair, 80% LTV, geen NHG). Verschil = korting voor dat label.
+
+        Banken hebben meestal label-onafhankelijke kortingen die voor alle periodes/LTVs
+        gelden. Het is dus voldoende om dit op één ankerpunt te bepalen.
+
+        Returns lijst van ScrapedKorting (1 per geldverstrekker × productlijn).
+        """
+        from rentes.scraper.models import ScrapedKorting
+
+        # Basis-rentes ophalen (label G) — als die er al zijn vanuit hoofdscrape kunnen we dat hergebruiken
+        # Voor eenvoud: aparte call.
+        anker_url = self._build_ltv_url(
+            AFLOSVORMEN["annuitair"], KORTING_ANKER_PERIODE_MND, "G", False,
+        )
+        resp = await self._fetch_fastlane(client, anker_url)
+        basis_data = resp.json()
+        await self._rate_limit()
+
+        # Per (geldverstrekker, productlijn): basis-rente op 80% LTV (index 6 = 80% in riskCategories)
+        # riskCategories: [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110]
+        basis_per_product: dict[tuple[str, str], float] = {}
+        for product in basis_data.get("labels", []):
+            raw_name = product.get("name", "").strip()
+            gv, pl = self._split_fastlane_label(raw_name)
+            if not gv:
+                continue
+            interests = product.get("interests", [])
+            if len(interests) > 6 and interests[6].get("percentage"):
+                try:
+                    basis_per_product[(gv, pl)] = float(interests[6]["percentage"])
+                except (ValueError, TypeError):
+                    pass
+
+        # Per label-keuze: scrape, bereken delta per product
+        kortingen_per_product: dict[tuple[str, str], dict[str, float]] = {}
+        for label in ENERGIELABELS_VOOR_KORTING:
+            url = self._build_ltv_url(
+                AFLOSVORMEN["annuitair"], KORTING_ANKER_PERIODE_MND, label, False,
+            )
+            resp = await self._fetch_fastlane(client, url)
+            data = resp.json()
+            await self._rate_limit()
+
+            for product in data.get("labels", []):
+                raw_name = product.get("name", "").strip()
+                gv, pl = self._split_fastlane_label(raw_name)
+                if not gv:
+                    continue
+                interests = product.get("interests", [])
+                if len(interests) > 6 and interests[6].get("percentage"):
+                    try:
+                        rate = float(interests[6]["percentage"])
+                    except (ValueError, TypeError):
+                        continue
+                    basis = basis_per_product.get((gv, pl))
+                    if basis is not None:
+                        korting = round(rate - basis, 4)  # negatief = korting
+                        if (gv, pl) not in kortingen_per_product:
+                            kortingen_per_product[(gv, pl)] = {}
+                        kortingen_per_product[(gv, pl)][label] = korting
+
+        # Bouw ScrapedKorting objects (1 per gv × productlijn, met staffel dict)
+        result = []
+        for (gv, pl), staffel in kortingen_per_product.items():
+            # Voor labels die niet apart gescraped zijn maar wel logisch dezelfde korting hebben:
+            # ING/ABN AMRO etc geven A+, A++, A+++, A++++ allemaal dezelfde korting als A
+            if "A" in staffel:
+                for premium_label in ["A+", "A++", "A+++", "A++++"]:
+                    staffel[premium_label] = staffel["A"]
+            # E/F/G hebben geen korting (basis)
+            for zero_label in ["E", "F", "G"]:
+                staffel[zero_label] = 0.0
+
+            result.append(ScrapedKorting(
+                geldverstrekker=gv,
+                productlijn=pl,
+                korting_type="energielabel",
+                staffel=staffel,
+                bron=self.name,
+                omschrijving="Energielabel-korting (afgeleid van 10jr annuïtair 80% LTV ankerpunt)",
+            ))
+
+        logger.info("[fastlane] Kortingen afgeleid voor %d producten", len(result))
+        return result
 
     async def _fetch_fastlane(self, client: httpx.AsyncClient, url: str) -> httpx.Response:
         """Wrapper rond _fetch met Fastlane-specifieke headers."""

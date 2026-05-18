@@ -25,12 +25,25 @@ class ScrapedRate:
 
 
 @dataclass
+class ScrapedKorting:
+    """Eén geschraapte korting (bijv. energielabel-staffel) per geldverstrekker."""
+
+    geldverstrekker: str
+    productlijn: str
+    korting_type: str             # "energielabel", "betaalrekening", etc.
+    staffel: dict[str, float]     # {"A": -0.20, "B": -0.12, ...}
+    bron: str
+    omschrijving: str = ""
+
+
+@dataclass
 class ScrapeResult:
     """Resultaat van één scraper-run."""
 
     bron: str
     success: bool
     rates: list[ScrapedRate] = field(default_factory=list)
+    kortingen: list[ScrapedKorting] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
     pages_fetched: int = 0
