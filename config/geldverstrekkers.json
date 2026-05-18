@@ -1,7 +1,7 @@
 {
   "versie": "2026",
-  "laatst_bijgewerkt": "2026-03-23",
-  "beschrijving": "Geldverstrekkers en productlijnen voor hypotheken",
+  "laatst_bijgewerkt": "2026-05-18",
+  "beschrijving": "Geldverstrekkers en productlijnen voor hypotheken. Status-objects markeren inactieve/uitgefaseerde entries (default = actief).",
   "geldverstrekkers": [
     "ABN AMRO",
     "Aegon",
@@ -42,6 +42,29 @@
     "Vista",
     "Woonnu"
   ],
+  "geldverstrekkers_status": {
+    "_comment": "Default = actief. Alleen entries vermeld die NIET actief zijn (uitgefaseerd, gefuseerd, overgenomen). overgenomen_door = wijst naar opvolger(s).",
+    "Aegon": {
+      "actief": false,
+      "overgenomen_door": ["Knab", "ASR"],
+      "notitie": "Aegon-hypotheek bedrijf opgegaan in Knab en ASR. Bestaande Aegon-hypotheken blijven beheerd; nieuwe aanvragen via Knab of ASR."
+    },
+    "BLG Wonen": {
+      "actief": false,
+      "overgenomen_door": ["ASN"],
+      "notitie": "BLG Wonen-portefeuille opgegaan in ASN."
+    },
+    "RegioBank": {
+      "actief": false,
+      "overgenomen_door": ["ASN"],
+      "notitie": "RegioBank-portefeuille opgegaan in ASN."
+    },
+    "SNS": {
+      "actief": false,
+      "overgenomen_door": ["ASN"],
+      "notitie": "SNS-portefeuille opgegaan in ASN."
+    }
+  },
   "productlijnen": {
     "ABN AMRO": ["Budget Hypotheek", "Woning Hypotheek"],
     "Aegon": ["Hypotheek"],
@@ -81,5 +104,14 @@
     "Venn": ["Hypotheek"],
     "Vista": ["Hypotheek"],
     "Woonnu": ["Hypotheek"]
+  },
+  "productlijnen_status": {
+    "_comment": "Default = actief. Per geldverstrekker per productlijn een status-object. Alleen non-defaults vermelden.",
+    "bijBouwe": {
+      "Hypotheek": {
+        "actief": false,
+        "notitie": "Oude bijBouwe-hypotheek. Niet meer beschikbaar voor nieuwe aanvragen — alleen Vooruit Hypotheek is actief. Bestaande klanten kunnen renteverlengen via 'bijBouwe (basis) Hypotheek (Beheer)' in HB."
+      }
+    }
   }
 }
