@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from rentes.scraper.runner import ScrapeOrchestrator
 
@@ -223,6 +224,76 @@ async def scraper_refresh_token_debug(request: Request):
         out["steps"] = steps
 
     return out
+
+
+class SetCredentialsRequest(BaseModel):
+    auth_token: str
+    user_hash: str
+    notes: str | None = None
+
+
+@router.post("/set-credentials")
+async def scraper_set_credentials(body: SetCredentialsRequest, request: Request):
+    """Handmatig nieuwe Fastlane credentials opslaan in Supabase.
+
+    Veel betrouwbaarder dan auto-refresh via Playwright (Fastlane SSO is
+    sessiegebonden en niet stabiel te scripten). Workflow:
+
+    1. Open https://fastlane.fdta.nl/rente/rentevast-periode in browser (ingelogd)
+    2. F12 → Network tab → klik 'ja' request
+    3. Kopieer 'authorization' header value
+    4. Kopieer 'x-user-hash' header value
+    5. POST naar dit endpoint met die waarden
+
+    Beveiligd met X-Cron-Secret header.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    # Validatie: token moet 32 hex chars zijn, user_hash 36 chars (UUID)
+    if len(body.auth_token) < 16:
+        raise HTTPException(400, f"auth_token te kort ({len(body.auth_token)} chars, verwacht 32)")
+    if len(body.user_hash) != 36:
+        raise HTTPException(400, f"user_hash moet 36 chars zijn (UUID), kreeg {len(body.user_hash)}")
+
+    # Eerst: test of de nieuwe credentials werken
+    import httpx
+    test_url = "https://fds2.fdta.nl/v1/filter/ltv/58/120/C/2/nee/1/ja"
+    test_headers = {
+        "authorization": body.auth_token,
+        "x-user-hash": body.user_hash,
+        "origin": "https://fastlane.fdta.nl",
+        "referer": "https://fastlane.fdta.nl/",
+        "user-agent": "Mozilla/5.0",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(test_url, headers=test_headers)
+        if resp.status_code != 200:
+            return {
+                "status": "rejected",
+                "message": f"Test-call mislukt met HTTP {resp.status_code}",
+                "response_preview": resp.text[:200],
+            }
+    except Exception as e:
+        return {"status": "rejected", "message": f"Test-call exception: {e}"}
+
+    # Werkt → opslaan
+    from rentes.scraper.credentials_store import save_credentials
+    saved = await save_credentials(
+        bron="fastlane",
+        auth_token=body.auth_token,
+        user_hash=body.user_hash,
+        notes=body.notes or "Handmatig ingevoerd via /set-credentials",
+    )
+
+    return {
+        "status": "ok" if saved else "warning",
+        "saved_to_supabase": saved,
+        "test_call_status": 200,
+        "message": "Credentials geverifieerd en opgeslagen — scraper gebruikt deze bij volgende run",
+    }
 
 
 @router.get("/playwright-status")
