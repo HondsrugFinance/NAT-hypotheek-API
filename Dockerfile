@@ -28,8 +28,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Installeer Playwright Chromium browser (nodig voor Fastlane auto token-refresh)
-RUN python -m playwright install chromium
+# Installeer Playwright Chromium + headless shell (Playwright 1.52 splitst die op)
+# Nodig voor Fastlane auto token-refresh via fastlane_auth.py
+RUN python -m playwright install chromium chromium-headless-shell
 
 COPY . .
 
