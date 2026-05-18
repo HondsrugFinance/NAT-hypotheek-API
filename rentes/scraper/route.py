@@ -60,6 +60,74 @@ async def scraper_status():
     return _last_run
 
 
+@router.get("/diagnostic")
+async def scraper_diagnostic(request: Request):
+    """Diagnostiek endpoint: test of Fastlane API bereikbaar is vanaf deze server.
+
+    Beveiligd met X-Cron-Secret. Doet 1 simpele API-call naar Fastlane en
+    retourneert HTTP status, response-grootte en eventuele errors. Handig
+    om te zien of de credentials kloppen en of Render's IP toegang heeft.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import time
+    import httpx
+
+    auth_token = os.environ.get("FASTLANE_AUTH_TOKEN", "")
+    user_hash = os.environ.get("FASTLANE_USER_HASH", "")
+
+    result = {
+        "auth_token_configured": bool(auth_token),
+        "auth_token_length": len(auth_token),
+        "user_hash_configured": bool(user_hash),
+        "user_hash_length": len(user_hash),
+        "test_url": "https://fds2.fdta.nl/v1/filter/ltv/58/120/C/2/nee/1/ja",
+    }
+
+    if not auth_token or not user_hash:
+        result["error"] = "Credentials niet geconfigureerd"
+        return result
+
+    headers = {
+        "authorization": auth_token,
+        "x-user-hash": user_hash,
+        "origin": "https://fastlane.fdta.nl",
+        "referer": "https://fastlane.fdta.nl/",
+        "user-agent": "Mozilla/5.0",
+        "accept": "*/*",
+    }
+
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(result["test_url"], headers=headers)
+        duration = time.time() - start
+        result["duration_seconds"] = round(duration, 2)
+        result["status_code"] = resp.status_code
+        result["response_length"] = len(resp.content)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                result["labels_count"] = len(data.get("labels", []))
+                result["risk_categories_count"] = len(data.get("riskCategories", []))
+                result["success"] = True
+            except Exception as e:
+                result["parse_error"] = str(e)
+                result["response_preview"] = resp.text[:300]
+        else:
+            result["response_preview"] = resp.text[:500]
+            result["success"] = False
+    except Exception as e:
+        result["duration_seconds"] = round(time.time() - start, 2)
+        result["exception_type"] = type(e).__name__
+        result["exception_message"] = str(e)
+        result["success"] = False
+
+    return result
+
+
 @router.get("/logs")
 async def scraper_logs(
     request: Request,
