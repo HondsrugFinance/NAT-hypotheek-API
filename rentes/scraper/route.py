@@ -345,6 +345,52 @@ async def scraper_diagnostic(request: Request):
     return result
 
 
+@router.post("/inactivity-test")
+async def scraper_inactivity_test(request: Request):
+    """Test: probeer 1 rij in scraper_inactivity_tracking te schrijven, toon exacte error."""
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import httpx
+    from datetime import datetime as _dt, timezone as _tz
+
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not supabase_url or not service_key:
+        return {"error": "no supabase"}
+
+    now = _dt.now(_tz.utc).isoformat()
+    test_row = {
+        "geldverstrekker": "_TEST_",
+        "productlijn": "_TEST_PROD_",
+        "status": "actief",
+        "last_seen_active_at": now,
+        "last_seen_bestaand_at": None,
+        "last_updated_at": now,
+    }
+
+    url = f"{supabase_url}/rest/v1/scraper_inactivity_tracking"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=representation",
+    }
+    params = {"on_conflict": "geldverstrekker,productlijn"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(url, headers=headers, params=params, json=[test_row])
+        return {
+            "status_code": resp.status_code,
+            "response_body": resp.text[:1000],
+            "request_body": test_row,
+        }
+    except Exception as e:
+        return {"exception": str(e), "exception_type": type(e).__name__}
+
+
 @router.get("/inactivity")
 async def scraper_inactivity(
     status: Optional[str] = Query(None, description="Filter op status: actief, alleen_bestaand, nieuw_in_hb"),
