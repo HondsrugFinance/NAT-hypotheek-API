@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 
 logger = logging.getLogger("nat-api.scraper.fastlane-auth")
 
@@ -113,6 +114,39 @@ async def refresh_fastlane_credentials(
     return credentials if credentials else None
 
 
+async def refresh_and_store_fastlane_credentials() -> tuple[str | None, str | None]:
+    """Volledige refresh-flow: login → onderschep token → sla op in Supabase.
+
+    Wordt aangeroepen door de FastlaneScraper als die een 403 krijgt.
+    Returns (auth_token, user_hash). None,None als refresh mislukt.
+    """
+    from rentes.scraper.credentials_store import save_credentials, clear_cache
+
+    logger.info("[fastlane-auth] Token-refresh gestart...")
+    creds = await refresh_fastlane_credentials(headless=True)
+    if not creds:
+        logger.error("[fastlane-auth] Token-refresh mislukt")
+        return None, None
+
+    auth_token = creds["auth_token"]
+    user_hash = creds["user_hash"]
+
+    # Sla op in Supabase
+    saved = await save_credentials(
+        bron="fastlane",
+        auth_token=auth_token,
+        user_hash=user_hash,
+        notes=f"Auto-refresh via Playwright login op {datetime.now(timezone.utc).isoformat()}",
+    )
+    if not saved:
+        logger.warning("[fastlane-auth] Opslaan in Supabase mislukt — token wel beschikbaar")
+
+    # Cache leeg zodat volgende call de nieuwe token gebruikt
+    clear_cache("fastlane")
+
+    return auth_token, user_hash
+
+
 async def verify_fastlane_credentials(auth_token: str, user_hash: str) -> bool:
     """Test of een Fastlane token nog geldig is met een simpele API-call."""
     import httpx
@@ -135,20 +169,21 @@ async def verify_fastlane_credentials(auth_token: str, user_hash: str) -> bool:
 
 
 # CLI-helper: handmatig credentials refreshen
+# Usage:
+#   python -m rentes.scraper.fastlane_auth          → refresh + sla op in Supabase
+#   python -m rentes.scraper.fastlane_auth --headed → met zichtbare browser (debug)
 if __name__ == "__main__":
     import sys
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
     async def main():
-        creds = await refresh_fastlane_credentials(headless="--headed" not in sys.argv)
-        if creds:
-            print("\n=== Nieuwe credentials ===")
-            print(f"FASTLANE_AUTH_TOKEN={creds['auth_token']}")
-            print(f"FASTLANE_USER_HASH={creds['user_hash']}")
-            print()
-            print("Sla deze op als environment variables op Render.")
+        token, user_hash = await refresh_and_store_fastlane_credentials()
+        if token:
+            print("\n=== Nieuwe credentials (opgeslagen in Supabase) ===")
+            print(f"auth_token: {token}")
+            print(f"user_hash:  {user_hash}")
         else:
-            print("\nLogin mislukt. Check credentials en logs.")
+            print("\nLogin/refresh mislukt. Check HYPOTHEEKBOND_EMAIL/PASSWORD env vars.")
             sys.exit(1)
 
     asyncio.run(main())

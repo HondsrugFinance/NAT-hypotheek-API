@@ -4,8 +4,8 @@ set -e
 
 pip install -r requirements.txt
 
-# Installeer Playwright Chromium + systeem-dependencies
-# Render draait op Debian/Ubuntu, dus --with-deps installeert libatk, libcups etc.
+# Installeer Playwright Chromium (zonder --with-deps want geen root op Render).
+# Nodig voor de Fastlane scraper auto token-refresh via fastlane_auth.py.
 echo "==> Installing Playwright Chromium..."
-npx playwright install --with-deps chromium || python -m playwright install --with-deps chromium || echo "WARN: Playwright Chromium install failed (optional)"
+python -m playwright install chromium || echo "WARN: Playwright Chromium install failed — auto token-refresh werkt niet"
 echo "==> Playwright install done"

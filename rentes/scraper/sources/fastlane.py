@@ -126,16 +126,53 @@ class FastlaneScraper(BaseScraper):
                  energielabels: list[str] | None = None,
                  with_nhg: bool = True):
         super().__init__()
-        self.auth_token = auth_token or os.environ.get("FASTLANE_AUTH_TOKEN", "")
-        self.user_hash = user_hash or os.environ.get("FASTLANE_USER_HASH", "")
+        # Credentials worden lazy geladen in scrape() via get_credentials()
+        # om credentials uit Supabase boven env vars te prefereren.
+        self.auth_token = auth_token
+        self.user_hash = user_hash
         self.aflosvormen = aflosvormen or list(AFLOSVORMEN.keys())
         self.energielabels = energielabels or ENERGIELABELS
         self.with_nhg = with_nhg
+        self._token_refreshed_this_run = False
 
-        if not self.auth_token or not self.user_hash:
-            logger.warning(
-                "[fastlane] Geen FASTLANE_AUTH_TOKEN / FASTLANE_USER_HASH env vars — scraper kan niet draaien"
-            )
+    async def _ensure_credentials(self) -> bool:
+        """Laad credentials uit Supabase store (fallback: env vars).
+        Returns True als credentials beschikbaar zijn."""
+        if self.auth_token and self.user_hash:
+            return True
+        from rentes.scraper.credentials_store import get_credentials
+        token, uhash = await get_credentials("fastlane")
+        if token and uhash:
+            self.auth_token = token
+            self.user_hash = uhash
+            return True
+        logger.warning(
+            "[fastlane] Geen credentials gevonden (Supabase + env vars beide leeg)"
+        )
+        return False
+
+    async def _refresh_credentials(self) -> bool:
+        """Trigger Playwright login om nieuwe credentials te krijgen.
+        Returns True als refresh succesvol. Mag maar 1x per scrape-run."""
+        if self._token_refreshed_this_run:
+            logger.warning("[fastlane] Token al gerefresht deze run — geef op")
+            return False
+        self._token_refreshed_this_run = True
+
+        from rentes.scraper.fastlane_auth import refresh_and_store_fastlane_credentials
+        from rentes.scraper.credentials_store import mark_403
+
+        await mark_403("fastlane")
+        logger.warning("[fastlane] 403 ontvangen — start token-refresh via Playwright")
+
+        new_token, new_hash = await refresh_and_store_fastlane_credentials()
+        if new_token and new_hash:
+            self.auth_token = new_token
+            self.user_hash = new_hash
+            logger.info("[fastlane] Token-refresh geslaagd, hervat scrape")
+            return True
+        logger.error("[fastlane] Token-refresh mislukt")
+        return False
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -158,6 +195,30 @@ class FastlaneScraper(BaseScraper):
     def _build_bridging_url(self) -> str:
         return f"{API_BASE}/v1/filter/bridging-loan"
 
+    async def _preflight_check(self) -> bool:
+        """Test of credentials werken door 1 simpele call te doen.
+        Bij 403 → automatisch refresh via Playwright.
+        Returns True als credentials werken na (eventuele) refresh."""
+        url = self._build_ltv_url(AFLOSVORMEN["annuitair"], 120, "C", False)
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=self._headers())
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 403:
+                logger.warning("[fastlane] Preflight: 403 — token expired, refresh")
+                if await self._refresh_credentials():
+                    # Retry met nieuwe credentials
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(url, headers=self._headers())
+                    return resp.status_code == 200
+                return False
+            logger.warning("[fastlane] Preflight onverwacht status %d", resp.status_code)
+            return False
+        except Exception as e:
+            logger.error("[fastlane] Preflight mislukt: %s", e)
+            return False
+
     async def scrape(self) -> ScrapeResult:
         """Scrape alle combinaties: aflosvorm × periode × energielabel × nhg."""
         start = time.time()
@@ -165,10 +226,18 @@ class FastlaneScraper(BaseScraper):
         errors: list[str] = []
         pages_fetched = 0
 
-        if not self.auth_token or not self.user_hash:
+        # 1. Laad credentials (Supabase → env vars fallback)
+        if not await self._ensure_credentials():
             return ScrapeResult(
                 bron=self.name, success=False,
-                errors=["Geen FASTLANE_AUTH_TOKEN of FASTLANE_USER_HASH ingesteld"],
+                errors=["Geen credentials beschikbaar (Supabase + env vars beide leeg)"],
+            )
+
+        # 2. Pre-flight check: bij 403 → auto-refresh
+        if not await self._preflight_check():
+            return ScrapeResult(
+                bron=self.name, success=False,
+                errors=["Pre-flight check mislukt — credentials werken niet en refresh is gefaald"],
             )
 
         nhg_options = [True, False] if self.with_nhg else [False]
