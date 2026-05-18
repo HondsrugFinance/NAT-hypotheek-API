@@ -148,6 +148,40 @@ async def scraper_test_mini(request: Request):
     return out
 
 
+@router.post("/install-playwright")
+async def scraper_install_playwright(request: Request):
+    """Installeer Playwright Chromium browsers op runtime.
+
+    Handig als build-time install faalt of als Playwright wordt geupgrade.
+    Beveiligd met X-Cron-Secret. Duurt 30-60 seconden.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import asyncio as _asyncio
+    import time
+    start = time.time()
+    try:
+        proc = await _asyncio.create_subprocess_exec(
+            "python", "-m", "playwright", "install", "chromium", "chromium-headless-shell",
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=180)
+        duration = round(time.time() - start, 2)
+        return {
+            "status": "ok" if proc.returncode == 0 else "error",
+            "returncode": proc.returncode,
+            "duration_seconds": duration,
+            "output": stdout.decode("utf-8", errors="replace")[-2000:],
+        }
+    except _asyncio.TimeoutError:
+        return {"status": "timeout", "duration_seconds": round(time.time() - start, 2)}
+    except Exception as e:
+        return {"status": "exception", "exception_type": type(e).__name__, "exception_message": str(e)}
+
+
 @router.post("/refresh-token")
 async def scraper_refresh_token(request: Request):
     """Trigger Playwright login + sla nieuwe Fastlane token op in Supabase.
