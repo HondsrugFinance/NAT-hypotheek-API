@@ -345,6 +345,52 @@ async def scraper_diagnostic(request: Request):
     return result
 
 
+@router.get("/inactivity")
+async def scraper_inactivity(
+    status: Optional[str] = Query(None, description="Filter op status: actief, alleen_bestaand, nieuw_in_hb"),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Toon inactivity tracking status: welke producten zijn alleen voor bestaande klanten beschikbaar?"""
+    import httpx
+
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+    if not supabase_url or not service_key:
+        return {"items": [], "message": "Supabase niet geconfigureerd"}
+
+    try:
+        url = f"{supabase_url}/rest/v1/scraper_inactivity_tracking"
+        params = {
+            "select": "*",
+            "order": "status,geldverstrekker,productlijn",
+            "limit": str(limit),
+        }
+        if status:
+            params["status"] = f"eq.{status}"
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+
+        rows = resp.json()
+        return {
+            "total": len(rows),
+            "by_status": {
+                s: sum(1 for r in rows if r["status"] == s)
+                for s in ("actief", "alleen_bestaand", "nieuw_in_hb", "verdwenen")
+            },
+            "items": rows,
+        }
+    except Exception as e:
+        logger.error("[scraper] Kan inactivity niet ophalen: %s", e)
+        raise HTTPException(500, f"Fout bij ophalen inactivity: {e}")
+
+
 @router.get("/logs")
 async def scraper_logs(
     request: Request,
