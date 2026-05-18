@@ -81,10 +81,22 @@ async def scraper_diagnostic(request: Request):
     result = {
         "auth_token_configured": bool(auth_token),
         "auth_token_length": len(auth_token),
+        "auth_token_first8": auth_token[:8] if auth_token else "",
+        "auth_token_last4": auth_token[-4:] if auth_token else "",
         "user_hash_configured": bool(user_hash),
         "user_hash_length": len(user_hash),
+        "user_hash_first8": user_hash[:8] if user_hash else "",
         "test_url": "https://fds2.fdta.nl/v1/filter/ltv/58/120/C/2/nee/1/ja",
     }
+
+    # Probeer ook outbound IP detecteren via een echo-service
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            ip_resp = await client.get("https://api.ipify.org?format=json")
+            result["outbound_ip"] = ip_resp.json().get("ip")
+    except Exception as e:
+        result["outbound_ip_error"] = str(e)
 
     if not auth_token or not user_hash:
         result["error"] = "Credentials niet geconfigureerd"
