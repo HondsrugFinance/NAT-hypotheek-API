@@ -67,22 +67,31 @@ async def rente_lookup(
     rentevaste_periode: int = Query(..., description="Jaren (0 = variabel)"),
     ltv: Optional[float] = Query(None, description="LTV percentage, bijv. 80"),
     energielabel: Optional[str] = Query(None, description="Energielabel, bijv. A, B, C"),
+    klanttype: str = Query("nieuw", description="'nieuw' (default) of 'bestaand' (renteverlenging/uitgefaseerde producten)"),
 ):
     """Zoek de actuele rente op voor een specifieke combinatie.
 
     Retourneert het basistarief uit de LTV-staffel + eventuele kortingen (energielabel etc.).
     Als geen ltv opgegeven: retourneert de hele LTV-staffel.
+
+    klanttype:
+    - 'nieuw' (default): tarieven voor nieuwe hypotheekaanvragen
+    - 'bestaand': tarieven voor renteverlenging / bestaande klanten (incl. uitgefaseerde producten)
     """
+    if klanttype not in ("nieuw", "bestaand"):
+        raise HTTPException(400, "klanttype moet 'nieuw' of 'bestaand' zijn")
+
     access_token = _extract_access_token(request)
 
     # 1. Haal het meest recente tarief op
     url = f"{SUPABASE_URL}/rest/v1/hypotheekrentes"
     params = {
-        "select": "ltv_staffel,peildatum",
+        "select": "ltv_staffel,peildatum,klanttype",
         "geldverstrekker": f"eq.{geldverstrekker}",
         "productlijn": f"eq.{productlijn}",
         "aflosvorm": f"eq.{aflosvorm}",
         "rentevaste_periode": f"eq.{rentevaste_periode}",
+        "klanttype": f"eq.{klanttype}",
         "order": "peildatum.desc",
         "limit": "1",
     }
@@ -147,6 +156,7 @@ async def rente_lookup(
         "productlijn": productlijn,
         "aflosvorm": aflosvorm,
         "rentevaste_periode": rentevaste_periode,
+        "klanttype": klanttype,
         "peildatum": peildatum,
         "ltv_staffel": ltv_staffel,
         "kortingen": kortingen,

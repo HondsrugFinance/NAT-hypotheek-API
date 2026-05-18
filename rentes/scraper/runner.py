@@ -55,8 +55,8 @@ class ScrapeOrchestrator:
         if not scrapers:
             return {"error": "Geen scrapers geregistreerd"}
 
-        # 2. Run alle scrapers (parallel als meerdere)
-        logger.info("[runner] Start scrape-run: %s (dry_run=%s)",
+        # 2. Run alle scrapers (parallel als meerdere) — klanttype='nieuw' (default)
+        logger.info("[runner] Start scrape-run nieuw: %s (dry_run=%s)",
                      [s.name for s in scrapers], self.dry_run)
 
         results: list[ScrapeResult] = await asyncio.gather(
@@ -75,6 +75,26 @@ class ScrapeOrchestrator:
                 ))
             else:
                 processed_results.append(r)
+
+        # 2b. Extra Fastlane scrape met klanttype='bestaand' (voor renteverlengingen
+        # en inactivity-detection). Alleen als Fastlane succesvol was.
+        fastlane_result = next((r for r in processed_results if r.bron == "fastlane" and r.success), None)
+        bestaand_result: ScrapeResult | None = None
+        if fastlane_result and not self.single_source or self.single_source == "fastlane":
+            try:
+                from rentes.scraper.sources.fastlane import FastlaneScraper
+                logger.info("[runner] Start extra scrape voor klanttype='bestaand'")
+                bestaand_scraper = FastlaneScraper(klanttype="bestaand")
+                bestaand_result = await bestaand_scraper.scrape()
+                if bestaand_result.success:
+                    processed_results.append(bestaand_result)
+                    logger.info("[runner] klanttype='bestaand' scrape: %d rates",
+                                 len(bestaand_result.rates))
+                else:
+                    logger.warning("[runner] klanttype='bestaand' scrape mislukt: %s",
+                                   bestaand_result.errors)
+            except Exception as e:
+                logger.exception("[runner] Fout bij klanttype='bestaand' scrape: %s", e)
 
         # 3. Verzamel alle geldige rates
         all_rates: list[ScrapedRate] = []
@@ -129,12 +149,113 @@ class ScrapeOrchestrator:
             if all_kortingen:
                 kortingen_stored = await self._store_kortingen(all_kortingen)
 
-        # 9. Log run
+        # 9. Inactivity tracking: diff bestaand vs nieuw
+        inactivity_summary = {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
+        if not self.dry_run and bestaand_result and fastlane_result:
+            inactivity_summary = await self._update_inactivity_tracking(
+                fastlane_result.rates, bestaand_result.rates,
+            )
+
+        # 10. Log run
         await self._log_run(processed_results, validation)
 
         summary = self._build_summary(processed_results, validation, stored)
         summary["kortingen_opgeslagen"] = kortingen_stored
+        summary["inactivity"] = inactivity_summary
         return summary
+
+    async def _update_inactivity_tracking(
+        self,
+        nieuw_rates: list[ScrapedRate],
+        bestaand_rates: list[ScrapedRate],
+    ) -> dict:
+        """Update scraper_inactivity_tracking tabel met huidige actief/inactief status.
+
+        - Producten in 'nieuw' set → status='actief' (last_seen_active_at = nu)
+        - Producten alleen in 'bestaand' set → status='alleen_bestaand'
+        - Producten in beide sets niet voorkomend (nu) → ongewijzigd (oude rij blijft)
+
+        Beslissing over config-aanpassing wordt NIET automatisch gemaakt — alleen tracking.
+        """
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
+
+        # Sets van (gv, productlijn) per klanttype
+        actief_set = {(r.geldverstrekker, r.productlijn) for r in nieuw_rates}
+        bestaand_set = {(r.geldverstrekker, r.productlijn) for r in bestaand_rates}
+
+        alleen_bestaand = bestaand_set - actief_set
+
+        # Laad onze huidige config om 'nieuw_in_hb' te detecteren
+        nieuw_in_hb: set[tuple[str, str]] = set()
+        try:
+            import json as _json
+            from pathlib import Path
+            cfg_path = Path(__file__).parent.parent.parent / "config" / "geldverstrekkers.json"
+            with open(cfg_path, encoding="utf-8") as f:
+                cfg = _json.load(f)
+            known_products = {
+                (gv, prod)
+                for gv, prods in cfg.get("productlijnen", {}).items()
+                for prod in prods
+            }
+            # In HB maar niet in onze config = nieuw_in_hb
+            all_hb = actief_set | bestaand_set
+            nieuw_in_hb = all_hb - known_products
+        except Exception as e:
+            logger.warning("[runner] Kan config niet lezen voor nieuw_in_hb detectie: %s", e)
+
+        # Bouw upsert rows
+        now = datetime.now(timezone.utc).isoformat()
+        rows = []
+        for (gv, prod) in actief_set:
+            rows.append({
+                "geldverstrekker": gv,
+                "productlijn": prod,
+                "status": "actief",
+                "last_seen_active_at": now,
+                "last_seen_bestaand_at": now if (gv, prod) in bestaand_set else None,
+                "last_updated_at": now,
+            })
+        for (gv, prod) in alleen_bestaand:
+            row = {
+                "geldverstrekker": gv,
+                "productlijn": prod,
+                "status": "alleen_bestaand",
+                "last_seen_bestaand_at": now,
+                "last_updated_at": now,
+            }
+            if (gv, prod) in nieuw_in_hb:
+                row["status"] = "nieuw_in_hb"
+            rows.append(row)
+
+        if not rows:
+            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
+
+        # Upsert in chunks
+        url = f"{SUPABASE_URL}/rest/v1/scraper_inactivity_tracking"
+        headers = _supabase_headers()
+        headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+        params = {"on_conflict": "geldverstrekker,productlijn"}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, params=params, json=rows)
+                resp.raise_for_status()
+        except Exception as e:
+            logger.error("[runner] Fout bij inactivity tracking upsert: %s", e)
+            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
+
+        n_actief = len(actief_set)
+        n_alleen_bestaand = len(alleen_bestaand - nieuw_in_hb)
+        n_nieuw = len(nieuw_in_hb)
+        logger.info("[runner] Inactivity: %d actief, %d alleen_bestaand, %d nieuw_in_hb",
+                     n_actief, n_alleen_bestaand, n_nieuw)
+        return {
+            "actief": n_actief,
+            "alleen_bestaand": n_alleen_bestaand,
+            "nieuw_in_hb": n_nieuw,
+        }
 
     async def _store_kortingen(self, kortingen) -> int:
         """Sla kortingen op in Supabase rente_kortingen tabel.
@@ -231,16 +352,17 @@ class ScrapeOrchestrator:
             logger.warning("[runner] Geen Supabase config — kan niet opslaan")
             return 0
 
-        # Groepeer per basis-key
+        # Groepeer per basis-key (inclusief klanttype zodat nieuw + bestaand naast elkaar bestaan)
         grouped: dict[tuple, dict[str, float]] = defaultdict(dict)
         for rate in rates:
             base_key = (rate.geldverstrekker, rate.productlijn,
-                        rate.aflosvorm, rate.rentevaste_periode)
+                        rate.aflosvorm, rate.rentevaste_periode,
+                        getattr(rate, 'klanttype', 'nieuw'))
             grouped[base_key][rate.ltv_categorie] = rate.rente
 
         peildatum = date.today().isoformat()
         rows = []
-        for (gv, prod, aflos, rvp), staffel in grouped.items():
+        for (gv, prod, aflos, rvp, klanttype), staffel in grouped.items():
             rows.append({
                 "geldverstrekker": gv,
                 "productlijn": prod,
@@ -249,6 +371,7 @@ class ScrapeOrchestrator:
                 "ltv_staffel": staffel,
                 "peildatum": peildatum,
                 "bron": "scraper",
+                "klanttype": klanttype,
             })
 
         # Check welke renten handmatig zijn ingevuld (niet overschrijven)
@@ -275,7 +398,7 @@ class ScrapeOrchestrator:
         headers = _supabase_headers()
         headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
         params = {
-            "on_conflict": "geldverstrekker,productlijn,aflosvorm,rentevaste_periode,peildatum"
+            "on_conflict": "geldverstrekker,productlijn,aflosvorm,rentevaste_periode,peildatum,klanttype"
         }
 
         CHUNK_SIZE = 500

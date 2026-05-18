@@ -133,7 +133,14 @@ class FastlaneScraper(BaseScraper):
                  user_hash: str | None = None,
                  aflosvormen: list[str] | None = None,
                  energielabels: list[str] | None = None,
-                 with_nhg: bool = True):
+                 with_nhg: bool = True,
+                 klanttype: str = "nieuw"):
+        """
+        Args:
+            klanttype: 'nieuw' (default, alleen actieve voor nieuwe klanten) of
+                       'bestaand' (alles incl. uitgefaseerde/bestaande-klant-only).
+                       Bepaalt URL-positie 6: 1=nieuwe-klant=ja, 2=nieuwe-klant=nee.
+        """
         super().__init__()
         # Credentials worden lazy geladen in scrape() via get_credentials()
         # om credentials uit Supabase boven env vars te prefereren.
@@ -142,6 +149,9 @@ class FastlaneScraper(BaseScraper):
         self.aflosvormen = aflosvormen or list(AFLOSVORMEN.keys())
         self.energielabels = energielabels or ENERGIELABELS
         self.with_nhg = with_nhg
+        if klanttype not in ("nieuw", "bestaand"):
+            raise ValueError(f"klanttype moet 'nieuw' of 'bestaand' zijn, kreeg: {klanttype}")
+        self.klanttype = klanttype
         self._token_refreshed_this_run = False
 
     async def _ensure_credentials(self) -> bool:
@@ -186,10 +196,16 @@ class FastlaneScraper(BaseScraper):
 
     def _build_ltv_url(self, aflosvorm_id: int, periode_mnd: int,
                        energielabel: str, nhg: bool) -> str:
-        """Bouw URL voor het LTV-endpoint (geeft alle 13 staffels in 1 call)."""
+        """Bouw URL voor het LTV-endpoint (geeft alle 13 staffels in 1 call).
+
+        URL positie 6 = "Nieuwe klant" filter:
+        - 1 = ja (alleen producten voor nieuwe klanten, ~44 met rates)
+        - 2 = nee (alles incl. bestaande-klant-only, ~88 met rates)
+        """
         nhg_val = "ja" if nhg else "nee"
         el = urllib.parse.quote(energielabel)
-        return f"{API_BASE}/v1/filter/ltv/{aflosvorm_id}/{periode_mnd}/{el}/2/{nhg_val}/1/ja"
+        nieuwe_klant = "1" if self.klanttype == "nieuw" else "2"
+        return f"{API_BASE}/v1/filter/ltv/{aflosvorm_id}/{periode_mnd}/{el}/2/{nhg_val}/{nieuwe_klant}/ja"
 
     def _build_bridging_url(self) -> str:
         return f"{API_BASE}/v1/filter/bridging-loan"
@@ -457,8 +473,9 @@ class FastlaneScraper(BaseScraper):
                 if not percentage_str or percentage_str.strip() == "":
                     continue
 
-                # Skip "only for existing customers" tarieven (verwarrend in scraper)
-                if interest.get("onlyForExistingCustomers"):
+                # Bij klanttype='nieuw': skip 'only for existing customers'.
+                # Bij klanttype='bestaand': juist WEL meenemen.
+                if self.klanttype == "nieuw" and interest.get("onlyForExistingCustomers"):
                     continue
 
                 try:
@@ -486,6 +503,7 @@ class FastlaneScraper(BaseScraper):
                     ltv_categorie=ltv_categorie,
                     rente=rente,
                     bron=self.name,
+                    klanttype=self.klanttype,
                     raw_geldverstrekker=raw_name,
                     raw_productlijn=raw_name,
                 ))

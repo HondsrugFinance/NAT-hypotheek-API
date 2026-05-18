@@ -17,6 +17,7 @@ class ScrapedRate:
     ltv_categorie: str            # "NHG", "60", "70", "80", "90", "100"
     rente: float                  # Percentage, bijv. 3.96
     bron: str                     # "easymortgage", "handelsbanken", etc.
+    klanttype: str = "nieuw"      # "nieuw" of "bestaand" (HB Nieuwe klant ja/nee filter)
     scrape_timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Originele naam zoals gescraped (voor debugging)

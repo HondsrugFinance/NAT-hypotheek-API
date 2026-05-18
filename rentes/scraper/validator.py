@@ -18,8 +18,8 @@ TREND_QUARANTINE = 1.00    # sprong t.o.v. gisteren → quarantaine
 
 
 def _rate_key(r: ScrapedRate) -> tuple:
-    """Unieke sleutel per tarief."""
-    return (r.geldverstrekker, r.productlijn, r.aflosvorm, r.rentevaste_periode, r.ltv_categorie)
+    """Unieke sleutel per tarief (inclusief klanttype zodat nieuw+bestaand niet dedupliceren)."""
+    return (r.geldverstrekker, r.productlijn, r.aflosvorm, r.rentevaste_periode, r.ltv_categorie, getattr(r, 'klanttype', 'nieuw'))
 
 
 def cross_validate(results: list[ScrapeResult]) -> ValidationReport:
