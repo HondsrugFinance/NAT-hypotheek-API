@@ -35,12 +35,30 @@ async def _run_scrape_async(dry_run: bool, source: Optional[str]):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "result": result,
         }
+        # Status 'error' / 'partial' ook naar Sentry — anders zien we alleen excepties
+        status = result.get("status", "")
+        if status in ("error", "partial"):
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_message(
+                    f"Scraper run finished with status={status}",
+                    level="warning" if status == "partial" else "error",
+                    extras={"result": result},
+                )
+            except Exception:
+                pass
     except Exception as e:
         logger.exception("[scraper] Background scrape gefaald: %s", e)
         _last_run = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "result": {"status": "error", "error": str(e)},
         }
+        # Uncaught exception → Sentry
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(e)
+        except Exception:
+            pass
     finally:
         _is_running = False
 
@@ -95,135 +113,82 @@ async def scraper_status():
     return out
 
 
-@router.post("/test-mini")
-async def scraper_test_mini(request: Request):
-    """Mini-scrape: 1 Fastlane call + parsing test (zonder Supabase, zonder loop).
+@router.get("/status-health")
+async def scraper_status_health(
+    max_age_hours: int = Query(26, ge=1, le=168, description="Max ouderdom laatste run in uren"),
+):
+    """Health check voor monitoring/cron-job alerting.
 
-    Doet exact wat 1 stap van de scraper doet: fetch + parse + naam-normalisatie.
-    Snel (~2s) en toont of er onderweg iets fout gaat.
+    Returnt HTTP 500 als de laatste scrape:
+    - Niet bestaat in scraper_logs tabel
+    - Ouder is dan max_age_hours (default 26 — 1 dag + 2 uur buffer)
+    - Geen success heeft
+    - Te weinig rates heeft opgeslagen (< 100)
+
+    HTTP 200 als alles in orde is.
+
+    Use case: 2e cron-job.org job draait dit 15min na de scrape, met
+    'notify on failure' aan → mail bij fout zonder dat de scrape-trigger zelf
+    al een mail moest sturen (die retourneert nu altijd 200 met 'started').
     """
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
+    import httpx
 
-    import time
-    from rentes.scraper.sources.fastlane import FastlaneScraper
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
-    start = time.time()
-    scraper = FastlaneScraper()
-
-    out = {
-        "auth_configured": bool(scraper.auth_token and scraper.user_hash),
-    }
+    if not supabase_url or not service_key:
+        raise HTTPException(500, "Supabase niet geconfigureerd — kan health niet bepalen")
 
     try:
-        import httpx
-        url = scraper._build_ltv_url(58, 120, "C", False)
-        out["url"] = url
-
-        async with httpx.AsyncClient(timeout=10.0, headers=scraper._headers()) as client:
-            resp = await scraper._fetch(client, url)
-        out["http_status"] = resp.status_code
-
-        rates = scraper._parse_ltv_response(
-            resp.json(), aflosvorm="annuitair", rentevaste_periode=10,
-            energielabel="C", nhg=False,
-        )
-        out["rates_parsed"] = len(rates)
-        out["unique_banks"] = len(set(r.geldverstrekker for r in rates))
-        if rates:
-            sample = rates[0]
-            out["sample_rate"] = {
-                "geldverstrekker": sample.geldverstrekker,
-                "productlijn": sample.productlijn,
-                "ltv": sample.ltv_categorie,
-                "rente": sample.rente,
-            }
-        out["success"] = True
+        url = f"{supabase_url}/rest/v1/scraper_logs"
+        params = {
+            "select": "*",
+            "bron": "eq.fastlane",
+            "order": "created_at.desc",
+            "limit": "1",
+        }
+        headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+        rows = resp.json()
     except Exception as e:
-        out["exception_type"] = type(e).__name__
-        out["exception_message"] = str(e)[:500]
-        out["success"] = False
+        raise HTTPException(500, f"Kan scraper_logs niet lezen: {e}")
 
-    out["duration_seconds"] = round(time.time() - start, 2)
-    return out
+    if not rows:
+        raise HTTPException(500, "Geen scraper runs gevonden in scraper_logs tabel")
 
+    last = rows[0]
+    created_at = datetime.fromisoformat(last["created_at"].replace("Z", "+00:00"))
+    age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600
 
-@router.post("/refresh-token-debug")
-async def scraper_refresh_token_debug(request: Request):
-    """Token refresh met uitgebreide stap-voor-stap diagnostiek."""
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
+    problems = []
+    if age_hours > max_age_hours:
+        problems.append(f"Laatste scrape is {age_hours:.1f}u oud (max {max_age_hours}u)")
+    if not last.get("success"):
+        problems.append(f"Laatste scrape was niet succesvol ({last.get('errors', 0)} errors)")
+    if last.get("rates_stored", 0) < 100:
+        problems.append(f"Laatste scrape stored slechts {last.get('rates_stored', 0)} rates (< 100)")
 
-    import time
-    from playwright.async_api import async_playwright
-
-    email = os.environ.get("HYPOTHEEKBOND_EMAIL", "")
-    password = os.environ.get("HYPOTHEEKBOND_PASSWORD", "")
-
-    steps = []
-    captured_calls = []
-    out = {
-        "email_set": bool(email),
-        "password_set": bool(password),
-        "password_length": len(password),
+    summary = {
+        "last_run_at": last["created_at"],
+        "age_hours": round(age_hours, 1),
+        "success": last.get("success"),
+        "rates_scraped": last.get("rates_scraped"),
+        "rates_stored": last.get("rates_stored"),
+        "errors": last.get("errors"),
     }
 
-    if not email or not password:
-        out["error"] = "Missing credentials env vars"
-        return out
+    if problems:
+        action = "Actie: POST /rentes/scraper/set-credentials met nieuwe token uit fastlane.fdta.nl DevTools"
+        raise HTTPException(500, {
+            "status": "unhealthy",
+            "problems": problems,
+            "last_run": summary,
+            "action": action,
+        })
 
-    start = time.time()
-    try:
-        async with async_playwright() as p:
-            steps.append({"step": "playwright_started", "t": round(time.time() - start, 2)})
-            browser = await p.chromium.launch(headless=True)
-            steps.append({"step": "browser_launched", "t": round(time.time() - start, 2)})
-            context = await browser.new_context()
-            page = await context.new_page()
-
-            def on_req(req):
-                if "fdta" in req.url or "fastlane" in req.url:
-                    captured_calls.append({
-                        "method": req.method,
-                        "url": req.url[:150],
-                        "auth": req.headers.get("authorization", "")[:16],
-                        "hash": req.headers.get("x-user-hash", "")[:16],
-                    })
-
-            page.on("request", on_req)
-
-            await page.goto("https://www.hypotheekbond.nl/inloggen", timeout=30000)
-            await page.wait_for_load_state("networkidle")
-            steps.append({"step": "login_page_loaded", "t": round(time.time() - start, 2), "url": page.url})
-
-            await page.fill('input[name="email"]', email)
-            await page.fill('input[name="password"]', password)
-            await page.click('button[type="submit"], input[type="submit"]')
-            await page.wait_for_timeout(3000)
-            steps.append({"step": "login_submitted", "t": round(time.time() - start, 2), "url": page.url, "title": await page.title()})
-
-            await page.goto("https://fastlane.fdta.nl/rente/rentevast-periode", timeout=30000)
-            await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(7000)
-            steps.append({"step": "fastlane_loaded", "t": round(time.time() - start, 2), "url": page.url, "title": await page.title()})
-
-            body_text = await page.inner_text("body")
-            out["fastlane_body_preview"] = body_text[:300]
-
-            await browser.close()
-
-        out["captured_calls"] = captured_calls[:10]
-        out["captured_calls_count"] = len(captured_calls)
-        out["steps"] = steps
-        out["total_duration"] = round(time.time() - start, 2)
-    except Exception as e:
-        out["exception"] = str(e)[:500]
-        out["exception_type"] = type(e).__name__
-        out["steps"] = steps
-
-    return out
+    return {"status": "healthy", "last_run": summary}
 
 
 class SetCredentialsRequest(BaseModel):
@@ -296,144 +261,6 @@ async def scraper_set_credentials(body: SetCredentialsRequest, request: Request)
     }
 
 
-@router.get("/playwright-status")
-async def playwright_status(request: Request):
-    """Toon wat er in de Playwright cache zit + voer install opnieuw uit."""
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
-
-    import asyncio as _asyncio
-    out = {}
-
-    # 1. Welke cache dir gebruikt Playwright?
-    for env_var in ["PLAYWRIGHT_BROWSERS_PATH", "HOME"]:
-        out[f"env_{env_var}"] = os.environ.get(env_var, "")
-
-    # 2. Wat staat er in de cache?
-    for path in ["/opt/render/.cache/ms-playwright", "/root/.cache/ms-playwright", "~/.cache/ms-playwright"]:
-        expanded = os.path.expanduser(path)
-        try:
-            if os.path.isdir(expanded):
-                out[f"contents_{path}"] = sorted(os.listdir(expanded))
-            else:
-                out[f"contents_{path}"] = "DOES_NOT_EXIST"
-        except Exception as e:
-            out[f"contents_{path}"] = f"ERROR: {e}"
-
-    # 3. Playwright version
-    try:
-        proc = await _asyncio.create_subprocess_exec(
-            "python", "-c", "import playwright; print(playwright.__version__)",
-            stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await proc.communicate()
-        out["playwright_version"] = stdout.decode().strip()
-    except Exception as e:
-        out["playwright_version_error"] = str(e)
-
-    # 4. Run --force install met full stderr
-    try:
-        proc = await _asyncio.create_subprocess_exec(
-            "python", "-m", "playwright", "install", "--force", "chromium",
-            stdout=_asyncio.subprocess.PIPE,
-            stderr=_asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=180)
-        out["force_install_returncode"] = proc.returncode
-        out["force_install_output"] = stdout.decode("utf-8", errors="replace")[-3000:]
-    except _asyncio.TimeoutError:
-        out["force_install"] = "TIMEOUT after 180s"
-    except Exception as e:
-        out["force_install_exception"] = str(e)
-
-    # 5. Check opnieuw na install
-    for path in ["/opt/render/.cache/ms-playwright"]:
-        expanded = os.path.expanduser(path)
-        try:
-            if os.path.isdir(expanded):
-                out[f"contents_after_{path}"] = sorted(os.listdir(expanded))
-        except Exception as e:
-            out[f"contents_after_{path}"] = f"ERROR: {e}"
-
-    return out
-
-
-@router.post("/install-playwright")
-async def scraper_install_playwright(request: Request):
-    """Installeer Playwright Chromium browsers op runtime.
-
-    Handig als build-time install faalt of als Playwright wordt geupgrade.
-    Beveiligd met X-Cron-Secret. Duurt 30-60 seconden.
-    """
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
-
-    import asyncio as _asyncio
-    import time
-    start = time.time()
-    try:
-        proc = await _asyncio.create_subprocess_exec(
-            "python", "-m", "playwright", "install", "chromium", "chromium-headless-shell",
-            stdout=_asyncio.subprocess.PIPE,
-            stderr=_asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=180)
-        duration = round(time.time() - start, 2)
-        return {
-            "status": "ok" if proc.returncode == 0 else "error",
-            "returncode": proc.returncode,
-            "duration_seconds": duration,
-            "output": stdout.decode("utf-8", errors="replace")[-2000:],
-        }
-    except _asyncio.TimeoutError:
-        return {"status": "timeout", "duration_seconds": round(time.time() - start, 2)}
-    except Exception as e:
-        return {"status": "exception", "exception_type": type(e).__name__, "exception_message": str(e)}
-
-
-@router.post("/refresh-token")
-async def scraper_refresh_token(request: Request):
-    """Trigger Playwright login + sla nieuwe Fastlane token op in Supabase.
-
-    Handmatig aan te roepen als de auto-refresh om wat voor reden niet werkt,
-    of om initiële credentials op te slaan in de store.
-    """
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
-
-    import time
-    from rentes.scraper.fastlane_auth import refresh_and_store_fastlane_credentials
-
-    start = time.time()
-    try:
-        token, user_hash = await refresh_and_store_fastlane_credentials()
-        duration = round(time.time() - start, 2)
-        if token and user_hash:
-            return {
-                "status": "ok",
-                "duration_seconds": duration,
-                "auth_token_first8": token[:8],
-                "auth_token_last4": token[-4:],
-                "user_hash_first8": user_hash[:8],
-                "message": "Token opgeslagen in scraper_credentials tabel",
-            }
-        return {
-            "status": "error",
-            "duration_seconds": duration,
-            "message": "Playwright login mislukt of geen token onderschept",
-        }
-    except Exception as e:
-        return {
-            "status": "exception",
-            "duration_seconds": round(time.time() - start, 2),
-            "exception_type": type(e).__name__,
-            "exception_message": str(e)[:500],
-        }
-
-
 @router.get("/diagnostic")
 async def scraper_diagnostic(request: Request):
     """Diagnostiek endpoint: test of Fastlane API bereikbaar is vanaf deze server.
@@ -448,9 +275,13 @@ async def scraper_diagnostic(request: Request):
 
     import time
     import httpx
+    from rentes.scraper.credentials_store import get_credentials, clear_cache
 
-    auth_token = os.environ.get("FASTLANE_AUTH_TOKEN", "")
-    user_hash = os.environ.get("FASTLANE_USER_HASH", "")
+    # Lees uit Supabase (met env-var fallback) — zelfde flow als de scraper
+    clear_cache("fastlane")  # geen stale cache
+    auth_token, user_hash = await get_credentials("fastlane")
+    auth_token = auth_token or ""
+    user_hash = user_hash or ""
 
     result = {
         "auth_token_configured": bool(auth_token),
