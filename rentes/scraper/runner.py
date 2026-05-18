@@ -242,9 +242,16 @@ class ScrapeOrchestrator:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, headers=headers, params=params, json=rows)
                 resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            err = f"HTTP {e.response.status_code}: {e.response.text[:300]}"
+            logger.error("[runner] Fout bij inactivity tracking upsert: %s", err)
+            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0,
+                    "error": err, "rows_attempted": len(rows)}
         except Exception as e:
-            logger.error("[runner] Fout bij inactivity tracking upsert: %s", e)
-            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
+            err = f"{type(e).__name__}: {e}"
+            logger.error("[runner] Exception bij inactivity tracking upsert: %s", err)
+            return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0,
+                    "error": err, "rows_attempted": len(rows)}
 
         n_actief = len(actief_set)
         n_alleen_bestaand = len(alleen_bestaand - nieuw_in_hb)
@@ -255,6 +262,7 @@ class ScrapeOrchestrator:
             "actief": n_actief,
             "alleen_bestaand": n_alleen_bestaand,
             "nieuw_in_hb": n_nieuw,
+            "rows_written": len(rows),
         }
 
     async def _store_kortingen(self, kortingen) -> int:
