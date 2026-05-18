@@ -262,21 +262,30 @@ class ScrapeOrchestrator:
         if not filtered_rows:
             return 0
 
-        # Batch upsert (Supabase PostgREST)
+        # Chunked upsert (Supabase PostgREST heeft request size limits — chunks van 500)
         url = f"{SUPABASE_URL}/rest/v1/hypotheekrentes"
         headers = _supabase_headers()
         headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
 
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=filtered_rows)
-                resp.raise_for_status()
+        CHUNK_SIZE = 500
+        total_stored = 0
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for i in range(0, len(filtered_rows), CHUNK_SIZE):
+                chunk = filtered_rows[i:i + CHUNK_SIZE]
+                try:
+                    resp = await client.post(url, headers=headers, json=chunk)
+                    resp.raise_for_status()
+                    total_stored += len(chunk)
+                    logger.info("[runner] Chunk %d-%d opgeslagen (%d rows)",
+                                i, i + len(chunk), len(chunk))
+                except Exception as e:
+                    logger.error("[runner] Fout bij chunk %d-%d: %s — %s",
+                                 i, i + len(chunk), e,
+                                 getattr(e, 'response', None) and e.response.text[:300] or "")
 
-            logger.info("[runner] %d tarieven opgeslagen in Supabase", len(filtered_rows))
-            return len(filtered_rows)
-        except Exception as e:
-            logger.error("[runner] Fout bij opslaan: %s", e)
-            return 0
+        logger.info("[runner] Totaal %d/%d tarieven opgeslagen in Supabase",
+                     total_stored, len(filtered_rows))
+        return total_stored
 
     async def _get_manual_keys(self) -> set[tuple]:
         """Haal keys op van handmatig ingevoerde tarieven (niet overschrijven)."""
