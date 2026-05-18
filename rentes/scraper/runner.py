@@ -307,7 +307,12 @@ class ScrapeOrchestrator:
         return total_stored
 
     async def _get_manual_keys(self) -> set[tuple]:
-        """Haal keys op van handmatig ingevoerde tarieven (niet overschrijven)."""
+        """Haal keys op van VANDAAG handmatig ingevoerde tarieven (niet overschrijven).
+
+        Filter op peildatum=vandaag zodat oude handmatige rijen (uit eerdere
+        admin-tests) niet de huidige scrape blokkeren. Alleen handmatige
+        invoer van vandaag heeft voorrang op de scraper-data van vandaag.
+        """
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
             return set()
 
@@ -316,6 +321,7 @@ class ScrapeOrchestrator:
             params = {
                 "select": "geldverstrekker,productlijn,aflosvorm,rentevaste_periode",
                 "bron": "eq.handmatig",
+                "peildatum": f"eq.{date.today().isoformat()}",
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=_supabase_headers(), params=params)
