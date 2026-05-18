@@ -345,6 +345,52 @@ async def scraper_diagnostic(request: Request):
     return result
 
 
+@router.post("/inactivity-trigger")
+async def scraper_inactivity_trigger(request: Request):
+    """Trigger _update_inactivity_tracking met live scrape-data (synchroon),
+    om exception/error zichtbaar te maken in HTTP response."""
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    from rentes.scraper.sources.fastlane import FastlaneScraper
+    from rentes.scraper.runner import ScrapeOrchestrator
+
+    # Pak alleen 1 periode voor snelle test
+    from rentes.scraper.sources import fastlane as fl_module
+    orig_periodes = fl_module.PERIODES_MAANDEN
+    fl_module.PERIODES_MAANDEN = [120]  # alleen 10jr
+
+    try:
+        scraper_nieuw = FastlaneScraper(klanttype="nieuw", energielabels=["G"], with_nhg=False)
+        scraper_bestaand = FastlaneScraper(klanttype="bestaand", energielabels=["G"], with_nhg=False)
+        r_nieuw = await scraper_nieuw.scrape()
+        r_bestaand = await scraper_bestaand.scrape()
+    finally:
+        fl_module.PERIODES_MAANDEN = orig_periodes
+
+    out = {
+        "nieuw_rates": len(r_nieuw.rates),
+        "bestaand_rates": len(r_bestaand.rates),
+        "nieuw_unique_products": len({(r.geldverstrekker, r.productlijn) for r in r_nieuw.rates}),
+        "bestaand_unique_products": len({(r.geldverstrekker, r.productlijn) for r in r_bestaand.rates}),
+    }
+
+    # Roep _update_inactivity_tracking expliciet aan
+    orch = ScrapeOrchestrator()
+    try:
+        result = await orch._update_inactivity_tracking(r_nieuw.rates, r_bestaand.rates)
+        out["update_result"] = result
+        out["success"] = True
+    except Exception as e:
+        import traceback
+        out["exception"] = str(e)
+        out["traceback"] = traceback.format_exc()[-1500:]
+        out["success"] = False
+
+    return out
+
+
 @router.post("/inactivity-test")
 async def scraper_inactivity_test(request: Request):
     """Test: probeer 1 rij in scraper_inactivity_tracking te schrijven, toon exacte error."""
