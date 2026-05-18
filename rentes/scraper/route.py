@@ -148,6 +148,47 @@ async def scraper_test_mini(request: Request):
     return out
 
 
+@router.post("/refresh-token")
+async def scraper_refresh_token(request: Request):
+    """Trigger Playwright login + sla nieuwe Fastlane token op in Supabase.
+
+    Handmatig aan te roepen als de auto-refresh om wat voor reden niet werkt,
+    of om initiële credentials op te slaan in de store.
+    """
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import time
+    from rentes.scraper.fastlane_auth import refresh_and_store_fastlane_credentials
+
+    start = time.time()
+    try:
+        token, user_hash = await refresh_and_store_fastlane_credentials()
+        duration = round(time.time() - start, 2)
+        if token and user_hash:
+            return {
+                "status": "ok",
+                "duration_seconds": duration,
+                "auth_token_first8": token[:8],
+                "auth_token_last4": token[-4:],
+                "user_hash_first8": user_hash[:8],
+                "message": "Token opgeslagen in scraper_credentials tabel",
+            }
+        return {
+            "status": "error",
+            "duration_seconds": duration,
+            "message": "Playwright login mislukt of geen token onderschept",
+        }
+    except Exception as e:
+        return {
+            "status": "exception",
+            "duration_seconds": round(time.time() - start, 2),
+            "exception_type": type(e).__name__,
+            "exception_message": str(e)[:500],
+        }
+
+
 @router.get("/diagnostic")
 async def scraper_diagnostic(request: Request):
     """Diagnostiek endpoint: test of Fastlane API bereikbaar is vanaf deze server.
