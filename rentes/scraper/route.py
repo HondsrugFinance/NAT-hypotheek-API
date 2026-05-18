@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 
 from rentes.scraper.runner import ScrapeOrchestrator
 
@@ -19,6 +20,28 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 # In-memory laatste run status
 _last_run: dict | None = None
+_is_running: bool = False
+
+
+async def _run_scrape_async(dry_run: bool, source: Optional[str]):
+    """Voer de scrape uit in de achtergrond en update _last_run."""
+    global _last_run, _is_running
+    _is_running = True
+    try:
+        orchestrator = ScrapeOrchestrator(dry_run=dry_run, single_source=source)
+        result = await orchestrator.run()
+        _last_run = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "result": result,
+        }
+    except Exception as e:
+        logger.exception("[scraper] Background scrape gefaald: %s", e)
+        _last_run = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "result": {"status": "error", "error": str(e)},
+        }
+    finally:
+        _is_running = False
 
 
 @router.post("/run")
@@ -27,37 +50,48 @@ async def scraper_run(
     dry_run: bool = Query(False, description="Alleen scrapen en valideren, niet opslaan"),
     source: Optional[str] = Query(None, description="Alleen deze bron draaien"),
 ):
-    """Cron endpoint: start een scrape-run.
+    """Cron endpoint: start een scrape-run in de achtergrond.
 
-    Beveiligd met X-Cron-Secret header. Kan ook handmatig getriggerd worden.
+    Beveiligd met X-Cron-Secret header. Retourneert direct (HTTP 202),
+    de scrape draait door in de achtergrond. Vraag /status op voor het resultaat.
 
     Query params:
     - dry_run=true: scrape + valideer zonder opslag
-    - source=easymortgage: alleen deze bron draaien
+    - source=fastlane: alleen deze bron draaien
     """
-    global _last_run
+    global _is_running
 
     secret = request.headers.get("X-Cron-Secret", "")
     if not CRON_SECRET or secret != CRON_SECRET:
         raise HTTPException(401, "Ongeldig cron secret")
 
-    orchestrator = ScrapeOrchestrator(dry_run=dry_run, single_source=source)
-    result = await orchestrator.run()
+    if _is_running:
+        return {
+            "status": "already_running",
+            "message": "Er draait al een scrape. Wacht tot deze klaar is.",
+        }
 
-    _last_run = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "result": result,
+    # Start de scrape in de achtergrond met asyncio.create_task
+    # (BackgroundTasks van FastAPI werkt niet altijd lekker bij langlopende taken)
+    asyncio.create_task(_run_scrape_async(dry_run=dry_run, source=source))
+
+    return {
+        "status": "started",
+        "message": "Scrape gestart in achtergrond. Vraag GET /rentes/scraper/status voor resultaat.",
+        "dry_run": dry_run,
+        "source": source,
     }
-
-    return result
 
 
 @router.get("/status")
 async def scraper_status():
     """Laatste scrape-run status (in-memory)."""
     if not _last_run:
-        return {"status": "no_runs", "message": "Nog geen scrape-run uitgevoerd sinds server start"}
-    return _last_run
+        msg = "Scrape draait nu (start net)" if _is_running else "Nog geen scrape-run uitgevoerd sinds server start"
+        return {"status": "running" if _is_running else "no_runs", "message": msg}
+    out = dict(_last_run)
+    out["is_running"] = _is_running
+    return out
 
 
 @router.post("/test-mini")
