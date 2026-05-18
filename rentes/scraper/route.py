@@ -148,6 +148,83 @@ async def scraper_test_mini(request: Request):
     return out
 
 
+@router.post("/refresh-token-debug")
+async def scraper_refresh_token_debug(request: Request):
+    """Token refresh met uitgebreide stap-voor-stap diagnostiek."""
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import time
+    from playwright.async_api import async_playwright
+
+    email = os.environ.get("HYPOTHEEKBOND_EMAIL", "")
+    password = os.environ.get("HYPOTHEEKBOND_PASSWORD", "")
+
+    steps = []
+    captured_calls = []
+    out = {
+        "email_set": bool(email),
+        "password_set": bool(password),
+        "password_length": len(password),
+    }
+
+    if not email or not password:
+        out["error"] = "Missing credentials env vars"
+        return out
+
+    start = time.time()
+    try:
+        async with async_playwright() as p:
+            steps.append({"step": "playwright_started", "t": round(time.time() - start, 2)})
+            browser = await p.chromium.launch(headless=True)
+            steps.append({"step": "browser_launched", "t": round(time.time() - start, 2)})
+            context = await browser.new_context()
+            page = await context.new_page()
+
+            def on_req(req):
+                if "fdta" in req.url or "fastlane" in req.url:
+                    captured_calls.append({
+                        "method": req.method,
+                        "url": req.url[:150],
+                        "auth": req.headers.get("authorization", "")[:16],
+                        "hash": req.headers.get("x-user-hash", "")[:16],
+                    })
+
+            page.on("request", on_req)
+
+            await page.goto("https://www.hypotheekbond.nl/inloggen", timeout=30000)
+            await page.wait_for_load_state("networkidle")
+            steps.append({"step": "login_page_loaded", "t": round(time.time() - start, 2), "url": page.url})
+
+            await page.fill('input[name="email"]', email)
+            await page.fill('input[name="password"]', password)
+            await page.click('button[type="submit"], input[type="submit"]')
+            await page.wait_for_timeout(3000)
+            steps.append({"step": "login_submitted", "t": round(time.time() - start, 2), "url": page.url, "title": await page.title()})
+
+            await page.goto("https://fastlane.fdta.nl/rente/rentevast-periode", timeout=30000)
+            await page.wait_for_load_state("networkidle")
+            await page.wait_for_timeout(7000)
+            steps.append({"step": "fastlane_loaded", "t": round(time.time() - start, 2), "url": page.url, "title": await page.title()})
+
+            body_text = await page.inner_text("body")
+            out["fastlane_body_preview"] = body_text[:300]
+
+            await browser.close()
+
+        out["captured_calls"] = captured_calls[:10]
+        out["captured_calls_count"] = len(captured_calls)
+        out["steps"] = steps
+        out["total_duration"] = round(time.time() - start, 2)
+    except Exception as e:
+        out["exception"] = str(e)[:500]
+        out["exception_type"] = type(e).__name__
+        out["steps"] = steps
+
+    return out
+
+
 @router.post("/install-playwright")
 async def scraper_install_playwright(request: Request):
     """Installeer Playwright Chromium browsers op runtime.
