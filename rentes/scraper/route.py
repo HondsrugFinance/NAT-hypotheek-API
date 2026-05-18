@@ -225,6 +225,69 @@ async def scraper_refresh_token_debug(request: Request):
     return out
 
 
+@router.get("/playwright-status")
+async def playwright_status(request: Request):
+    """Toon wat er in de Playwright cache zit + voer install opnieuw uit."""
+    secret = request.headers.get("X-Cron-Secret", "")
+    if not CRON_SECRET or secret != CRON_SECRET:
+        raise HTTPException(401, "Ongeldig cron secret")
+
+    import asyncio as _asyncio
+    out = {}
+
+    # 1. Welke cache dir gebruikt Playwright?
+    for env_var in ["PLAYWRIGHT_BROWSERS_PATH", "HOME"]:
+        out[f"env_{env_var}"] = os.environ.get(env_var, "")
+
+    # 2. Wat staat er in de cache?
+    for path in ["/opt/render/.cache/ms-playwright", "/root/.cache/ms-playwright", "~/.cache/ms-playwright"]:
+        expanded = os.path.expanduser(path)
+        try:
+            if os.path.isdir(expanded):
+                out[f"contents_{path}"] = sorted(os.listdir(expanded))
+            else:
+                out[f"contents_{path}"] = "DOES_NOT_EXIST"
+        except Exception as e:
+            out[f"contents_{path}"] = f"ERROR: {e}"
+
+    # 3. Playwright version
+    try:
+        proc = await _asyncio.create_subprocess_exec(
+            "python", "-c", "import playwright; print(playwright.__version__)",
+            stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await proc.communicate()
+        out["playwright_version"] = stdout.decode().strip()
+    except Exception as e:
+        out["playwright_version_error"] = str(e)
+
+    # 4. Run --force install met full stderr
+    try:
+        proc = await _asyncio.create_subprocess_exec(
+            "python", "-m", "playwright", "install", "--force", "chromium",
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=180)
+        out["force_install_returncode"] = proc.returncode
+        out["force_install_output"] = stdout.decode("utf-8", errors="replace")[-3000:]
+    except _asyncio.TimeoutError:
+        out["force_install"] = "TIMEOUT after 180s"
+    except Exception as e:
+        out["force_install_exception"] = str(e)
+
+    # 5. Check opnieuw na install
+    for path in ["/opt/render/.cache/ms-playwright"]:
+        expanded = os.path.expanduser(path)
+        try:
+            if os.path.isdir(expanded):
+                out[f"contents_after_{path}"] = sorted(os.listdir(expanded))
+        except Exception as e:
+            out[f"contents_after_{path}"] = f"ERROR: {e}"
+
+    return out
+
+
 @router.post("/install-playwright")
 async def scraper_install_playwright(request: Request):
     """Installeer Playwright Chromium browsers op runtime.
