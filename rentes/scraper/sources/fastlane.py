@@ -65,21 +65,19 @@ AFLOSVORMEN = {
 
 # Rentevaste periodes in MAANDEN (Fastlane gebruikt maanden, niet jaren)
 # 1 = variabel (1 maand), de rest is jaren * 12
+# Default: 7 meest-gebruikte periodes. Volledige lijst via PERIODES_MAANDEN_FULL.
 PERIODES_MAANDEN = [
     1,    # variabel
     12,   # 1 jaar
-    24,   # 2 jaar
-    36,   # 3 jaar
     60,   # 5 jaar
-    72,   # 6 jaar
-    84,   # 7 jaar
     120,  # 10 jaar
-    144,  # 12 jaar
     180,  # 15 jaar
-    204,  # 17 jaar
     240,  # 20 jaar
-    300,  # 25 jaar
     360,  # 30 jaar
+]
+
+PERIODES_MAANDEN_FULL = [
+    1, 12, 24, 36, 60, 72, 84, 120, 144, 180, 204, 240, 300, 360,
 ]
 
 def periode_maanden_naar_jaren(maanden: int) -> int:
@@ -88,9 +86,10 @@ def periode_maanden_naar_jaren(maanden: int) -> int:
         return 0  # variabel
     return maanden // 12
 
-# Energielabels die we scrapen (A++++ t/m A geven dezelfde rente bij ING/ABN,
-# maar dit verschilt per bank — we scrapen er een paar voor cross-reference)
-ENERGIELABELS = ["A", "B", "C", "D", "E", "G"]
+# Energielabels die we standaard scrapen (alleen C voor basis-rente).
+# Energielabel-kortingen worden apart afgeleid (via A vs G vergelijk).
+ENERGIELABELS = ["C"]
+ENERGIELABELS_VOOR_KORTING_DERIVATION = ["A", "G"]
 
 # LTV-staffel mapping: index in riskCategories array → onze database LTV-categorie
 # riskCategories order: 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110
@@ -173,6 +172,13 @@ class FastlaneScraper(BaseScraper):
             )
 
         nhg_options = [True, False] if self.with_nhg else [False]
+        total_calls = (
+            len(self.aflosvormen) * len(PERIODES_MAANDEN)
+            * len(self.energielabels) * len(nhg_options) + 1
+        )
+        logger.info("[fastlane] Start scrape: %d calls (%d aflosvormen × %d periodes × %d labels × %d nhg)",
+                     total_calls, len(self.aflosvormen), len(PERIODES_MAANDEN),
+                     len(self.energielabels), len(nhg_options))
 
         async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers()) as client:
             # 1. Hoofd-scraping: alle rente-combinaties
@@ -199,6 +205,14 @@ class FastlaneScraper(BaseScraper):
                                     nhg=nhg,
                                 )
                                 all_rates.extend(rates)
+
+                                # Log iedere 10 calls voortgang
+                                if pages_fetched % 10 == 0:
+                                    elapsed = time.time() - start
+                                    logger.info("[fastlane] Voortgang: %d/%d (%.0f%%) — %d rates — %.1fs",
+                                                 pages_fetched, total_calls,
+                                                 100 * pages_fetched / total_calls,
+                                                 len(all_rates), elapsed)
                             except Exception as e:
                                 msg = f"Fout bij {url}: {e}"
                                 logger.error("[fastlane] %s", msg)
