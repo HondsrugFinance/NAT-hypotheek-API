@@ -13,3 +13,5 @@ sentry-sdk[fastapi]==2.22.0
 anthropic>=0.40.0
 Pillow>=10.0.0
 PyPDF2>=3.0.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0

@@ -120,6 +120,11 @@ from rentes.route import router as rentes_router
 app.include_router(rentes_router)
 logger.info("Rentes endpoints registered: GET /rentes/lookup, GET/POST /rentes/tarieven, GET/POST /rentes/kortingen")
 
+# --- Rente Scraper ---
+from rentes.scraper.route import router as scraper_router
+app.include_router(scraper_router)
+logger.info("Scraper endpoints registered: POST /rentes/scraper/run, GET /rentes/scraper/status, GET /rentes/scraper/logs")
+
 # --- SharePoint klantmappen ---
 from sharepoint.route import router as sharepoint_router, webhook_router
 app.include_router(sharepoint_router)

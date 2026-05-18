@@ -1,0 +1,189 @@
+{
+  "_comment": "Mapping van gescrapete namen naar canonical namen in geldverstrekkers.json. Makkelijk uitbreidbaar zonder code-wijziging.",
+  "geldverstrekkers": {
+    "ABN Amro": "ABN AMRO",
+    "ABN AMRO Bank": "ABN AMRO",
+    "Aegon Hypotheken": "Aegon",
+    "Allianz Hypotheek": "Allianz",
+    "Argenta Spaarbank": "Argenta",
+    "ASN Bank": "ASN",
+    "a.s.r.": "ASR",
+    "ASR Hypotheken": "ASR",
+    "ASR Levensverzekering": "ASR",
+    "Attens Hypotheken": "Attens",
+    "BLG": "BLG Wonen",
+    "BLG Hypotheken": "BLG Wonen",
+    "Bunq": "bunq",
+    "BUNQ": "bunq",
+    "Centraal Beheer Achmea": "Centraal Beheer",
+    "Dynamic Credit": "Dynamic",
+    "Florius (ABN AMRO)": "Florius",
+    "Groene Hart Hypotheken": "Groene Hart",
+    "De Handelsbanken": "Handelsbank",
+    "Handelsbanken": "Handelsbank",
+    "Holland Woont": "HollandWoont",
+    "Hypotrust Hypotheken": "Hypotrust",
+    "Impact Hypotheken": "Impact",
+    "ING Bank": "ING",
+    "Lloyds": "Lloyds Bank",
+    "Lot Hypotheken": "Lot",
+    "Merius Hypotheken": "Merius",
+    "MUNT Hypotheken": "MUNT",
+    "Nationale-Nederlanden": "Nationale Nederlanden",
+    "NN": "Nationale Nederlanden",
+    "NN Hypotheken": "Nationale Nederlanden",
+    "NIBC Direct": "NIBC",
+    "Obvion Hypotheken": "Obvion",
+    "Obvion (Rabobank)": "Obvion",
+    "Rabobank Hypotheek": "Rabobank",
+    "Robuust Hypotheken": "Robuust",
+    "SNS Bank": "SNS",
+    "Syntrus Achmea Hypotheken": "Syntrus Achmea",
+    "Triodos Bank": "Triodos",
+    "Tulp Hypotheken": "Tulp",
+    "Venn Hypotheken": "Venn",
+    "Vista Hypotheken": "Vista",
+    "Woonnu Hypotheken": "Woonnu"
+  },
+  "_productlijnen_comment": "Mapping van geldverstrekker-specifieke korte/lange productnamen naar canonical productlijn-namen. Bij Fastlane geven we de volledige string door (bijv. 'Budget Hypotheek'), bij easymortgage een verkorte naam (bijv. 'Budget').",
+  "productlijnen": {
+    "ABN AMRO": {
+      "Budget": "Budget Hypotheek",
+      "Woning": "Woning Hypotheek"
+    },
+    "Aegon": {
+      "Aegon": "Hypotheek"
+    },
+    "Allianz": {
+      "Allianz": "Hypotheek"
+    },
+    "Argenta": {
+      "Argenta": "Hypotheek"
+    },
+    "ASN": {
+      "ASN Bank": "Hypotheek",
+      "Bespaarhypotheek": "Bespaarhypotheek"
+    },
+    "ASR": {
+      "WelThuis": "WelThuis Hypotheek",
+      "DigiThuis": "WelThuis Hypotheek"
+    },
+    "Attens": {
+      "Attens Hypotheken": "Hypotheek"
+    },
+    "bijBouwe": {
+      "bijBouwe": "Hypotheek",
+      "Vooruit": "Vooruit Hypotheek"
+    },
+    "BLG Wonen": {
+      "BLG Wonen": "Hypotheek",
+      "Bespaarhypotheek": "Bespaarhypotheek"
+    },
+    "bunq": {
+      "bunq": "Easy Mortgage",
+      "Easy Mortgage": "Easy Mortgage"
+    },
+    "Centraal Beheer": {
+      "Leef": "Leef Hypotheek",
+      "Centraal Beheer": "Leef Hypotheek"
+    },
+    "Dynamic": {
+      "Lekker Wonen": "Lekker Wonen Hypotheek",
+      "Dynamic": "Lekker Wonen Hypotheek"
+    },
+    "Florius": {
+      "Profijt Drie+Drie": "Profijt drie + drie Hypotheek",
+      "Profijt 3+3": "Profijt drie + drie Hypotheek",
+      "Profijt Twaalf": "Profijt twaalf Hypotheek",
+      "Profijt 12": "Profijt twaalf Hypotheek"
+    },
+    "Groene Hart": {
+      "Groene Hart": "Hypotheek"
+    },
+    "Handelsbank": {
+      "Woning": "Woninghypotheek",
+      "Woninghypotheek": "Woninghypotheek"
+    },
+    "HollandWoont": {
+      "HollandWoont": "Hypotheek"
+    },
+    "Hypotrust": {
+      "Elan Plus": "Elan Plus Hypotheek",
+      "Vrij Leven": "Vrij Leven Hypotheek"
+    },
+    "Impact": {
+      "Impact": "Hypotheek",
+      "Impact Hypotheken": "Hypotheek"
+    },
+    "ING": {
+      "ING": "Hypotheek"
+    },
+    "Knab": {
+      "Knab": "Hypotheek"
+    },
+    "Lloyds Bank": {
+      "Lloyds Bank": "Hypotheek"
+    },
+    "Lot": {
+      "Lot": "Hypotheek"
+    },
+    "Merius": {
+      "Merius": "Hypotheek"
+    },
+    "MUNT": {
+      "MUNT Hypotheken": "Hypotheek",
+      "MUNT": "Hypotheek"
+    },
+    "Nationale Nederlanden": {
+      "Nationale Nederlanden": "Hypotheek",
+      "Nieuwbouw": "Hypotheek"
+    },
+    "NIBC": {
+      "NIBC": "Hypotheek",
+      "Extra": "Extra Hypotheek"
+    },
+    "Obvion": {
+      "Woon": "Woon Hypotheek"
+    },
+    "Rabobank": {
+      "Basis": "Hypotheek met Basisvoorwaarden",
+      "Plus": "Hypotheek met Plusvoorwaarden",
+      "Basisvoorwaarden": "Hypotheek met Basisvoorwaarden",
+      "Plusvoorwaarden": "Hypotheek met Plusvoorwaarden"
+    },
+    "RegioBank": {
+      "RegioBank": "Hypotheek",
+      "Bespaarhypotheek": "Bespaarhypotheek"
+    },
+    "Robuust": {
+      "Robuust": "Hypotheek"
+    },
+    "SNS": {
+      "SNS": "Hypotheek",
+      "Bespaarhypotheek": "Bespaarhypotheek"
+    },
+    "Syntrus Achmea": {
+      "Basis": "Basishypotheek",
+      "Syntrus Achmea": "Basishypotheek"
+    },
+    "Triodos": {
+      "Triodos Bank": "Hypotheek",
+      "Triodos": "Hypotheek"
+    },
+    "Tulp": {
+      "Compleet": "Compleet Hypotheek",
+      "Riant": "Riant Hypotheek"
+    },
+    "Venn": {
+      "Venn Hypotheken": "Hypotheek",
+      "Venn": "Hypotheek"
+    },
+    "Vista": {
+      "Vista Hypotheken": "Hypotheek",
+      "Vista": "Hypotheek"
+    },
+    "Woonnu": {
+      "Woonnu": "Hypotheek"
+    }
+  }
+}
