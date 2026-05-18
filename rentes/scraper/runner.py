@@ -163,13 +163,20 @@ class ScrapeOrchestrator:
         url = f"{SUPABASE_URL}/rest/v1/rente_kortingen"
         headers = _supabase_headers()
         headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+        params = {
+            "on_conflict": "geldverstrekker,productlijn,korting_type,peildatum"
+        }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=rows)
+                resp = await client.post(url, headers=headers, params=params, json=rows)
                 resp.raise_for_status()
             logger.info("[runner] %d kortingen opgeslagen in rente_kortingen", len(rows))
             return len(rows)
+        except httpx.HTTPStatusError as e:
+            logger.error("[runner] Fout bij opslaan kortingen: HTTP %d: %s",
+                         e.response.status_code, e.response.text[:300])
+            return 0
         except Exception as e:
             logger.error("[runner] Fout bij opslaan kortingen: %s", e)
             return 0
@@ -262,26 +269,38 @@ class ScrapeOrchestrator:
         if not filtered_rows:
             return 0
 
-        # Chunked upsert (Supabase PostgREST heeft request size limits — chunks van 500)
+        # Chunked upsert met expliciete on_conflict (Supabase PostgREST vereist
+        # dit voor merge-duplicates op composite unique constraint).
         url = f"{SUPABASE_URL}/rest/v1/hypotheekrentes"
         headers = _supabase_headers()
         headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+        params = {
+            "on_conflict": "geldverstrekker,productlijn,aflosvorm,rentevaste_periode,peildatum"
+        }
 
         CHUNK_SIZE = 500
         total_stored = 0
+        last_error = None
         async with httpx.AsyncClient(timeout=60.0) as client:
             for i in range(0, len(filtered_rows), CHUNK_SIZE):
                 chunk = filtered_rows[i:i + CHUNK_SIZE]
                 try:
-                    resp = await client.post(url, headers=headers, json=chunk)
+                    resp = await client.post(url, headers=headers, params=params, json=chunk)
                     resp.raise_for_status()
                     total_stored += len(chunk)
                     logger.info("[runner] Chunk %d-%d opgeslagen (%d rows)",
                                 i, i + len(chunk), len(chunk))
+                except httpx.HTTPStatusError as e:
+                    last_error = f"HTTP {e.response.status_code}: {e.response.text[:300]}"
+                    logger.error("[runner] Fout bij chunk %d-%d: %s",
+                                 i, i + len(chunk), last_error)
                 except Exception as e:
-                    logger.error("[runner] Fout bij chunk %d-%d: %s — %s",
-                                 i, i + len(chunk), e,
-                                 getattr(e, 'response', None) and e.response.text[:300] or "")
+                    last_error = f"{type(e).__name__}: {e}"
+                    logger.error("[runner] Exception bij chunk %d-%d: %s",
+                                 i, i + len(chunk), last_error)
+
+        if total_stored == 0 and last_error:
+            logger.error("[runner] _store_rates: 0 stored — laatste error: %s", last_error)
 
         logger.info("[runner] Totaal %d/%d tarieven opgeslagen in Supabase",
                      total_stored, len(filtered_rows))
