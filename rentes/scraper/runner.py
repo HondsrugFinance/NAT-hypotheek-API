@@ -205,7 +205,7 @@ class ScrapeOrchestrator:
         except Exception as e:
             logger.warning("[runner] Kan config niet lezen voor nieuw_in_hb detectie: %s", e)
 
-        # Bouw upsert rows
+        # Bouw upsert rows — PostgREST eist dezelfde key-set per row in batch
         now = datetime.now(timezone.utc).isoformat()
         rows = []
         for (gv, prod) in actief_set:
@@ -218,16 +218,15 @@ class ScrapeOrchestrator:
                 "last_updated_at": now,
             })
         for (gv, prod) in alleen_bestaand:
-            row = {
+            status = "nieuw_in_hb" if (gv, prod) in nieuw_in_hb else "alleen_bestaand"
+            rows.append({
                 "geldverstrekker": gv,
                 "productlijn": prod,
-                "status": "alleen_bestaand",
+                "status": status,
+                "last_seen_active_at": None,
                 "last_seen_bestaand_at": now,
                 "last_updated_at": now,
-            }
-            if (gv, prod) in nieuw_in_hb:
-                row["status"] = "nieuw_in_hb"
-            rows.append(row)
+            })
 
         if not rows:
             return {"actief": 0, "alleen_bestaand": 0, "nieuw_in_hb": 0}
