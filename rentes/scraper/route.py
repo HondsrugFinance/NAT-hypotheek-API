@@ -261,57 +261,6 @@ async def scraper_set_credentials(body: SetCredentialsRequest, request: Request)
     }
 
 
-@router.post("/test-store")
-async def scraper_test_store(request: Request):
-    """Test of we 1 enkele rij in hypotheekrentes kunnen schrijven via service key.
-    Toont exact welke error optreedt (anders verstopt in runner exception handler).
-    """
-    secret = request.headers.get("X-Cron-Secret", "")
-    if not CRON_SECRET or secret != CRON_SECRET:
-        raise HTTPException(401, "Ongeldig cron secret")
-
-    import httpx
-    from datetime import date as _date
-
-    supabase_url = os.environ.get("SUPABASE_URL", "")
-    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
-    if not supabase_url or not service_key:
-        return {"error": "Supabase niet geconfigureerd"}
-
-    # Test rij — opzettelijk een unieke combinatie zodat het niet conflict met echte data
-    test_row = {
-        "geldverstrekker": "ING",
-        "productlijn": "Hypotheek",
-        "aflosvorm": "annuitair",
-        "rentevaste_periode": 99,  # niet bestaand, dus uniek
-        "ltv_staffel": {"NHG": 9.99, "test": 9.99},
-        "peildatum": _date.today().isoformat(),
-        "bron": "scraper",
-    }
-
-    url = f"{supabase_url}/rest/v1/hypotheekrentes"
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=representation",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, headers=headers, json=[test_row])
-        return {
-            "status_code": resp.status_code,
-            "response_body": resp.text[:1000],
-            "headers": dict(resp.headers),
-        }
-    except Exception as e:
-        return {
-            "exception_type": type(e).__name__,
-            "exception_message": str(e),
-        }
-
-
 @router.get("/diagnostic")
 async def scraper_diagnostic(request: Request):
     """Diagnostiek endpoint: test of Fastlane API bereikbaar is vanaf deze server.
