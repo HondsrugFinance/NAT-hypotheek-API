@@ -700,6 +700,12 @@ class CalcasaClient:
             # field 4 varint = 1 (keuze-index voor "Ja")
             return self._inject_answer(raw_vraag_bytes, b"\x20\x01")
 
+        elif vraag_id == "is_aflossingsvrij":
+            # ING (sinds mei 2026) vraagt of er aflossingsvrije leningdelen zijn.
+            # Voor bepaal_modelwaarde irrelevant — we lokken sowieso de LTV-fout uit.
+            # field 4 varint = 2 ("Nee", geen aflossingsvrij)
+            return self._inject_answer(raw_vraag_bytes, b"\x20\x02")
+
         else:
             # Onbekende vraag — skip
             return None
@@ -840,6 +846,8 @@ class CalcasaClient:
             return b"\x20\x01"  # field 4 varint = 1
         elif vraag_id == "eigen_bewoning":
             return b"\x20\x01"
+        elif vraag_id == "is_aflossingsvrij":
+            return b"\x20\x02"  # field 4 varint = 2 ("Nee")
         return None
 
     def initialiseer_waardering(

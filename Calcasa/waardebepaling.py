@@ -64,7 +64,7 @@ def main():
 
         # Modelwaarde bepalen
         print("\nModelwaarde bepalen...")
-        result = client.bepaal_modelwaarde("ing", adres["id"])
+        result = client.bepaal_modelwaarde("asr", adres["id"])
 
         print("\n" + "=" * 60)
         if result.get("modelwaarde"):

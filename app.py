@@ -1468,7 +1468,10 @@ async def taxatie_modelwaarde(
             )
 
         # Modelwaarde bepalen
-        result = client.bepaal_modelwaarde("ing", adres["id"])
+        # ASR i.p.v. ING: ASR stelt minder controle-vragen (geen is_aflossingsvrij,
+        # geen klantwaarde) en is daardoor robuuster. Uitkomst is identiek
+        # — we triggeren bewust een LTV-fout om de modelwaarde af te leiden.
+        result = client.bepaal_modelwaarde("asr", adres["id"])
 
         response = {
             "adres": {
