@@ -50,10 +50,12 @@ class LoanPart(BaseModel):
     @field_validator("interest_rate")
     @classmethod
     def convert_percentage_to_decimal(cls, v: Decimal) -> Decimal:
-        """Convert percentage to decimal if needed (4.5 -> 0.045)."""
-        if v > 1:
-            return v / 100
-        return v
+        """Convert percentage to decimal (4.5 -> 0.045, 0.9 -> 0.009).
+
+        Altijd delen door 100: het contract is een percentage (zie le=20).
+        Een `if v > 1`-heuristiek faalt voor rentes onder 1% (0,9% werd 90%).
+        """
+        return v / 100
 
 
 class Partner(BaseModel):
