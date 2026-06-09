@@ -183,11 +183,11 @@ class KVKClient:
         """
         Haal vestigingsprofiel op voor een vestigingsnummer.
 
-        Geeft o.a. de datum waarop de vestiging is aangevangen
-        (materieleRegistratie.datumAanvang, formaat YYYYMMDD).
-
         Retourneert dict met:
-          - vestigingsnummer, datumAanvang (str | None)
+          - vestigingsnummer, datumAanvang (str YYYYMMDD | None)
+          - eersteHandelsnaam, isHoofdvestiging (bool), totaalWerkzamePersonen
+          - sbiActiviteiten: [{code, omschrijving, hoofd}]
+          - bezoekadres: {straat, huisnummer, postcode, plaats}
           - error: str (bij fout)
         """
         nr = (vestigingsnummer or "").strip()
@@ -223,9 +223,34 @@ class KVKClient:
             or data.get("formeleRegistratiedatum")
         )
 
+        adressen = data.get("adressen", [])
+        bezoek = next(
+            (a for a in adressen if a.get("type") == "bezoekadres"),
+            adressen[0] if adressen else {},
+        )
+
+        sbi = data.get("sbiActiviteiten", [])
+
         return {
             "vestigingsnummer": data.get("vestigingsnummer") or nr,
             "datumAanvang": datum_aanvang,
+            "eersteHandelsnaam": data.get("eersteHandelsnaam"),
+            "isHoofdvestiging": str(data.get("indHoofdvestiging", "")).lower() == "ja",
+            "totaalWerkzamePersonen": data.get("totaalWerkzamePersonen"),
+            "sbiActiviteiten": [
+                {
+                    "code": s.get("sbiCode"),
+                    "omschrijving": s.get("sbiOmschrijving"),
+                    "hoofd": str(s.get("indHoofdactiviteit", "")).lower() == "ja",
+                }
+                for s in sbi
+            ],
+            "bezoekadres": {
+                "straat": bezoek.get("straatnaam", ""),
+                "huisnummer": bezoek.get("huisnummer"),
+                "postcode": bezoek.get("postcode", ""),
+                "plaats": bezoek.get("plaats", ""),
+            },
         }
 
     def _format_basisprofiel(self, data: dict) -> dict:

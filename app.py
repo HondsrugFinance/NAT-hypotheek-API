@@ -1932,20 +1932,16 @@ async def kvk_op_adres(
     request: Request = None,
 ) -> Dict[str, Any]:
     """
-    Zoek alle KVK-inschrijvingen op een adres en verrijk ze met basisprofiel.
+    Zoek KVK-inschrijvingen op een adres — GRATIS (alleen de zoek-API).
 
-    Flow (kostenbewust):
-      1. Gratis zoeken op postcode + huisnummer.
-      2. Geen hits? → kosten = 0, lege lijst.
-      3. Wel hits? → per inschrijving een basisprofiel (rechtsvorm) EN een
-         vestigingsprofiel (vestigingsdatum), elk EUR 0,02 → ~EUR 0,04 p/stuk.
-         Calls worden gecachet, dus dezelfde onderneming/vestiging telt 1x.
+    Geeft alleen de gratis velden terug. Voor rechtsvorm, datums en activiteiten
+    (uit basis- + vestigingsprofiel, EUR 0,04) gebruikt de frontend daarna per
+    inschrijving het endpoint /kvk/inschrijving-details.
 
     Retourneert:
-      - inschrijvingen: [{naam, rechtsvorm, kvkNummer, vestigingsnummer,
-                          datum, datum_is_vestiging, type, actief}]
+      - inschrijvingen: [{naam, kvkNummer, vestigingsnummer, type, actief}]
       - aantal: int
-      - kosten_eur: float (0,02 * aantal daadwerkelijk gedane betaalde calls)
+      - kosten_eur: 0.0
     """
     origin = request.headers.get("origin", "onbekend") if request else "onbekend"
     schoon_postcode = postcode.replace(" ", "").upper()
@@ -1967,60 +1963,89 @@ async def kvk_op_adres(
 
     resultaten = zoek.get("resultaten", [])
 
-    # Dedupliceer inschrijvingen op (kvkNummer, vestigingsnummer).
+    # Dedupliceer op (kvkNummer, vestigingsnummer).
     gezien: set = set()
-    uniek = []
+    inschrijvingen = []
     for r in resultaten:
         sleutel = (r.get("kvkNummer"), r.get("vestigingsnummer"))
-        if r.get("kvkNummer") and sleutel not in gezien:
-            gezien.add(sleutel)
-            uniek.append(r)
-
-    # Caches zodat we elke betaalde call hoogstens één keer doen.
-    basis_cache: Dict[str, dict] = {}      # kvkNummer → basisprofiel (EUR 0,02)
-    vest_cache: Dict[str, dict] = {}       # vestigingsnummer → vestigingsprofiel (EUR 0,02)
-
-    inschrijvingen = []
-    for r in uniek:
-        kvk_nr = r.get("kvkNummer")
-        vest_nr = r.get("vestigingsnummer")
-
-        if kvk_nr and kvk_nr not in basis_cache:
-            basis_cache[kvk_nr] = client.basisprofiel(kvk_nr)
-        profiel = basis_cache.get(kvk_nr, {})
-
-        if vest_nr and vest_nr not in vest_cache:
-            vest_cache[vest_nr] = client.vestigingsprofiel(vest_nr)
-        vest = vest_cache.get(vest_nr, {})
-
-        # Vestigingsdatum primair, val terug op formele registratiedatum onderneming.
-        datum = vest.get("datumAanvang") or profiel.get("formeleRegistratiedatum")
-
+        if not r.get("kvkNummer") or sleutel in gezien:
+            continue
+        gezien.add(sleutel)
         inschrijvingen.append({
-            "naam": profiel.get("naam") or r.get("naam"),
-            "rechtsvorm": profiel.get("rechtsvorm"),
-            "kvkNummer": kvk_nr,
-            "vestigingsnummer": vest_nr,
-            "datum": datum,
-            "datum_is_vestiging": bool(vest.get("datumAanvang")),
+            "naam": r.get("naam"),
+            "kvkNummer": r.get("kvkNummer"),
+            "vestigingsnummer": r.get("vestigingsnummer"),
             "type": r.get("type"),
             "actief": r.get("actief"),
         })
 
-    # Kosten = EUR 0,02 per daadwerkelijk gedane betaalde call.
-    betaalde_calls = (
-        sum(1 for p in basis_cache.values() if "error" not in p)
-        + sum(1 for v in vest_cache.values() if "error" not in v)
-    )
-
     return {
         "inschrijvingen": inschrijvingen,
         "aantal": len(inschrijvingen),
-        "kosten_eur": round(0.02 * betaalde_calls, 2),
+        "kosten_eur": 0.0,
     }
+
+
+@app.get("/kvk/inschrijving-details")
+async def kvk_inschrijving_details(
+    kvk_nummer: str,
+    vestigingsnummer: Optional[str] = None,
+    request: Request = None,
+) -> Dict[str, Any]:
+    """
+    Volledige details van één KVK-inschrijving — BETAALD (~EUR 0,04).
+
+    Combineert basisprofiel (rechtsvorm, oprichtingsdatum, onderneming-brede
+    activiteiten, handelsnamen) met vestigingsprofiel (vestigingsdatum,
+    vestiging-activiteiten, bezoekadres). Activiteiten/personen op vestigingniveau
+    krijgen voorrang; valt terug op onderneming-niveau.
+
+    Retourneert een 'details' object + kosten_eur.
+    """
+    origin = request.headers.get("origin", "onbekend") if request else "onbekend"
+    logger.info("KVK details: origin=%s, kvk=%s, vestiging=%s", origin, kvk_nummer, vestigingsnummer)
+
+    client = _KVKClient()
+    if not client.is_configured:
+        raise HTTPException(status_code=503, detail="KVK API niet beschikbaar. Controleer KVK_API_KEY.")
+
+    basis = client.basisprofiel(kvk_nummer)          # EUR 0,02
+    if "error" in basis:
+        raise HTTPException(status_code=400, detail=basis["error"])
+
+    vest = client.vestigingsprofiel(vestigingsnummer) if vestigingsnummer else {}  # EUR 0,02
+    vest_ok = "error" not in vest
+
+    # Activiteiten: vestiging eerst, anders onderneming-breed.
+    activiteiten = (vest.get("sbiActiviteiten") if vest_ok else None) or basis.get("sbiActiviteiten", [])
+
+    bezoekadres = vest.get("bezoekadres") if vest_ok else basis.get("adres")
+
+    details = {
+        "naam": basis.get("naam"),
+        "statutaireNaam": basis.get("statutaireNaam"),
+        "rechtsvorm": basis.get("rechtsvorm"),
+        "kvkNummer": basis.get("kvkNummer") or kvk_nummer,
+        "vestigingsnummer": vestigingsnummer,
+        "isHoofdvestiging": vest.get("isHoofdvestiging") if vest_ok else None,
+        "oprichtingsdatum": basis.get("formeleRegistratiedatum"),
+        "vestigingsdatum": vest.get("datumAanvang") if vest_ok else None,
+        "werkzamePersonenOnderneming": basis.get("totaalWerkzamePersonen"),
+        "werkzamePersonenVestiging": vest.get("totaalWerkzamePersonen") if vest_ok else None,
+        "handelsnamen": basis.get("handelsnamen", []),
+        "activiteiten": activiteiten,
+        "bezoekadres": bezoekadres,
+        "vestiging_fout": None if vest_ok else vest.get("error"),
+    }
+
+    # Kosten: basis altijd (gelukt), vestiging alleen als opgevraagd én gelukt.
+    betaalde_calls = 1 + (1 if (vestigingsnummer and vest_ok) else 0)
+
+    return {"details": details, "kosten_eur": round(0.02 * betaalde_calls, 2)}
 
 
 if RATE_LIMITING_ENABLED:
     kvk_zoeken = limiter.limit("30/minute")(kvk_zoeken)
     kvk_basisprofiel = limiter.limit("30/minute")(kvk_basisprofiel)
     kvk_op_adres = limiter.limit("30/minute")(kvk_op_adres)
+    kvk_inschrijving_details = limiter.limit("30/minute")(kvk_inschrijving_details)
