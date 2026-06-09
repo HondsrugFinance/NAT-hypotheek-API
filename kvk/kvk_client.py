@@ -15,6 +15,7 @@ Env var: KVK_API_KEY
 """
 
 import os
+import json
 import logging
 from typing import Optional
 
@@ -105,7 +106,7 @@ class KVKClient:
             return {"error": f"Ongeldig verzoek: {body.get('fout', resp.text[:200])}"}
 
         resp.raise_for_status()
-        data = resp.json()
+        data = json.loads(resp.content.decode("utf-8-sig"))  # KVK is UTF-8; forceer juiste decoding
 
         resultaten = data.get("resultaten", [])
         return {
@@ -171,7 +172,7 @@ class KVKClient:
             return {"error": f"Ongeldig verzoek voor KVK-nummer {kvk_clean}"}
 
         resp.raise_for_status()
-        data = resp.json()
+        data = json.loads(resp.content.decode("utf-8-sig"))  # KVK is UTF-8; forceer juiste decoding
 
         return self._format_basisprofiel(data)
 
@@ -213,7 +214,7 @@ class KVKClient:
             return {"error": f"Ongeldig verzoek voor vestigingsnummer {nr}"}
 
         resp.raise_for_status()
-        data = resp.json()
+        data = json.loads(resp.content.decode("utf-8-sig"))  # KVK is UTF-8; forceer juiste decoding
 
         # Defensief: datum kan op materieleRegistratie of top-level staan.
         materiele = data.get("materieleRegistratie") or {}
