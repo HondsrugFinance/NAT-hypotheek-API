@@ -25,8 +25,10 @@ RP_BASE = "https://ruimte.omgevingswet.overheid.nl/ruimtelijke-plannen/api/opvra
 PDOK_FREE = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free"
 ENV_KEY = "RUIMTELIJKE_PLANNEN_API_KEY"
 
-# Max aantal plannen waarvoor we bestemmingsvlakken ophalen (kostenloos, maar wel calls).
-MAX_PLANNEN = 8
+# Max aantal plannen waarvoor we vlakken ophalen (kostenloos, maar wel calls).
+# Ruim genoeg: binnenstad-adressen stapelen veel facet-/parapluplannen bovenop
+# het onderliggende buurtbestemmingsplan dat de echte 'Wonen'-bestemming bevat.
+MAX_PLANNEN = 20
 
 # Nette labels voor enkele meerledige/afwijkende hoofdgroepen; de rest krijgt
 # gewoon een hoofdletter. Alles dat met "won" begint → "Wonen".
@@ -188,9 +190,10 @@ class BestemmingClient:
             try:
                 # Bestemmingsplannen hebben bestemmingsvlakken; een beheersverordening
                 # (en sommige inpassingsplannen) hebben in plaats daarvan besluitvlakken.
-                # Probeer eerst bestemmingsvlakken; bij niets → val terug op besluitvlakken.
+                # Probeer eerst bestemmingsvlakken; bij niets → besluitvlakken, maar alleen
+                # voor niet-bestemmingsplannen (die hebben nooit besluitvlakken).
                 vlakken = self._zoek_vlakken(plan_id, "bestemmingsvlakken", x, y)
-                if not vlakken:
+                if not vlakken and (plan.get("type") or "").lower() != "bestemmingsplan":
                     vlakken = self._zoek_vlakken(plan_id, "besluitvlakken", x, y)
             except Exception as e:
                 logger.warning("vlakken ophalen mislukt voor %s: %s", plan_id, e)
