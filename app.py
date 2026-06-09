@@ -152,6 +152,11 @@ from kadaster.route import router as kadaster_router
 app.include_router(kadaster_router)
 logger.info("Kadaster endpoints registered: GET /kadaster/jwks.json")
 
+# --- Bestemming (Ruimtelijke Plannen API) ---
+from bestemming.route import router as bestemming_router
+app.include_router(bestemming_router)
+logger.info("Bestemming endpoint registered: GET /bestemming")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
