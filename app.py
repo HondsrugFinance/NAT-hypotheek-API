@@ -1920,6 +1920,102 @@ async def kvk_basisprofiel(
     return result
 
 
+@app.get("/kvk/op-adres")
+async def kvk_op_adres(
+    postcode: str,
+    huisnummer: int,
+    request: Request = None,
+) -> Dict[str, Any]:
+    """
+    Zoek alle KVK-inschrijvingen op een adres en verrijk ze met basisprofiel.
+
+    Flow (kostenbewust):
+      1. Gratis zoeken op postcode + huisnummer.
+      2. Geen hits? → kosten = 0, lege lijst.
+      3. Wel hits? → per inschrijving een basisprofiel (rechtsvorm) EN een
+         vestigingsprofiel (vestigingsdatum), elk EUR 0,02 → ~EUR 0,04 p/stuk.
+         Calls worden gecachet, dus dezelfde onderneming/vestiging telt 1x.
+
+    Retourneert:
+      - inschrijvingen: [{naam, rechtsvorm, kvkNummer, vestigingsnummer,
+                          datum, datum_is_vestiging, type, actief}]
+      - aantal: int
+      - kosten_eur: float (0,02 * aantal daadwerkelijk gedane betaalde calls)
+    """
+    origin = request.headers.get("origin", "onbekend") if request else "onbekend"
+    schoon_postcode = postcode.replace(" ", "").upper()
+    logger.info("KVK op-adres: origin=%s, postcode=%s, huisnummer=%s", origin, schoon_postcode, huisnummer)
+
+    client = _KVKClient()
+    if not client.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="KVK API niet beschikbaar. Controleer KVK_API_KEY.",
+        )
+
+    zoek = client.zoeken(postcode=schoon_postcode, huisnummer=huisnummer)
+    if "error" in zoek and not zoek.get("resultaten"):
+        # "Geen resultaten gevonden" is geen fout — gewoon 0 inschrijvingen.
+        if "Geen resultaten" in zoek["error"]:
+            return {"inschrijvingen": [], "aantal": 0, "kosten_eur": 0.0}
+        raise HTTPException(status_code=400, detail=zoek["error"])
+
+    resultaten = zoek.get("resultaten", [])
+
+    # Dedupliceer inschrijvingen op (kvkNummer, vestigingsnummer).
+    gezien: set = set()
+    uniek = []
+    for r in resultaten:
+        sleutel = (r.get("kvkNummer"), r.get("vestigingsnummer"))
+        if r.get("kvkNummer") and sleutel not in gezien:
+            gezien.add(sleutel)
+            uniek.append(r)
+
+    # Caches zodat we elke betaalde call hoogstens één keer doen.
+    basis_cache: Dict[str, dict] = {}      # kvkNummer → basisprofiel (EUR 0,02)
+    vest_cache: Dict[str, dict] = {}       # vestigingsnummer → vestigingsprofiel (EUR 0,02)
+
+    inschrijvingen = []
+    for r in uniek:
+        kvk_nr = r.get("kvkNummer")
+        vest_nr = r.get("vestigingsnummer")
+
+        if kvk_nr and kvk_nr not in basis_cache:
+            basis_cache[kvk_nr] = client.basisprofiel(kvk_nr)
+        profiel = basis_cache.get(kvk_nr, {})
+
+        if vest_nr and vest_nr not in vest_cache:
+            vest_cache[vest_nr] = client.vestigingsprofiel(vest_nr)
+        vest = vest_cache.get(vest_nr, {})
+
+        # Vestigingsdatum primair, val terug op formele registratiedatum onderneming.
+        datum = vest.get("datumAanvang") or profiel.get("formeleRegistratiedatum")
+
+        inschrijvingen.append({
+            "naam": profiel.get("naam") or r.get("naam"),
+            "rechtsvorm": profiel.get("rechtsvorm"),
+            "kvkNummer": kvk_nr,
+            "vestigingsnummer": vest_nr,
+            "datum": datum,
+            "datum_is_vestiging": bool(vest.get("datumAanvang")),
+            "type": r.get("type"),
+            "actief": r.get("actief"),
+        })
+
+    # Kosten = EUR 0,02 per daadwerkelijk gedane betaalde call.
+    betaalde_calls = (
+        sum(1 for p in basis_cache.values() if "error" not in p)
+        + sum(1 for v in vest_cache.values() if "error" not in v)
+    )
+
+    return {
+        "inschrijvingen": inschrijvingen,
+        "aantal": len(inschrijvingen),
+        "kosten_eur": round(0.02 * betaalde_calls, 2),
+    }
+
+
 if RATE_LIMITING_ENABLED:
     kvk_zoeken = limiter.limit("30/minute")(kvk_zoeken)
     kvk_basisprofiel = limiter.limit("30/minute")(kvk_basisprofiel)
+    kvk_op_adres = limiter.limit("30/minute")(kvk_op_adres)

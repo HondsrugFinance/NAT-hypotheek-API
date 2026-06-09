@@ -175,6 +175,59 @@ class KVKClient:
 
         return self._format_basisprofiel(data)
 
+    # ------------------------------------------------------------------
+    # Vestigingsprofiel (EUR 0,02 per call) — voor vestigingsdatum
+    # ------------------------------------------------------------------
+
+    def vestigingsprofiel(self, vestigingsnummer: str) -> dict:
+        """
+        Haal vestigingsprofiel op voor een vestigingsnummer.
+
+        Geeft o.a. de datum waarop de vestiging is aangevangen
+        (materieleRegistratie.datumAanvang, formaat YYYYMMDD).
+
+        Retourneert dict met:
+          - vestigingsnummer, datumAanvang (str | None)
+          - error: str (bij fout)
+        """
+        nr = (vestigingsnummer or "").strip()
+        if not nr.isdigit() or len(nr) != 12:
+            return {"error": f"Ongeldig vestigingsnummer: '{vestigingsnummer}' (moet 12 cijfers zijn)"}
+
+        try:
+            resp = httpx.get(
+                f"{KVK_BASE}/v1/vestigingsprofielen/{nr}",
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException:
+            return {"error": "KVK API timeout — probeer het later opnieuw"}
+        except httpx.ConnectError:
+            return {"error": "Kan geen verbinding maken met KVK API"}
+
+        if resp.status_code == 401:
+            return {"error": "KVK API key ongeldig of ontbreekt"}
+        if resp.status_code == 404:
+            return {"error": f"Geen vestiging gevonden voor {nr}"}
+        if resp.status_code == 400:
+            return {"error": f"Ongeldig verzoek voor vestigingsnummer {nr}"}
+
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Defensief: datum kan op materieleRegistratie of top-level staan.
+        materiele = data.get("materieleRegistratie") or {}
+        datum_aanvang = (
+            materiele.get("datumAanvang")
+            or data.get("datumAanvang")
+            or data.get("formeleRegistratiedatum")
+        )
+
+        return {
+            "vestigingsnummer": data.get("vestigingsnummer") or nr,
+            "datumAanvang": datum_aanvang,
+        }
+
     def _format_basisprofiel(self, data: dict) -> dict:
         """Formateer basisprofiel naar gestandaardiseerd formaat."""
         embedded = data.get("_embedded", {})
