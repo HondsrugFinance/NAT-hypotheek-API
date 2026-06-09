@@ -28,6 +28,34 @@ ENV_KEY = "RUIMTELIJKE_PLANNEN_API_KEY"
 # Max aantal plannen waarvoor we bestemmingsvlakken ophalen (kostenloos, maar wel calls).
 MAX_PLANNEN = 8
 
+# Nette labels voor enkele meerledige/afwijkende hoofdgroepen; de rest krijgt
+# gewoon een hoofdletter. Alles dat met "won" begint → "Wonen".
+SIMPELE_LABELS = {
+    "agrarisch met waarden": "Agrarisch",
+    "cultuur en ontspanning": "Cultuur en ontspanning",
+    "verkeer - verblijfsgebied": "Verkeer",
+    "verkeer - railverkeer": "Verkeer",
+    # Gemengde bestemmingen waar wonen is toegestaan → hint voor de adviseur.
+    "centrum": "Centrum (incl. wonen)",
+    "gemengd": "Gemengd (incl. wonen)",
+}
+
+
+def vereenvoudig_bestemming(hoofdgroep: Optional[str], naam: Optional[str]) -> Optional[str]:
+    """Maak van een hoofdgroep/naam een korte, leesbare waarde (bv. 'Wonen')."""
+    hg = (hoofdgroep or "").strip().lower()
+    nm = (naam or "").strip()
+    # "wonen" begint met "wonen"; "woongebied"/"woondoeleinden" met "woon".
+    woon = lambda s: s.startswith("wonen") or s.startswith("woon")
+    if woon(hg) or woon(nm.lower()):
+        return "Wonen"
+    if hg:
+        return SIMPELE_LABELS.get(hg, hg[:1].upper() + hg[1:])
+    if nm:
+        # Geen hoofdgroep (oud plan): strip eventuele nummering ("- 1").
+        return re.sub(r"\s*[-–]?\s*\d+\s*$", "", nm).strip() or nm
+    return None
+
 
 class BestemmingClient:
     """Client voor de Ruimtelijke Plannen API (bestemming op adres)."""
@@ -158,9 +186,11 @@ class BestemmingClient:
                     "plan_naam": plan_naam,
                 })
 
-        # Primaire bestemming = eerste enkelbestemming, anders eerste gevonden.
+        # Primaire bestemming = eerste enkelbestemming, anders eerste gevonden;
+        # vereenvoudigd tot een korte waarde (bv. "Wonen").
         enkel = [b for b in bestemmingen if (b.get("type") or "").lower() == "enkelbestemming"]
-        primair = (enkel[0]["naam"] if enkel else (bestemmingen[0]["naam"] if bestemmingen else None))
+        bron = enkel[0] if enkel else (bestemmingen[0] if bestemmingen else None)
+        primair = vereenvoudig_bestemming(bron.get("hoofdgroep"), bron.get("naam")) if bron else None
 
         return {
             "gevonden": bool(bestemmingen),
