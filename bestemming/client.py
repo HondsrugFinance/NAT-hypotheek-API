@@ -133,9 +133,13 @@ class BestemmingClient:
 
         plannen = self._zoek_plannen(x, y)
 
+        # Structuurvisies/omgevingsvisies hebben geen bestemmingsvlakken — eruit
+        # filteren vóór de limiet, zodat het echte bestemmingsplan niet wegvalt.
+        relevant = [p for p in plannen if (p.get("type") or "").lower() != "structuurvisie"]
+
         bestemmingen = []
         plan_info = []
-        for plan in plannen[:MAX_PLANNEN]:
+        for plan in relevant[:MAX_PLANNEN]:
             plan_id = plan.get("id")
             plan_naam = plan.get("naam")
             plan_info.append({"id": plan_id, "naam": plan_naam, "type": plan.get("type")})
