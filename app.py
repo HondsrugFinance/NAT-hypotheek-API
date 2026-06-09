@@ -147,6 +147,11 @@ from email_intake.route import router as email_intake_router
 app.include_router(email_intake_router)
 logger.info("Email Intake endpoints registered: POST /email-intake/poll, GET /email-intake/status")
 
+# --- Kadaster KIK Inzage (JWKS voor OAuth signed-JWT) ---
+from kadaster.route import router as kadaster_router
+app.include_router(kadaster_router)
+logger.info("Kadaster endpoints registered: GET /kadaster/jwks.json")
+
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
