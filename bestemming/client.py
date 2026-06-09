@@ -57,6 +57,17 @@ def vereenvoudig_bestemming(hoofdgroep: Optional[str], naam: Optional[str]) -> O
     return None
 
 
+# Namen/typen die een overlay (dubbelbestemming) aanduiden i.p.v. de hoofdbestemming.
+_OVERLAY_PREFIXES = ("waarde", "leiding", "dubbel", "vrijwaringszone", "veiligheidszone", "geluidzone")
+
+
+def _is_overlay(b: dict) -> bool:
+    """True voor dubbelbestemmingen/overlays (Waarde, Leiding, ...) — geen woonbestemming."""
+    naam = (b.get("naam") or "").strip().lower()
+    typ = (b.get("type") or "").strip().lower()
+    return typ == "dubbelbestemming" or naam.startswith(_OVERLAY_PREFIXES)
+
+
 class BestemmingClient:
     """Client voor de Ruimtelijke Plannen API (bestemming op adres)."""
 
@@ -136,10 +147,11 @@ class BestemmingClient:
         resp.raise_for_status()
         return self._json(resp).get("_embedded", {}).get("plannen", [])
 
-    def _zoek_bestemmingsvlakken(self, plan_id: str, x: float, y: float) -> list:
+    def _zoek_vlakken(self, plan_id: str, resource: str, x: float, y: float) -> list:
+        """Zoek vlakken van een type (bestemmingsvlakken / besluitvlakken) op een punt."""
         body = {"_geo": {"intersectAndNotTouches": {"type": "Point", "coordinates": [x, y]}}}
         resp = httpx.post(
-            f"{RP_BASE}/plannen/{plan_id}/bestemmingsvlakken/_zoek",
+            f"{RP_BASE}/plannen/{plan_id}/{resource}/_zoek",
             json=body,
             headers=self._headers(),
             timeout=self._timeout,
@@ -147,7 +159,7 @@ class BestemmingClient:
         if resp.status_code == 404:
             return []
         resp.raise_for_status()
-        return self._json(resp).get("_embedded", {}).get("bestemmingsvlakken", [])
+        return self._json(resp).get("_embedded", {}).get(resource, [])
 
     # ------------------------------------------------------------------
     # Publiek: bestemming op adres
@@ -174,9 +186,14 @@ class BestemmingClient:
             if not plan_id:
                 continue
             try:
-                vlakken = self._zoek_bestemmingsvlakken(plan_id, x, y)
+                # Bestemmingsplannen hebben bestemmingsvlakken; een beheersverordening
+                # (en sommige inpassingsplannen) hebben in plaats daarvan besluitvlakken.
+                # Probeer eerst bestemmingsvlakken; bij niets → val terug op besluitvlakken.
+                vlakken = self._zoek_vlakken(plan_id, "bestemmingsvlakken", x, y)
+                if not vlakken:
+                    vlakken = self._zoek_vlakken(plan_id, "besluitvlakken", x, y)
             except Exception as e:
-                logger.warning("bestemmingsvlakken mislukt voor %s: %s", plan_id, e)
+                logger.warning("vlakken ophalen mislukt voor %s: %s", plan_id, e)
                 continue
             for bv in vlakken:
                 bestemmingen.append({
@@ -186,10 +203,11 @@ class BestemmingClient:
                     "plan_naam": plan_naam,
                 })
 
-        # Primaire bestemming = eerste enkelbestemming, anders eerste gevonden;
+        # Primaire bestemming = eerste enkelbestemming/besluitvlak dat geen overlay is
+        # (Waarde-/Leiding-dubbelbestemmingen zijn geen woonbestemming);
         # vereenvoudigd tot een korte waarde (bv. "Wonen").
-        enkel = [b for b in bestemmingen if (b.get("type") or "").lower() == "enkelbestemming"]
-        bron = enkel[0] if enkel else (bestemmingen[0] if bestemmingen else None)
+        niet_overlay = [b for b in bestemmingen if not _is_overlay(b)]
+        bron = niet_overlay[0] if niet_overlay else (bestemmingen[0] if bestemmingen else None)
         primair = vereenvoudig_bestemming(bron.get("hoofdgroep"), bron.get("naam")) if bron else None
 
         return {
