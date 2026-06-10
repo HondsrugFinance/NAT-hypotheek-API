@@ -18,6 +18,7 @@ Env vars: SUPABASE_URL, SUPABASE_SERVICE_KEY (of SUPABASE_ANON_KEY als fallback)
 
 import os
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -29,6 +30,16 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 _TABEL = "kvk_cache"
+
+# Cache-records ouder dan dit gelden als verlopen → verse KVK-ophaal (EUR 0,04).
+# KVK-gegevens (rechtsvorm, werkzame personen, faillissement, handelsnamen) kunnen
+# wijzigen; 6 maanden is een redelijke balans tussen kosten en actualiteit.
+TTL_DAGEN = 180
+
+
+def _verloop_grens_iso() -> str:
+    """ISO-timestamp: records ouder dan dit zijn verlopen."""
+    return (datetime.now(timezone.utc) - timedelta(days=TTL_DAGEN)).isoformat()
 
 
 def is_configured() -> bool:
@@ -57,7 +68,7 @@ async def lees_cache(kvk_nummer: str, vestigingsnummer: Optional[str]) -> Option
     Zoek een eerder opgeslagen detail-record.
 
     Retourneert dict met {details, opgehaald_op} of None als niet gevonden /
-    cache niet beschikbaar.
+    verlopen (ouder dan TTL_DAGEN) / cache niet beschikbaar.
     """
     if not is_configured():
         return None
@@ -66,6 +77,7 @@ async def lees_cache(kvk_nummer: str, vestigingsnummer: Optional[str]) -> Option
         "select": "details,opgehaald_op",
         "kvk_nummer": f"eq.{kvk_nummer.strip()}",
         "vestigingsnummer": f"eq.{_norm_vest(vestigingsnummer)}",
+        "opgehaald_op": f"gte.{_verloop_grens_iso()}",  # verlopen records overslaan
         "limit": "1",
     }
     try:
@@ -98,6 +110,7 @@ async def welke_in_cache(kvk_nummers: list[str]) -> set[tuple[str, str]]:
     params = {
         "select": "kvk_nummer,vestigingsnummer",
         "kvk_nummer": f"in.({','.join(schoon)})",
+        "opgehaald_op": f"gte.{_verloop_grens_iso()}",  # verlopen records tellen als niet-gecachet
     }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
