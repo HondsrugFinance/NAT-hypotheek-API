@@ -1864,6 +1864,7 @@ if RATE_LIMITING_ENABLED:
 # ── KVK Handelsregister ─────────────────────────────────
 
 from kvk.kvk_client import KVKClient as _KVKClient
+from kvk import cache as _kvk_cache
 
 
 @app.get("/kvk/zoeken")
@@ -1989,6 +1990,11 @@ async def kvk_op_adres(
             "actief": r.get("actief"),
         })
 
+    # Markeer welke inschrijvingen al gratis uit de cache komen (details eerder opgehaald).
+    in_cache = await _kvk_cache.welke_in_cache([i["kvkNummer"] for i in inschrijvingen])
+    for i in inschrijvingen:
+        i["in_cache"] = (i["kvkNummer"], i.get("vestigingsnummer") or "") in in_cache
+
     return {
         "inschrijvingen": inschrijvingen,
         "aantal": len(inschrijvingen),
@@ -2000,21 +2006,44 @@ async def kvk_op_adres(
 async def kvk_inschrijving_details(
     kvk_nummer: str,
     vestigingsnummer: Optional[str] = None,
+    refresh: bool = False,
     request: Request = None,
 ) -> Dict[str, Any]:
     """
-    Volledige details van één KVK-inschrijving — BETAALD (~EUR 0,04).
+    Volledige details van één KVK-inschrijving.
+
+    Eerst wordt de Supabase-cache (kvk_cache) geraadpleegd op
+    (kvk_nummer, vestigingsnummer). Een hit kost niets en geeft de eerder
+    opgehaalde details terug (`uit_cache: true` + `opgehaald_op`).
+
+    Bij een misser — of met `refresh=true` om te forceren — haalt de backend
+    de gegevens live bij KVK op (~EUR 0,04) en slaat het resultaat op in de
+    cache voor volgende keren.
 
     Combineert basisprofiel (rechtsvorm, oprichtingsdatum, onderneming-brede
     activiteiten, handelsnamen) met vestigingsprofiel (vestigingsdatum,
     vestiging-activiteiten, bezoekadres). Activiteiten/personen op vestigingniveau
     krijgen voorrang; valt terug op onderneming-niveau.
 
-    Retourneert een 'details' object + kosten_eur.
+    Retourneert een 'details' object + kosten_eur + uit_cache (+ opgehaald_op).
     """
     origin = request.headers.get("origin", "onbekend") if request else "onbekend"
-    logger.info("KVK details: origin=%s, kvk=%s, vestiging=%s", origin, kvk_nummer, vestigingsnummer)
+    logger.info("KVK details: origin=%s, kvk=%s, vestiging=%s, refresh=%s",
+                origin, kvk_nummer, vestigingsnummer, refresh)
 
+    # 1) Cache-check (gratis), tenzij geforceerd ververst.
+    if not refresh:
+        cached = await _kvk_cache.lees_cache(kvk_nummer, vestigingsnummer)
+        if cached:
+            logger.info("KVK details uit cache: kvk=%s", kvk_nummer)
+            return {
+                "details": cached["details"],
+                "kosten_eur": 0.0,
+                "uit_cache": True,
+                "opgehaald_op": cached.get("opgehaald_op"),
+            }
+
+    # 2) Live ophalen bij KVK (betaald).
     client = _KVKClient()
     if not client.is_configured:
         raise HTTPException(status_code=503, detail="KVK API niet beschikbaar. Controleer KVK_API_KEY.")
@@ -2048,10 +2077,17 @@ async def kvk_inschrijving_details(
         "vestiging_fout": None if vest_ok else vest.get("error"),
     }
 
+    # 3) Opslaan in cache (best-effort) — alleen als basisprofiel gelukt is (dat is hier zo).
+    await _kvk_cache.schrijf_cache(kvk_nummer, vestigingsnummer, details, opgehaald_door=origin)
+
     # Kosten: basis altijd (gelukt), vestiging alleen als opgevraagd én gelukt.
     betaalde_calls = 1 + (1 if (vestigingsnummer and vest_ok) else 0)
 
-    return {"details": details, "kosten_eur": round(0.02 * betaalde_calls, 2)}
+    return {
+        "details": details,
+        "kosten_eur": round(0.02 * betaalde_calls, 2),
+        "uit_cache": False,
+    }
 
 
 if RATE_LIMITING_ENABLED:
