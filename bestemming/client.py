@@ -30,6 +30,12 @@ ENV_KEY = "RUIMTELIJKE_PLANNEN_API_KEY"
 # het onderliggende buurtbestemmingsplan dat de echte 'Wonen'-bestemming bevat.
 MAX_PLANNEN = 20
 
+# Plantypen die geen echte bestemming dragen — eruit filteren vóór de limiet:
+# - structuurvisie/omgevingsvisie: beleid, geen bestemmingsvlakken
+# - voorbereidingsbesluit: tijdelijke 'bevriezing', besluitvlak heet generiek "Besluitvlak"
+# - gerechtelijke uitspraak: vernietigt/wijzigt een plan, is zelf geen bestemming
+EXCLUDE_PLANTYPES = {"structuurvisie", "voorbereidingsbesluit", "gerechtelijke uitspraak"}
+
 # Nette labels voor enkele meerledige/afwijkende hoofdgroepen; de rest krijgt
 # gewoon een hoofdletter. Alles dat met "won" begint → "Wonen".
 SIMPELE_LABELS = {
@@ -67,7 +73,13 @@ def _is_overlay(b: dict) -> bool:
     """True voor dubbelbestemmingen/overlays (Waarde, Leiding, ...) — geen woonbestemming."""
     naam = (b.get("naam") or "").strip().lower()
     typ = (b.get("type") or "").strip().lower()
-    return typ == "dubbelbestemming" or naam.startswith(_OVERLAY_PREFIXES)
+    # "besluitvlak" als naam = generiek vlak zonder echte bestemming (bv. uit een
+    # voorbereidingsbesluit) — nooit als primaire bestemming kiezen.
+    return (
+        typ == "dubbelbestemming"
+        or naam == "besluitvlak"
+        or naam.startswith(_OVERLAY_PREFIXES)
+    )
 
 
 class BestemmingClient:
@@ -175,9 +187,10 @@ class BestemmingClient:
 
         plannen = self._zoek_plannen(x, y)
 
-        # Structuurvisies/omgevingsvisies hebben geen bestemmingsvlakken — eruit
-        # filteren vóór de limiet, zodat het echte bestemmingsplan niet wegvalt.
-        relevant = [p for p in plannen if (p.get("type") or "").lower() != "structuurvisie"]
+        # Plannen zonder echte bestemming (structuurvisie, voorbereidingsbesluit,
+        # gerechtelijke uitspraak) eruit filteren vóór de limiet, zodat het echte
+        # bestemmingsplan niet wegvalt.
+        relevant = [p for p in plannen if (p.get("type") or "").lower() not in EXCLUDE_PLANTYPES]
 
         bestemmingen = []
         plan_info = []
