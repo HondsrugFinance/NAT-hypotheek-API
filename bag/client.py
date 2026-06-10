@@ -21,6 +21,30 @@ logger = logging.getLogger(__name__)
 BAG_BASE = "https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2"
 ENV_KEY = "BAG_API_KEY"
 
+# De 11 BAG-gebruiksdoelen → leesbare labels (zonder "functie").
+GEBRUIKSDOEL_LABELS = {
+    "woonfunctie": "Wonen",
+    "kantoorfunctie": "Kantoor",
+    "winkelfunctie": "Winkel",
+    "industriefunctie": "Industrie",
+    "logiesfunctie": "Logies",
+    "bijeenkomstfunctie": "Bijeenkomst",
+    "onderwijsfunctie": "Onderwijs",
+    "sportfunctie": "Sport",
+    "gezondheidszorgfunctie": "Gezondheidszorg",
+    "celfunctie": "Detentie",
+    "overige gebruiksfunctie": "Overig",
+}
+
+
+def gebruiksdoel_label(doel: str) -> str:
+    """Maak een leesbaar label van een BAG-gebruiksdoel (zonder 'functie')."""
+    d = doel.strip().lower()
+    if d in GEBRUIKSDOEL_LABELS:
+        return GEBRUIKSDOEL_LABELS[d]
+    schoon = d.replace("functie", "").strip()
+    return (schoon or d)[:1].upper() + (schoon or d)[1:]
+
 
 class BAGClient:
     """Client voor de BAG API (objectdata op adres)."""
@@ -100,9 +124,9 @@ class BAGClient:
         bouwjaren = [str(b) for b in (adres.get("oorspronkelijkBouwjaar") or []) if b]
         bouwjaar = " / ".join(dict.fromkeys(bouwjaren)) or None
 
-        # Gebruiksdoel(en) netjes met hoofdletter.
-        doelen = [str(d).strip() for d in (adres.get("gebruiksdoelen") or []) if d]
-        gebruiksdoel = ", ".join(d[:1].upper() + d[1:] for d in doelen) or None
+        # Gebruiksdoel(en) → leesbare labels (zonder "functie"), gededupliceerd.
+        labels = [gebruiksdoel_label(str(d)) for d in (adres.get("gebruiksdoelen") or []) if d]
+        gebruiksdoel = ", ".join(dict.fromkeys(labels)) or None
 
         return {
             "gevonden": True,
