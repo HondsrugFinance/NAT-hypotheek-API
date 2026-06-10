@@ -33,8 +33,8 @@ _TABEL = "kvk_cache"
 
 # Cache-records ouder dan dit gelden als verlopen → verse KVK-ophaal (EUR 0,04).
 # KVK-gegevens (rechtsvorm, werkzame personen, faillissement, handelsnamen) kunnen
-# wijzigen; 6 maanden is een redelijke balans tussen kosten en actualiteit.
-TTL_DAGEN = 180
+# wijzigen; 360 dagen (~1 jaar) als balans tussen kosten en actualiteit.
+TTL_DAGEN = 360
 
 
 def _verloop_grens_iso() -> str:
