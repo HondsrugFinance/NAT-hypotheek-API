@@ -147,13 +147,19 @@ async def schrijf_cache(
         "naam": details.get("naam"),
         "details": details,
         "opgehaald_door": opgehaald_door,
-        # opgehaald_op wordt door een DB-trigger op now() gezet (ook bij upsert).
+        # Expliciet meegeven zodat de datum óók bij een upsert-update vernieuwt.
+        # (De DB-trigger zet 'm desnoods alsnog op NOW().)
+        "opgehaald_op": datetime.now(timezone.utc).isoformat(),
     }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{SUPABASE_URL}/rest/v1/{_TABEL}",
                 headers=_headers("resolution=merge-duplicates,return=minimal"),
+                # Expliciet conflict-doel: anders detecteert PostgREST de PK (id, altijd
+                # nieuw) i.p.v. de UNIQUE-constraint, en faalt de tweede schrijf als
+                # dubbele-insert i.p.v. een update.
+                params={"on_conflict": "kvk_nummer,vestigingsnummer"},
                 json=payload,
             )
             resp.raise_for_status()
