@@ -94,10 +94,12 @@ async def luchtfoto(
     px_w = lf.clamp_pixels(breedte)
     px_h = lf.clamp_pixels(hoogte)
     url = lf.wms_url(data["rd_x"], data["rd_y"], grootte_m, px_w, px_h)
+    kadaster_url = lf.kadaster_wms_url(data["rd_x"], data["rd_y"], grootte_m, px_w, px_h)
 
     return {
         "gevonden": True,
         "url": url,
+        "kadaster_url": kadaster_url,
         "rd_x": data["rd_x"],
         "rd_y": data["rd_y"],
         "grootte_m": grootte_m,
@@ -105,6 +107,29 @@ async def luchtfoto(
         "hoogte": px_h,
         "bron": lf.BRON,
     }
+
+
+async def _proxy_wms(url: str, foutlabel: str) -> Response:
+    """Haal een WMS-afbeelding op en geef hem door (24h cache). 502 bij een niet-afbeelding."""
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as http:
+            resp = await http.get(url, headers={"User-Agent": "HondsrugFinance-Rekentool/1.0"})
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning("%s ophalen mislukt: %s", foutlabel, e)
+        raise HTTPException(status_code=502, detail=f"{foutlabel} kon niet worden opgehaald")
+
+    content_type = resp.headers.get("content-type", "image/png")
+    if "image" not in content_type:
+        # PDOK geeft bij een fout een XML ServiceException terug i.p.v. een plaatje.
+        logger.warning("%s: onverwacht content-type %s — %s", foutlabel, content_type, resp.text[:300])
+        raise HTTPException(status_code=502, detail=f"{foutlabel}-service gaf geen afbeelding terug")
+
+    return Response(
+        content=resp.content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.get("/luchtfoto/image")
@@ -129,23 +154,29 @@ async def luchtfoto_image(
         data["rd_x"], data["rd_y"],
         lf.clamp_grootte(grootte), lf.clamp_pixels(breedte), lf.clamp_pixels(hoogte),
     )
+    return await _proxy_wms(url, "Luchtfoto")
 
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as http:
-            resp = await http.get(url, headers={"User-Agent": "HondsrugFinance-Rekentool/1.0"})
-        resp.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.warning("Luchtfoto ophalen mislukt: %s", e)
-        raise HTTPException(status_code=502, detail="Luchtfoto kon niet worden opgehaald")
 
-    content_type = resp.headers.get("content-type", "image/png")
-    if "image" not in content_type:
-        # PDOK geeft bij een fout een XML ServiceException terug i.p.v. een plaatje.
-        logger.warning("Luchtfoto: onverwacht content-type %s — %s", content_type, resp.text[:300])
-        raise HTTPException(status_code=502, detail="Luchtfoto-service gaf geen afbeelding terug")
+@router.get("/luchtfoto/kadaster")
+async def luchtfoto_kadaster(
+    postcode: str,
+    huisnummer: int,
+    toevoeging: Optional[str] = None,
+    grootte: Optional[float] = None,
+    breedte: Optional[int] = None,
+    hoogte: Optional[int] = None,
+):
+    """
+    Kadastrale overlay (perceelgrenzen + perceelnummers) als transparante PNG.
 
-    return Response(
-        content=resp.content,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
+    Zelfde parameters/bbox als /luchtfoto/image, zodat de lagen exact uitlijnen.
+    """
+    data = _adres_punt(postcode, huisnummer, toevoeging)
+    if not data.get("gevonden"):
+        raise HTTPException(status_code=404, detail=data.get("error", "Adres niet gevonden"))
+
+    url = lf.kadaster_wms_url(
+        data["rd_x"], data["rd_y"],
+        lf.clamp_grootte(grootte), lf.clamp_pixels(breedte), lf.clamp_pixels(hoogte),
     )
+    return await _proxy_wms(url, "Kadasterkaart")
