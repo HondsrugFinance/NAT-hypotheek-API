@@ -9,10 +9,51 @@ from fastapi.responses import Response
 
 from bag.client import BAGClient
 from bag import luchtfoto as lf
+from bag import perceel as perceel_mod
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["bag"])
+
+
+def _verrijk_perceel(client: BAGClient, data: Dict[str, Any]) -> None:
+    """
+    Voeg perceeloppervlakte (m²) toe aan een gevonden BAG-adres (in-place).
+
+    Zet `perceel_oppervlakte` (int | None). Bij None geeft `perceel_reden` aan
+    waarom: "appartement" (gestapeld, gedeeld grondperceel), "geen_perceel"
+    (lig-/standplaats: woonboot/woonwagen) of "niet_gevonden".
+
+    Gratis: perceeldata komt uit de open PDOK Kadastrale Kaart (geen KIK-Inzage).
+    """
+    data["perceel_oppervlakte"] = None
+    data["perceel_aanduiding"] = None
+    data["perceel_reden"] = None
+
+    if data.get("rd_x") is None:
+        data["perceel_reden"] = "niet_gevonden"
+        return
+
+    # Lig-/standplaats (woonboot/woonwagen) heeft geen zinvol kadastraal perceel.
+    if (data.get("objecttype") or "").strip().lower() != "verblijfsobject":
+        data["perceel_reden"] = "geen_perceel"
+        return
+
+    # Gestapeld (appartement/flat) → gedeeld grondperceel, oppervlakte misleidend.
+    try:
+        if client.is_gestapeld(data.get("pand_ids") or []):
+            data["perceel_reden"] = "appartement"
+            return
+    except Exception as e:  # nooit de hele /bag-call laten klappen op deze extra
+        logger.warning("Gestapeld-check mislukt: %s", e)
+
+    p = perceel_mod.oppervlakte_op_punt(data["rd_x"], data["rd_y"])
+    if not p:
+        data["perceel_reden"] = "niet_gevonden"
+        return
+
+    data["perceel_oppervlakte"] = p["oppervlakte_m2"]
+    data["perceel_aanduiding"] = p["aanduiding"]
 
 
 def _adres_punt(postcode: str, huisnummer: int, toevoeging: Optional[str]) -> Dict[str, Any]:
@@ -61,13 +102,17 @@ async def bag(
         )
 
     try:
-        return client.adres_uitgebreid(schoon_postcode, huisnummer, toevoeging)
+        data = client.adres_uitgebreid(schoon_postcode, huisnummer, toevoeging)
     except httpx.HTTPStatusError as e:
         logger.warning("BAG API fout: %s — %s", e.response.status_code, e.response.text[:300])
         return {"gevonden": False, "error": f"BAG-API fout ({e.response.status_code})"}
     except Exception as e:
         logger.warning("BAG opvragen mislukt: %s", e)
         return {"gevonden": False, "error": "Opvragen mislukt"}
+
+    if data.get("gevonden"):
+        _verrijk_perceel(client, data)
+    return data
 
 
 @router.get("/luchtfoto")

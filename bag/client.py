@@ -165,6 +165,46 @@ class BAGClient:
             "gebruiksdoel": gebruiksdoel,
             "objecttype": adres.get("typeAdresseerbaarObject"),
             "status": adres.get("adresseerbaarObjectStatus"),
+            "pand_ids": [str(p) for p in (adres.get("pandIdentificaties") or []) if p],
             "rd_x": round(punt[0], 3) if punt else None,
             "rd_y": round(punt[1], 3) if punt else None,
         }
+
+    def is_gestapeld(self, pand_ids: list) -> bool:
+        """
+        True als het pand meerdere woon-verblijfsobjecten bevat (gestapeld =
+        appartement/flat). Bij zo'n pand delen de woningen één grondperceel, dus
+        de perceeloppervlakte zou misleidend zijn → bovenliggend tonen we 'n.v.t.'.
+
+        Best-effort: telt de woon-VBO's in het eerste pand via één extra
+        BAG-call. Faalt die call, dan gaan we ervan uit dat het géén appartement
+        is (we tonen liever de oppervlakte dan onterecht niets).
+
+        Kanttekening: een 2-onder-1-kap of rij die in BAG als één pand is
+        gemodelleerd telt ook als 'gestapeld' (vals-positief, veilige kant).
+        """
+        if not pand_ids:
+            return False
+
+        params = {"pandIdentificatie": pand_ids[0], "pageSize": 50}
+        try:
+            resp = httpx.get(
+                f"{BAG_BASE}/adressenuitgebreid",
+                params=params,
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.warning("Pand-telling (gestapeld) mislukt: %s", e)
+            return False
+
+        embedded = self._json(resp).get("_embedded", {})
+        adressen = embedded.get("adressen") or next(
+            (v for v in embedded.values() if isinstance(v, list)), []
+        )
+        woon = [
+            a for a in adressen
+            if any("woon" in str(d).lower() for d in (a.get("gebruiksdoelen") or []))
+        ]
+        return len(woon) > 1
