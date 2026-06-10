@@ -3,10 +3,18 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .env
+.env.*
+!.env.example
 *.egg-info/
 dist/
 build/
 reference/
+
+# Lokale debug-/temp-scripts (kunnen secrets bevatten — nooit committen)
+_debug*
+_tmp*
+**/_debug*.py
+**/_test_*.py
 
 # Test artefacten (gegenereerde PDF's, HTML's, screenshots)
 test-*.pdf
