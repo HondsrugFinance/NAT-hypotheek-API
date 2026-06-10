@@ -157,10 +157,10 @@ from bestemming.route import router as bestemming_router
 app.include_router(bestemming_router)
 logger.info("Bestemming endpoint registered: GET /bestemming")
 
-# --- BAG objectdata (bouwjaar, oppervlakte, gebruiksdoel) ---
+# --- BAG objectdata (bouwjaar, oppervlakte, gebruiksdoel) + luchtfoto ---
 from bag.route import router as bag_router
 app.include_router(bag_router)
-logger.info("BAG endpoint registered: GET /bag")
+logger.info("BAG endpoints registered: GET /bag, GET /luchtfoto, GET /luchtfoto/image")
 
 # --- API Key authenticatie ---
 API_KEY = os.environ.get("NAT_API_KEY")

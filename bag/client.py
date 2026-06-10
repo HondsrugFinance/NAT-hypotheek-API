@@ -46,6 +46,34 @@ def gebruiksdoel_label(doel: str) -> str:
     return (schoon or d)[:1].upper() + (schoon or d)[1:]
 
 
+def _rd_punt(adres: dict) -> Optional[tuple]:
+    """Haal de RD-coördinaat (x, y in epsg:28992) uit een BAG-adres.
+
+    De adressenuitgebreid-respons bevat `adresseerbaarObjectGeometrie` met een
+    `punt` (Point) en/of `vlak` (Polygon). We pakken het punt; valt dat weg,
+    dan het zwaartepunt van de eerste ring van het vlak.
+    """
+    geo = adres.get("adresseerbaarObjectGeometrie") or {}
+
+    punt = geo.get("punt") or {}
+    coords = punt.get("coordinates")
+    if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+        try:
+            return float(coords[0]), float(coords[1])
+        except (TypeError, ValueError):
+            pass
+
+    vlak = geo.get("vlak") or {}
+    ring = (vlak.get("coordinates") or [None])[0]
+    if isinstance(ring, list) and ring:
+        xs = [p[0] for p in ring if isinstance(p, (list, tuple)) and len(p) >= 2]
+        ys = [p[1] for p in ring if isinstance(p, (list, tuple)) and len(p) >= 2]
+        if xs and ys:
+            return sum(xs) / len(xs), sum(ys) / len(ys)
+
+    return None
+
+
 class BAGClient:
     """Client voor de BAG API (objectdata op adres)."""
 
@@ -128,6 +156,8 @@ class BAGClient:
         labels = [gebruiksdoel_label(str(d)) for d in (adres.get("gebruiksdoelen") or []) if d]
         gebruiksdoel = ", ".join(dict.fromkeys(labels)) or None
 
+        punt = _rd_punt(adres)
+
         return {
             "gevonden": True,
             "bouwjaar": bouwjaar,
@@ -135,4 +165,6 @@ class BAGClient:
             "gebruiksdoel": gebruiksdoel,
             "objecttype": adres.get("typeAdresseerbaarObject"),
             "status": adres.get("adresseerbaarObjectStatus"),
+            "rd_x": round(punt[0], 3) if punt else None,
+            "rd_y": round(punt[1], 3) if punt else None,
         }
